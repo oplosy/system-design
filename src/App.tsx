@@ -780,7 +780,6 @@ function Shell() {
             </span>
             {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={setId} meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined} />}
           </div>
-          <div className="spacer" />
           {design && (
             <FindBox design={design} visible={nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id))} onPick={findPick} inputRef={findRef} />
           )}
@@ -800,10 +799,10 @@ function Shell() {
             <span className="vrule" />
             <AppearanceMenu sketch={sketch} onSketch={setStyle} theme={theme} onTheme={setTheme} icon={icon} />
             {design && dockToggle('right')}
+            <button className="btn ink" onClick={() => setCreating(true)}>
+              New design
+            </button>
           </div>
-          <button className="btn ink" onClick={() => setCreating(true)}>
-            New design
-          </button>
         </header>
 
         {design && current ? (
