@@ -454,7 +454,7 @@ kbd {
 
 .part {
   display: grid;
-  grid-template-columns: 44px 1fr 12px;
+  grid-template-columns: 44px minmax(0, 1fr) 12px;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -479,6 +479,9 @@ kbd {
 
 .part-name {
   color: var(--ink-2);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .part-add {

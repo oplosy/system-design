@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { COMPONENT_TYPES, type ComponentType, type Design } from '../core/schema.ts';
 import { SketchContext } from './canvas.tsx';
-import { CATEGORY_COLOR, SHAPES, drawShape } from './shapes.ts';
+import { GROUPS, NOTE_COLOR, SHAPES, drawShape, searchText } from './shapes.ts';
 
 export type AddKind = ComponentType | 'note' | 'decision';
 export const DRAG_MIME = 'application/x-system-design';
@@ -21,15 +21,11 @@ export function ShapePreview({ type, width = 56, height = 38 }: { type: Componen
   );
 }
 
-const GROUPS: { title: string; category: keyof typeof CATEGORY_COLOR }[] = [
-  { title: 'Edge / security', category: 'edge' },
-  { title: 'Network / compute', category: 'compute' },
-  { title: 'Data', category: 'data' },
-];
-
 export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
   const [query, setQuery] = useState('');
-  const match = (name: string) => name.toLowerCase().includes(query.trim().toLowerCase());
+  // Every word must appear somewhere in the name, id or keywords ("kafka", "redis cache", "s3").
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const match = (text: string) => terms.every((t) => text.toLowerCase().includes(t));
   const row = (kind: AddKind, name: string, preview: React.ReactNode) => (
     <button
       key={kind}
@@ -49,21 +45,29 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
       </span>
     </button>
   );
-  const groups = GROUPS.map((g) => ({ ...g, types: COMPONENT_TYPES.filter((t) => SHAPES[t].category === g.category && match(SHAPES[t].name)) }));
+  const groups = GROUPS.map((g) => ({ ...g, types: COMPONENT_TYPES.filter((t) => SHAPES[t].group === g.key && match(searchText(t))) }));
   const explain = [
     { kind: 'note' as const, name: 'Note', preview: <span className="note-swatch" /> },
     { kind: 'decision' as const, name: 'Decision', preview: <span className="decision-swatch" /> },
   ].filter((x) => match(x.name));
   return (
     <aside className="palette">
-      <input className="palette-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter parts…" aria-label="Filter parts" />
+      <input
+        className="palette-search"
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
+        placeholder="Search parts: kafka, redis, s3…"
+        aria-label="Search parts"
+      />
       <div className="palette-scroll">
         {groups.map(
           (g) =>
             g.types.length > 0 && (
-              <section key={g.category}>
+              <section key={g.key}>
                 <h3 className="rule-head">
-                  <span className="swatch-sq" style={{ background: CATEGORY_COLOR[g.category] }} />
+                  <span className="swatch-sq" style={{ background: g.color }} />
                   {g.title}
                   <span className="rule-count">{pad(g.types.length)}</span>
                 </h3>
@@ -74,7 +78,7 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
         {explain.length > 0 && (
           <section>
             <h3 className="rule-head">
-              <span className="swatch-sq" style={{ background: '#EF9F27' }} />
+              <span className="swatch-sq" style={{ background: NOTE_COLOR }} />
               Annotate
               <span className="rule-count">{pad(explain.length)}</span>
             </h3>
@@ -279,10 +283,14 @@ export function Inspector({
           <>
             <Prop label="Type">
               <select className="ed" value={component.type} onChange={(e) => edit((d: Design) => d.components, { type: e.target.value as ComponentType })} aria-label="Type">
-                {COMPONENT_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {SHAPES[t].name}
-                  </option>
+                {GROUPS.map((g) => (
+                  <optgroup key={g.key} label={g.title}>
+                    {COMPONENT_TYPES.filter((t) => SHAPES[t].group === g.key).map((t) => (
+                      <option key={t} value={t}>
+                        {SHAPES[t].name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </Prop>
