@@ -129,8 +129,11 @@ test('exports Mermaid and a decision record', async () => {
     ['%% Export', 'flowchart LR', '  subgraph vpc["VPC · 10.0.0.0/16"]', '    api["API"]', '  end', '  end_[("Say #quot;hi#quot; (PostgreSQL)")]', '  api -.->|"SQL"| end_', ''].join('\n'),
   );
   const iface = m.addComponent(x, { type: 'interface', label: 'Store' });
-  const impl = m.connect(x, { from: db, to: iface, kind: 'implementation' });
-  assert.equal(parseDesign(structuredClone(x)).connections.find((c) => c.id === impl)?.kind, 'implementation');
+  const impl = m.connect(x, { from: db, to: iface, kind: 'implementation', route: 'elbow' });
+  assert.deepEqual(
+    (({ kind, route }) => ({ kind, route }))(parseDesign(structuredClone(x)).connections.find((c) => c.id === impl)!),
+    { kind: 'implementation', route: 'elbow' },
+  );
   assert.match(toMermaid(x), /end_ -\.-> store/);
   const adr = toDecisionRecord(x);
   assert.match(adr, /## D1\. Postgres/);
