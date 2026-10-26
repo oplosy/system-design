@@ -1,0 +1,93 @@
+{
+  "id": "twitter",
+  "title": "Twitter from scratch",
+  "description": "Post tweets, follow users, read a home timeline. Built up step by step.",
+  "rev": 0,
+  "steps": [
+    { "id": "requirements", "title": "Requirements and clients", "summary": "500M users, 200M daily active. Reads outnumber writes about 100 to 1, so the read path drives the design.", "seen": false },
+    { "id": "edge", "title": "Edge: DNS, CDN, WAF, API gateway", "summary": "Every request enters through one guarded door. Static media never reaches our servers.", "seen": false },
+    { "id": "core", "title": "Core services and their databases", "summary": "Split users and tweets into services that own their data.", "seen": false },
+    { "id": "media", "title": "Media storage", "summary": "Images and videos go to object storage and are served through the CDN.", "seen": false },
+    { "id": "timeline", "title": "Home timeline with fan-out", "summary": "Precompute each user's timeline when a tweet is posted, so reading it is one cache lookup.", "seen": false },
+    { "id": "search", "title": "Search", "summary": "A separate search index fed by the same tweet events.", "seen": false }
+  ],
+  "components": [
+    { "id": "client", "type": "client", "label": "Mobile / web", "step": "requirements" },
+    { "id": "dns", "type": "dns", "label": "DNS", "tech": "Route 53", "step": "edge" },
+    { "id": "cdn", "type": "cdn", "label": "CDN", "tech": "CloudFront", "step": "edge" },
+    { "id": "waf", "type": "waf", "label": "WAF", "step": "edge" },
+    { "id": "gateway", "type": "api-gateway", "label": "API gateway", "step": "edge" },
+    { "id": "user-svc", "type": "service", "label": "User service", "step": "core" },
+    { "id": "tweet-svc", "type": "service", "label": "Tweet service", "step": "core" },
+    { "id": "users-db", "type": "sql-db", "label": "Users", "tech": "PostgreSQL", "step": "core" },
+    { "id": "tweets-db", "type": "nosql-db", "label": "Tweets", "tech": "Cassandra", "step": "core" },
+    { "id": "media", "type": "object-storage", "label": "Media", "tech": "S3", "step": "media" },
+    { "id": "events", "type": "queue", "label": "Tweet events", "tech": "Kafka", "step": "timeline" },
+    { "id": "fanout", "type": "worker", "label": "Fan-out workers", "step": "timeline" },
+    { "id": "timeline-svc", "type": "service", "label": "Timeline service", "step": "timeline" },
+    { "id": "timelines", "type": "cache", "label": "Timelines", "tech": "Redis", "step": "timeline" },
+    { "id": "search", "type": "search", "label": "Search index", "tech": "Elasticsearch", "step": "search" }
+  ],
+  "connections": [
+    { "id": "client-dns", "from": "client", "to": "dns", "label": "resolve", "step": "edge" },
+    { "id": "client-cdn", "from": "client", "to": "cdn", "label": "images, video", "step": "edge" },
+    { "id": "client-waf", "from": "client", "to": "waf", "label": "HTTPS", "step": "edge" },
+    { "id": "waf-gateway", "from": "waf", "to": "gateway", "step": "edge" },
+    { "id": "gateway-user", "from": "gateway", "to": "user-svc", "step": "core" },
+    { "id": "gateway-tweet", "from": "gateway", "to": "tweet-svc", "step": "core" },
+    { "id": "user-db", "from": "user-svc", "to": "users-db", "step": "core" },
+    { "id": "tweet-db", "from": "tweet-svc", "to": "tweets-db", "step": "core" },
+    { "id": "tweet-media", "from": "tweet-svc", "to": "media", "label": "upload", "step": "media" },
+    { "id": "cdn-media", "from": "cdn", "to": "media", "label": "origin", "step": "media" },
+    { "id": "tweet-events", "from": "tweet-svc", "to": "events", "label": "tweet posted", "async": true, "step": "timeline" },
+    { "id": "events-fanout", "from": "events", "to": "fanout", "async": true, "step": "timeline" },
+    { "id": "fanout-timelines", "from": "fanout", "to": "timelines", "label": "push tweet id", "step": "timeline" },
+    { "id": "gateway-timeline", "from": "gateway", "to": "timeline-svc", "step": "timeline" },
+    { "id": "timeline-cache", "from": "timeline-svc", "to": "timelines", "label": "read", "step": "timeline" },
+    { "id": "events-search", "from": "events", "to": "search", "label": "index", "async": true, "step": "search" },
+    { "id": "gateway-search", "from": "gateway", "to": "search", "label": "query", "step": "search" }
+  ],
+  "notes": [
+    { "id": "note-load", "text": "Read heavy: ~100 timeline reads for every tweet posted. Optimise reads first.", "attachTo": "client", "step": "requirements" },
+    { "id": "note-waf", "text": "Blocks bots, scraping and injection before they cost us compute.", "attachTo": "waf", "step": "edge" },
+    { "id": "note-celebs", "text": "Celebrities (>1M followers) skip fan-out. Their tweets are merged in at read time.", "attachTo": "fanout", "step": "timeline" }
+  ],
+  "decisions": [
+    {
+      "id": "decision-gateway",
+      "title": "One API gateway in front of all services",
+      "why": "Auth, rate limiting and routing live in one place instead of in every service.",
+      "alternatives": ["Clients call services directly", "Backend-for-frontend per client"],
+      "tradeoffs": "An extra hop and a component that must scale with all traffic.",
+      "links": ["gateway"],
+      "step": "edge"
+    },
+    {
+      "id": "decision-cassandra",
+      "title": "Cassandra for tweets",
+      "why": "Tweets are write-heavy, append-only and read by (user, time). Cassandra partitions that natively and scales by adding nodes.",
+      "alternatives": ["Sharded PostgreSQL", "DynamoDB"],
+      "tradeoffs": "No joins or ad-hoc queries; data is modelled per query.",
+      "links": ["tweets-db"],
+      "step": "core"
+    },
+    {
+      "id": "decision-fanout",
+      "title": "Fan-out on write into Redis",
+      "why": "Building a timeline at read time means querying hundreds of followees per request. Precomputing makes the hot path one cache read.",
+      "alternatives": ["Fan-out on read", "Materialized view in the database"],
+      "tradeoffs": "Writes cost O(followers) and timelines take memory; hence the celebrity exception.",
+      "links": ["fanout", "timelines"],
+      "step": "timeline"
+    },
+    {
+      "id": "decision-search",
+      "title": "Separate search index fed by events",
+      "why": "Full-text search does not fit Cassandra. Indexing from the event stream keeps the tweet write path fast.",
+      "alternatives": ["Search directly in the primary database"],
+      "tradeoffs": "Search results are eventually consistent, a few seconds behind.",
+      "links": ["search"],
+      "step": "search"
+    }
+  ]
+}

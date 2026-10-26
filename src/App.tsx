@@ -1,0 +1,468 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Background,
+  ConnectionMode,
+  Controls,
+  ReactFlow,
+  ReactFlowProvider,
+  applyNodeChanges,
+  useReactFlow,
+  type Connection as FlowConnection,
+  type Node,
+  type NodeChange,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import { COMPONENT_TYPES, type Design } from '../core/schema.ts';
+import * as m from '../core/mutations.ts';
+import { ApiError, api, type Summary } from './api.ts';
+import { SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
+import { layout } from './layout.ts';
+import { DRAG_MIME, Inspector, Palette, ReviewBar, type AddKind } from './panels.tsx';
+import { DECISION_SIZE, NOTE_SIZE, SHAPES } from './shapes.ts';
+
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const isAddKind = (k: string): k is AddKind => k === 'note' || k === 'decision' || (COMPONENT_TYPES as readonly string[]).includes(k);
+
+function loadStyle() {
+  try {
+    return localStorage.getItem('sd-style') !== 'clean';
+  } catch {
+    return true;
+  }
+}
+
+export function App() {
+  return (
+    <ReactFlowProvider>
+      <Shell />
+    </ReactFlowProvider>
+  );
+}
+
+function Shell() {
+  const [designs, setDesigns] = useState<Summary[]>([]);
+  const [templates, setTemplates] = useState<Summary[]>([]);
+  const [id, setId] = useState<string | null>(() => decodeURIComponent(location.hash.slice(1)) || null);
+  const [design, setDesign] = useState<Design | null>(null);
+  const [viewIndex, setViewIndex] = useState(0);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [sketch, setSketch] = useState(loadStyle);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const designRef = useRef<Design | null>(null);
+  const saveState = useRef({ timer: undefined as number | undefined, pending: false, inFlight: false, dirty: false });
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const fittedFor = useRef<string | null>(null);
+  const { screenToFlowPosition, fitView } = useReactFlow();
+
+  const commit = useCallback((d: Design | null) => {
+    designRef.current = d;
+    setDesign(d);
+  }, []);
+
+  const flush = useCallback(async () => {
+    const s = saveState.current;
+    s.pending = false;
+    if (s.inFlight) {
+      s.dirty = true;
+      return;
+    }
+    const d = designRef.current;
+    if (!d) return;
+    s.inFlight = true;
+    try {
+      const saved = await api.save(d);
+      if (designRef.current?.id === saved.id) commit({ ...designRef.current, rev: saved.rev });
+      setError(null);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        // shortcut: on a conflict the local edit is dropped, not merged; add a merge if agents and you edit at the same time often.
+        s.dirty = false;
+        commit(await api.get(d.id));
+        setError('This design changed on disk (probably an agent), so it was reloaded. Your last edit was dropped.');
+      } else setError(errorText(e));
+    } finally {
+      s.inFlight = false;
+      if (s.dirty) {
+        s.dirty = false;
+        void flush();
+      }
+    }
+  }, [commit]);
+
+  /** Applies an edit locally right away and saves shortly after. */
+  const change = useCallback(
+    (fn: (d: Design) => void) => {
+      const cur = designRef.current;
+      if (!cur) return;
+      const next = structuredClone(cur);
+      try {
+        fn(next);
+      } catch (e) {
+        setError(errorText(e));
+        return;
+      }
+      commit(next);
+      const s = saveState.current;
+      clearTimeout(s.timer);
+      s.pending = true;
+      s.timer = window.setTimeout(flush, 350);
+    },
+    [commit, flush],
+  );
+
+  const refreshLists = useCallback(() => {
+    api.designs().then(setDesigns).catch((e) => setError(errorText(e)));
+    api.templates().then(setTemplates).catch((e) => setError(errorText(e)));
+  }, []);
+
+  useEffect(() => {
+    refreshLists();
+    const es = new EventSource('/api/events');
+    es.onmessage = async (ev) => {
+      const { id: changed } = JSON.parse(ev.data) as { id: string };
+      api.designs().then(setDesigns).catch(() => {});
+      const cur = designRef.current, s = saveState.current;
+      if (!cur || cur.id !== changed || s.pending || s.inFlight) return;
+      try {
+        const fresh = await api.get(changed);
+        if (fresh.rev !== designRef.current?.rev) commit(fresh);
+      } catch (e) {
+        setError(errorText(e));
+      }
+    };
+    return () => es.close();
+  }, [refreshLists, commit]);
+
+  useEffect(() => {
+    if (!id && designs.length) setId(designs[0].id);
+  }, [id, designs]);
+
+  useEffect(() => {
+    if (!id) return;
+    history.replaceState(null, '', `#${encodeURIComponent(id)}`);
+    let cancelled = false;
+    api
+      .get(id)
+      .then((d) => {
+        if (cancelled) return;
+        commit(d);
+        setSelected(null);
+        const firstUnseen = d.steps.findIndex((s) => !s.seen);
+        setViewIndex(firstUnseen >= 0 ? firstUnseen : d.steps.length - 1);
+      })
+      .catch((e) => setError(errorText(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [id, commit]);
+
+  // New items (from agents or templates) arrive without positions: lay them out once.
+  useEffect(() => {
+    if (!design) return;
+    const items = [...design.components, ...design.notes, ...design.decisions];
+    if (!items.some((x) => !x.position)) return;
+    let cancelled = false;
+    layout(design)
+      .then((pos) => {
+        if (cancelled) return;
+        change((d) => {
+          for (const x of [...d.components, ...d.notes, ...d.decisions]) if (!x.position) x.position = pos.get(x.id);
+        });
+      })
+      .catch((e) => setError(errorText(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [design, change]);
+
+  const firstUnseen = design ? design.steps.findIndex((s) => !s.seen) : -1;
+  const maxIndex = design ? (firstUnseen >= 0 ? firstUnseen : design.steps.length - 1) : 0;
+  const view = Math.min(viewIndex, maxIndex);
+  const current = design?.steps[view];
+
+  const derived = useMemo(() => {
+    if (!design || !current) return { nodes: [] as Node[], edges: [] as FlowEdge[] };
+    const idx = m.stepIndex(design);
+    const visibleStep = (step: string) => idx.get(step)! <= view;
+    const reviewing = !current.seen;
+    const flags = (step: string) => ({ unseen: reviewing && step === current.id, faded: reviewing && step !== current.id });
+    const shown = new Set<string>();
+    const node = (id: string, type: 'component' | 'note' | 'decision', position: { x: number; y: number } | undefined, data: object, step: string): Node => {
+      shown.add(id);
+      return { id, type, position: position ?? { x: 0, y: 0 }, hidden: !position, selected: id === selected, data: { ...data, ...flags(step) } };
+    };
+    const nodes = [
+      ...design.components.filter((c) => visibleStep(c.step)).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech }, c.step)),
+      ...design.notes.filter((n) => visibleStep(n.step)).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
+      ...design.decisions.filter((x) => visibleStep(x.step)).map((x) => node(x.id, 'decision', x.position, { title: x.title, why: x.why }, x.step)),
+    ];
+    const both = (a: string, b: string) => shown.has(a) && shown.has(b);
+    const link = (id: string, source: string, target: string, step: string): FlowEdge => ({
+      id,
+      source,
+      target,
+      type: 'rough',
+      selectable: false,
+      deletable: false,
+      data: { kind: 'link', ...flags(step) },
+    });
+    const edges: FlowEdge[] = [
+      ...design.connections
+        .filter((c) => visibleStep(c.step) && both(c.from, c.to))
+        .map((c): FlowEdge => ({ id: c.id, source: c.from, target: c.to, type: 'rough', selected: c.id === selected, data: { kind: 'flow', label: c.label, async: c.async, ...flags(c.step) } })),
+      ...design.notes.filter((n) => n.attachTo && both(n.attachTo, n.id)).map((n) => link(`link-${n.id}`, n.attachTo!, n.id, n.step)),
+      ...design.decisions.flatMap((x) => x.links.filter((l) => both(l, x.id)).map((l) => link(`link-${x.id}-${l}`, l, x.id, x.step))),
+    ];
+    return { nodes, edges };
+  }, [design, current, view, selected]);
+
+  const [nodes, setNodes] = useState<Node[]>([]);
+  useEffect(() => setNodes(derived.nodes), [derived.nodes]);
+  const onNodesChange = useCallback((changes: NodeChange[]) => setNodes((ns) => applyNodeChanges(changes, ns)), []);
+
+  // Re-fit when a design opens or the walkthrough moves to another step, so new items are in view.
+  useEffect(() => {
+    const key = design && `${design.id}:${view}`;
+    if (!key || fittedFor.current === key || !nodes.length || nodes.some((n) => n.hidden)) return;
+    fittedFor.current = key;
+    setTimeout(() => fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 }), 60);
+  }, [design, view, nodes, fitView]);
+
+  const add = (kind: AddKind, at?: { x: number; y: number }) => {
+    if (!current) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const center = at ?? screenToFlowPosition({ x: (rect?.left ?? 0) + (rect?.width ?? 0) / 2, y: (rect?.top ?? 0) + (rect?.height ?? 0) / 2 });
+    const size = kind === 'note' ? NOTE_SIZE : kind === 'decision' ? DECISION_SIZE : SHAPES[kind];
+    const position = { x: Math.round(center.x - size.w / 2), y: Math.round(center.y - size.h / 2) };
+    const step = current.id;
+    let newId: string | null = null;
+    change((d) => {
+      if (kind === 'note') newId = m.addNote(d, { text: 'New note', position, step, reopen: false });
+      else if (kind === 'decision') newId = m.addDecision(d, { title: 'New decision', why: 'Explain why', links: [], position, step, reopen: false });
+      else newId = m.addComponent(d, { type: kind, label: SHAPES[kind].name, position, step, reopen: false });
+    });
+    setSelected(newId);
+  };
+
+  const onConnect = (c: FlowConnection) => {
+    if (!current) return;
+    change((d) => {
+      const kind = (x: string) =>
+        d.components.some((i) => i.id === x) ? 'component' : d.notes.some((i) => i.id === x) ? 'note' : d.decisions.some((i) => i.id === x) ? 'decision' : null;
+      const ks = kind(c.source), kt = kind(c.target);
+      if (ks === 'component' && kt === 'component') {
+        m.connect(d, { from: c.source, to: c.target, step: current.id, reopen: false });
+        return;
+      }
+      const comp = ks === 'component' ? c.source : kt === 'component' ? c.target : null;
+      const other = comp === c.source ? c.target : c.source;
+      if (!comp) throw new Error('Connect notes and decisions to a component.');
+      const note = d.notes.find((n) => n.id === other);
+      const dec = d.decisions.find((x) => x.id === other);
+      if (note) note.attachTo = comp;
+      if (dec && !dec.links.includes(comp)) dec.links.push(comp);
+    });
+  };
+
+  const remove = (ids: string[]) =>
+    change((d) => {
+      for (const x of ids) {
+        const exists = [...d.components, ...d.connections, ...d.notes, ...d.decisions].some((i) => i.id === x);
+        if (exists) m.removeItem(d, x);
+      }
+    });
+
+  const setStyle = (s: boolean) => {
+    setSketch(s);
+    try {
+      localStorage.setItem('sd-style', s ? 'sketch' : 'clean');
+    } catch {
+      // Style preference is a convenience; ignore blocked storage.
+    }
+  };
+
+  return (
+    <SketchContext.Provider value={sketch}>
+      <div className="app">
+        <header className="topbar">
+          <strong className="brand">System design</strong>
+          {designs.length > 0 && (
+            <select value={id ?? ''} onChange={(e) => setId(e.target.value)} aria-label="Design">
+              {designs.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.title}
+                  {d.unseen ? ` (${d.unseen} unseen)` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          <button onClick={() => setCreating((v) => !v)}>New design</button>
+          <div className="spacer" />
+          <div className="segmented" role="group" aria-label="Drawing style">
+            <button aria-pressed={sketch} onClick={() => setStyle(true)}>
+              Sketch
+            </button>
+            <button aria-pressed={!sketch} onClick={() => setStyle(false)}>
+              Clean
+            </button>
+          </div>
+          <button
+            disabled={!design}
+            onClick={() => {
+              fittedFor.current = null;
+              change((d) => {
+                for (const x of [...d.components, ...d.notes, ...d.decisions]) x.position = undefined;
+              });
+            }}
+          >
+            Auto layout
+          </button>
+        </header>
+        {creating && (
+          <NewDesign
+            templates={templates}
+            onCancel={() => setCreating(false)}
+            onCreated={(d) => {
+              setCreating(false);
+              refreshLists();
+              setId(d.id);
+            }}
+          />
+        )}
+        {error && (
+          <div className="banner" role="alert">
+            {error}
+            <button onClick={() => setError(null)} aria-label="Dismiss">
+              ×
+            </button>
+          </div>
+        )}
+        {design && current ? (
+          <div className="workspace">
+            <Palette onAdd={(k) => add(k)} />
+            <div
+              className={`canvas${sketch ? ' sketch' : ''}`}
+              ref={canvasRef}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const kind = e.dataTransfer.getData(DRAG_MIME);
+                if (isAddKind(kind)) add(kind, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+              }}
+            >
+              <ReactFlow
+                key={design.id}
+                nodes={nodes}
+                edges={derived.edges}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                onNodesChange={onNodesChange}
+                onNodeClick={(_, n) => setSelected(n.id)}
+                onEdgeClick={(_, e) => e.data?.kind === 'flow' && setSelected(e.id)}
+                onPaneClick={() => setSelected(null)}
+                onNodeDragStop={(_, __, dragged) =>
+                  change((d) => {
+                    for (const n of dragged) {
+                      const item = [...d.components, ...d.notes, ...d.decisions].find((x) => x.id === n.id);
+                      if (item) item.position = { x: Math.round(n.position.x), y: Math.round(n.position.y) };
+                    }
+                  })
+                }
+                onConnect={onConnect}
+                onDelete={({ nodes: ns, edges: es }) => remove([...ns.map((n) => n.id), ...es.filter((e) => e.data?.kind === 'flow').map((e) => e.id)])}
+                deleteKeyCode={['Delete', 'Backspace']}
+                connectionMode={ConnectionMode.Loose}
+                colorMode="system"
+                minZoom={0.2}
+                proOptions={{ hideAttribution: true }}
+              >
+                <Background gap={18} size={1} />
+                <Controls showInteractive={false} />
+              </ReactFlow>
+            </div>
+            <Inspector design={design} selected={selected} stepId={current.id} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
+            <ReviewBar
+              design={design}
+              viewIndex={view}
+              maxIndex={maxIndex}
+              onView={(i) => {
+                setSelected(null);
+                setViewIndex(i);
+              }}
+              onSeenNext={() => {
+                change((d) => {
+                  d.steps[view].seen = true;
+                });
+                setSelected(null);
+                setViewIndex(Math.min(view + 1, design.steps.length - 1));
+              }}
+            />
+          </div>
+        ) : (
+          !creating && (
+            <div className="empty">
+              <h2>Start your first design</h2>
+              <p className="muted">Pick a template to walk through step by step, or start blank. Agents can also create designs through the MCP server.</p>
+              <button className="primary" onClick={() => setCreating(true)}>
+                New design
+              </button>
+            </div>
+          )
+        )}
+      </div>
+    </SketchContext.Provider>
+  );
+}
+
+function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; onCancel: () => void; onCreated: (d: Design) => void }) {
+  const [title, setTitle] = useState('');
+  const [template, setTemplate] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return setErr('Enter a title.');
+    try {
+      onCreated(await api.create({ id: m.slugify(title), title: title.trim(), template: template || undefined }));
+    } catch (e) {
+      setErr(e instanceof ApiError && e.status === 409 ? 'A design with this name already exists. Try another.' : errorText(e));
+    }
+  };
+  return (
+    <form className="new-design" onSubmit={submit}>
+      <label className="field">
+        <span>Title</span>
+        <input
+          autoFocus
+          value={title}
+          placeholder="Design Twitter"
+          onChange={(e) => {
+            setTitle(e.target.value);
+            setErr(null);
+          }}
+        />
+      </label>
+      <label className="field">
+        <span>Template</span>
+        <select value={template} onChange={(e) => setTemplate(e.target.value)}>
+          <option value="">Blank</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.title}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button className="primary" type="submit">
+        Create
+      </button>
+      <button type="button" onClick={onCancel}>
+        Cancel
+      </button>
+      {err && <em className="field-error">{err}</em>}
+    </form>
+  );
+}

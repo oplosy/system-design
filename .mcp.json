@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "system-design": {
+      "command": "node",
+      "args": ["mcp/server.ts"]
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "id": "three-tier",
+  "title": "Three-tier web app",
+  "description": "The classic starting point: load balancer, stateless app servers, cache and database.",
+  "rev": 0,
+  "steps": [
+    { "id": "single", "title": "One app server and a database", "summary": "The simplest thing that works.", "seen": false },
+    { "id": "scale", "title": "Load balancer and stateless app servers", "summary": "Run several app servers so one can fail or be deployed without downtime.", "seen": false },
+    { "id": "cache", "title": "Cache hot reads", "summary": "Keep frequent reads off the database.", "seen": false }
+  ],
+  "components": [
+    { "id": "client", "type": "client", "label": "Browser", "step": "single" },
+    { "id": "app", "type": "service", "label": "App server", "step": "single" },
+    { "id": "db", "type": "sql-db", "label": "Database", "tech": "PostgreSQL", "step": "single" },
+    { "id": "lb", "type": "load-balancer", "label": "Load balancer", "tech": "nginx", "step": "scale" },
+    { "id": "cache", "type": "cache", "label": "Cache", "tech": "Redis", "step": "cache" }
+  ],
+  "connections": [
+    { "id": "client-app", "from": "client", "to": "app", "label": "HTTPS", "step": "single" },
+    { "id": "app-db", "from": "app", "to": "db", "label": "SQL", "step": "single" },
+    { "id": "client-lb", "from": "client", "to": "lb", "label": "HTTPS", "step": "scale" },
+    { "id": "lb-app", "from": "lb", "to": "app", "step": "scale" },
+    { "id": "app-cache", "from": "app", "to": "cache", "label": "read-through", "step": "cache" }
+  ],
+  "notes": [
+    { "id": "note-stateless", "text": "Sessions live in the cache, not on the server, so any instance can serve any request.", "attachTo": "app", "step": "scale" }
+  ],
+  "decisions": [
+    {
+      "id": "decision-cache-aside",
+      "title": "Cache-aside with a short TTL",
+      "why": "Most pages read the same rows. A 60s TTL removes most database reads and keeps staleness bounded.",
+      "alternatives": ["Write-through cache", "Read replicas only"],
+      "tradeoffs": "Users may see data up to 60s old; invalidation logic in the app.",
+      "links": ["cache", "db"],
+      "step": "cache"
+    }
+  ]
+}
