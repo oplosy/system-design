@@ -634,6 +634,7 @@ kbd {
   font: 500 12px/1 var(--mono);
   color: var(--muted);
   text-align: center;
+  white-space: nowrap;
 }
 
 .tb-step:hover:not(.locked):not(.current) {
@@ -1676,6 +1677,13 @@ select.ed option {
   margin-bottom: 104px;
   border: 1px solid var(--rule-strong);
   background: var(--panel);
+}
+
+/* On a narrow canvas the overview would cover the drawing. */
+@media (max-width: 1180px) {
+  .react-flow__minimap {
+    display: none;
+  }
 }
 
 /* Present mode: the canvas alone, full screen, with a caption bar. */

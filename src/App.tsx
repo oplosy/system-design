@@ -34,6 +34,9 @@ const isEmpty = (d: Design, id: string) => !d.components.some((c) => c.boundary 
 const emptyBoundaries = (d: Design) => d.boundaries.filter((b) => isEmpty(d, b.id));
 const isAddKind = (k: string): k is AddKind => k === 'note' || k === 'decision' || !!boundaryKind(k) || (COMPONENT_TYPES as readonly string[]).includes(k);
 
+/** Fit the drawing with room at the bottom for the review or caption bar. */
+const FIT = { padding: { x: '48px', top: '48px', bottom: '120px' }, duration: 300, maxZoom: 1.2 } as const;
+
 type Editing = { id: string; at: Pt; value: string; multiline: boolean };
 
 function download(url: string, name: string) {
@@ -336,7 +339,7 @@ function Shell() {
     const fit = (tries: number) => {
       const ready = getNodes().every((n) => n.hidden || getInternalNode(n.id)?.measured.width);
       if (!ready && tries > 0) return void setTimeout(() => fit(tries - 1), 50);
-      void fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 });
+      void fitView(FIT);
     };
     // Entering full screen resizes the canvas a moment later.
     setTimeout(() => fit(40), presenting ? 250 : 60);
@@ -524,6 +527,21 @@ function Shell() {
     if (on) document.documentElement.requestFullscreen?.().catch(() => {});
     else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   };
+  // While presenting, re-fit whenever the canvas changes size (panels hide, full screen kicks in).
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || !presenting) return;
+    let t: number | undefined;
+    const ro = new ResizeObserver(() => {
+      clearTimeout(t);
+      t = window.setTimeout(() => fitView(FIT), 80);
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      clearTimeout(t);
+    };
+  }, [presenting, fitView]);
   useEffect(() => {
     const onChange = () => !document.fullscreenElement && setPresenting(false);
     document.addEventListener('fullscreenchange', onChange);
@@ -545,7 +563,8 @@ function Shell() {
       height,
       backgroundColor: getComputedStyle(canvasRef.current!).getPropertyValue('--canvas').trim(),
       style: { width: `${width}px`, height: `${height}px`, transform: `translate(${pad - b.x}px, ${pad - b.y}px) scale(1)` },
-      filter: (n: HTMLElement) => !n.classList?.contains('inline-edit') && !n.classList?.contains('bend-handle'),
+      // Leave out editing aids and review markers: the image is for docs, not for review.
+      filter: (n: HTMLElement) => !['inline-edit', 'bend-handle', 'unseen-dot', 'comment-badge'].some((c) => n.classList?.contains(c)),
     };
     try {
       download(kind === 'png' ? await toPng(el, { ...options, pixelRatio: 2 }) : await toSvg(el, options), `${design.id}.${kind}`);
@@ -752,6 +771,7 @@ function Shell() {
                       pannable
                       zoomable
                       ariaLabel="Overview"
+                      style={{ width: 160, height: 104 }}
                       nodeColor={(n) =>
                         n.type === 'component' ? GROUP_COLOR[SHAPES[(n.data as { type: ComponentType }).type].group] : n.type === 'note' ? NOTE_COLOR : n.type === 'decision' ? 'var(--decision)' : 'transparent'
                       }
