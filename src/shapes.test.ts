@@ -30,3 +30,9 @@ test('the network kit has its own devices plus the shared ones', () => {
   assert.ok(!network.includes('stream'), 'software-only parts stay out of the network kit');
   for (const k of KITS) assert.ok(COMPONENT_TYPES.some((t) => kitsOf(t).includes(k.key)), `${k.key} kit is empty`);
 });
+
+test('the software kit has diagram parts plus actors, services and stores', () => {
+  const software = COMPONENT_TYPES.filter((t) => kitsOf(t).includes('software'));
+  for (const t of ['use-case', 'class', 'port', 'aggregate', 'choice', 'state', 'user', 'service', 'sql-db'] as const) assert.ok(software.includes(t), `${t} missing from software kit`);
+  assert.ok(!software.includes('router'), 'network gear stays out of the software kit');
+});

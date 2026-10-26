@@ -34,7 +34,8 @@ function BoundaryPreview({ kind }: { kind: BoundaryKind }) {
 
 function savedKit(): Kit {
   try {
-    return localStorage.getItem('sd-kit') === 'network' ? 'network' : 'system';
+    const k = localStorage.getItem('sd-kit');
+    return KITS.find((x) => x.key === k)?.key ?? 'system';
   } catch {
     return 'system';
   }
@@ -92,7 +93,7 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
-          placeholder={kit === 'network' ? 'Search: router, printer, wifi…' : 'Search: kafka, redis, s3…'}
+          placeholder={{ system: 'Search: kafka, redis, s3…', network: 'Search: router, printer, wifi…', software: 'Search: use case, class, state…' }[kit]}
           aria-label="Search parts"
         />
         <div className="seg" role="radiogroup" aria-label="Part kit">

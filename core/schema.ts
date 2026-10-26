@@ -133,12 +133,42 @@ export const COMPONENT_TYPES = [
   'satellite',
   'mpls',
   'microwave',
+  // Software diagrams
+  'use-case',
+  'class',
+  'interface',
+  'module',
+  'package',
+  'table',
+  'layer',
+  'ui',
+  'controller',
+  'app-service',
+  'repository',
+  'port',
+  'adapter',
+  'library',
+  'aggregate',
+  'entity',
+  'value-object',
+  'command',
+  'query',
+  'domain-event',
+  'policy',
+  'start',
+  'end',
+  'action',
+  'choice',
+  'fork',
+  'state',
+  'signal',
+  'timer',
 ] as const;
 
 export type ComponentType = (typeof COMPONENT_TYPES)[number];
 
-/** Boxes that group components: cloud regions, networks, VLANs, sites, clusters. */
-export const BOUNDARY_KINDS = ['region', 'zone', 'datacenter', 'vpc', 'subnet', 'vlan', 'cluster', 'site', 'group'] as const;
+/** Boxes that group components: cloud regions, networks, VLANs, sites, clusters, system boundaries, swimlanes. */
+export const BOUNDARY_KINDS = ['region', 'zone', 'datacenter', 'vpc', 'subnet', 'vlan', 'cluster', 'site', 'system', 'context', 'lane', 'group'] as const;
 export type BoundaryKind = (typeof BOUNDARY_KINDS)[number];
 
 const Id = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'lowercase letters, digits and dashes');

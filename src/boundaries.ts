@@ -16,7 +16,10 @@ export const BOUNDARY_SPECS: Record<BoundaryKind, { name: string; color: string;
   vlan: { name: 'VLAN', color: '#7F77DD', dash: '9 4', strokeWidth: 1.4, kits: ['network'] },
   cluster: { name: 'Cluster / namespace', color: '#7F77DD', dash: '2 5', strokeWidth: 1.4, kits: ['system'] },
   site: { name: 'Site / floor', color: '#A8742E', strokeWidth: 1.8, kits: ['network'] },
-  group: { name: 'Group', color: '#888780', dash: '6 6', strokeWidth: 1.2, kits: ['system', 'network'] },
+  system: { name: 'System boundary', color: '#2F9FB8', strokeWidth: 1.6, kits: ['software'] },
+  context: { name: 'Bounded context', color: '#1D9E75', dash: '10 5', strokeWidth: 1.5, kits: ['software'] },
+  lane: { name: 'Swimlane', color: '#A8742E', strokeWidth: 1.2, kits: ['software'] },
+  group: { name: 'Group', color: '#888780', dash: '6 6', strokeWidth: 1.2, kits: ['system', 'network', 'software'] },
 };
 
 /**

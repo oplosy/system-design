@@ -3,8 +3,8 @@
 A local canvas for system and architecture designs that agents build and you review step by step.
 
 - Every component type has its own shape (cloud for CDN, shield for WAF, cylinder for databases, pipe for queues, ...).
-- Two part kits: **System** (cloud and software architecture) and **Network** (routers, switches, PCs, printers, ...).
-- **Boundaries** (region, zone, VPC, subnet, VLAN, site, cluster, ...) wrap their members and nest; drop a part into a box to group it.
+- Three part kits: **System** (cloud architecture), **Network** (routers, switches, PCs, printers, ...) and **Software** (use cases, classes, ports and adapters, DDD / CQRS, activity and state flows).
+- **Boundaries** (region, zone, VPC, subnet, VLAN, site, cluster, system boundary, bounded context, swimlane, ...) wrap their members and nest; drop a part into a box to group it.
 - Two looks for the same data: **Sketch** (hand-drawn, rough.js) and **Clean**.
 - Designs are built in **steps**. Each step carries its components, connections, notes and decisions (why, alternatives, trade-offs).
 - **Review queue:** steps added by an agent start unseen. You walk them in order and cannot jump past the first unseen step.
