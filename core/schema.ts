@@ -95,6 +95,8 @@ export const StepSchema = z.object({
   title: z.string().min(1),
   summary: z.string().optional(),
   seen: z.boolean(),
+  /** The reviewer sent this step back; cleared when the agent resolves the feedback. */
+  changesRequested: z.boolean().optional(),
 });
 
 export const ComponentSchema = z.object({
@@ -130,6 +132,10 @@ export const ConnectionSchema = z.object({
   to: Id,
   label: z.string().optional(),
   async: z.boolean().optional(),
+  /** How the line runs; curve when omitted. */
+  route: z.enum(['curve', 'straight', 'elbow']).optional(),
+  /** Hand-set offset of the line's middle, in canvas pixels. */
+  bend: z.number().optional(),
   step: Id,
 });
 
@@ -152,6 +158,17 @@ export const DecisionSchema = z.object({
   step: Id,
 });
 
+/** Review feedback on a step, or on one item in it. */
+export const CommentSchema = z.object({
+  id: Id,
+  step: Id,
+  target: Id.optional(),
+  text: z.string().min(1),
+  by: z.enum(['reviewer', 'agent']),
+  at: z.string(),
+  resolved: z.boolean().optional(),
+});
+
 export const DesignSchema = z
   .object({
     id: Id,
@@ -166,6 +183,7 @@ export const DesignSchema = z
     decisions: z.array(DecisionSchema),
     // Optional so designs written before boundaries existed still load.
     boundaries: z.array(BoundarySchema).default([]),
+    comments: z.array(CommentSchema).default([]),
   })
   .superRefine((d, ctx) => {
     const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
@@ -178,6 +196,13 @@ export const DesignSchema = z
       if (itemIds.has(item.id)) issue(`duplicate id "${item.id}"`);
       itemIds.add(item.id);
       if (!stepIds.has(item.step)) issue(`"${item.id}" references unknown step "${item.step}"`);
+    }
+    const commentIds = new Set<string>();
+    for (const c of d.comments) {
+      if (commentIds.has(c.id) || itemIds.has(c.id)) issue(`duplicate id "${c.id}"`);
+      commentIds.add(c.id);
+      if (!stepIds.has(c.step)) issue(`comment "${c.id}" references unknown step "${c.step}"`);
+      if (c.target && !itemIds.has(c.target)) issue(`comment "${c.id}" is about unknown "${c.target}"`);
     }
     const componentIds = new Set(d.components.map((c) => c.id));
     for (const c of d.connections) {
@@ -212,6 +237,7 @@ export type Connection = z.infer<typeof ConnectionSchema>;
 export type Note = z.infer<typeof NoteSchema>;
 export type Decision = z.infer<typeof DecisionSchema>;
 export type Boundary = z.infer<typeof BoundarySchema>;
+export type Comment = z.infer<typeof CommentSchema>;
 export type Design = z.infer<typeof DesignSchema>;
 
 export const isId = (s: string) => Id.safeParse(s).success;

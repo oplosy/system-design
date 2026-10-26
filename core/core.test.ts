@@ -64,6 +64,75 @@ test('boundaries nest, refuse cycles and hand their contents up when removed', a
   await assert.rejects(store.writeDesign(stored), /inside itself/);
 });
 
+test('feedback goes back to the agent and returns the step for review', async () => {
+  const x = await store.createDesign({ id: 'review', title: 'Review' });
+  const step = m.addStep(x, { title: 'Add cache' });
+  const cache = m.addComponent(x, { type: 'cache', label: 'Cache' });
+  const onItem = m.addComment(x, { target: cache, text: 'Why not CDN?', by: 'reviewer' });
+  m.requestChanges(x, step, 'Size it first');
+  assert.equal(x.steps[1].seen, true);
+  assert.deepEqual(
+    m.feedback(x).map((f) => [f.step, f.comments.length, f.comments[0].about]),
+    [[step, 2, { id: cache, label: 'Cache' }]],
+  );
+
+  m.resolveFeedback(x, { comments: [onItem], reply: 'Reads repeat per user, a CDN would not hit.' });
+  assert.equal(x.steps[1].changesRequested, true, 'one comment is still open');
+  m.resolveFeedback(x, { step });
+  assert.equal(x.steps[1].changesRequested, undefined);
+  assert.equal(x.steps[1].seen, false, 'the step goes back to the reviewer');
+  assert.deepEqual(m.feedback(x), []);
+
+  m.removeItem(x, cache);
+  assert.equal(x.comments[0].target, undefined, 'feedback outlives the item');
+  await store.writeDesign(x);
+});
+
+test('reverting a step removes what it added, and paste makes fresh copies', async () => {
+  const x = await store.createDesign({ id: 'revert', title: 'Revert' });
+  const api = m.addComponent(x, { type: 'service', label: 'API', position: { x: 0, y: 0 } });
+  const step = m.addStep(x, { title: 'Add DB' });
+  const vpc = m.addBoundary(x, { kind: 'vpc', label: 'VPC', members: [api] });
+  const db = m.addComponent(x, { type: 'sql-db', label: 'DB', boundary: vpc, position: { x: 0, y: 100 } });
+  m.connect(x, { from: api, to: db });
+  m.addNote(x, { text: 'Primary only', attachTo: db });
+
+  const clip = m.copyItems(x, [vpc, x.notes[0].id]);
+  assert.deepEqual(clip.components.map((c) => c.id), [api, db], 'a boundary brings its contents');
+  const pasted = m.pasteItems(x, clip, { step, offset: 40 });
+  assert.deepEqual(pasted, ['vpc-2', 'api-2', 'db-2', 'note-2']);
+  const copy = x.components.find((c) => c.id === 'db-2')!;
+  assert.deepEqual([copy.boundary, copy.position], ['vpc-2', { x: 40, y: 140 }]);
+  assert.equal(x.notes.find((n) => n.id === 'note-2')!.attachTo, 'db-2');
+  assert.ok(x.connections.some((c) => c.from === 'api-2' && c.to === 'db-2'));
+  await store.writeDesign(x);
+
+  const y = await store.readDesign('revert');
+  m.revertStep(y, step);
+  assert.deepEqual(y.components.map((c) => c.id), [api]);
+  assert.equal(y.components[0].boundary, undefined);
+  assert.deepEqual([y.steps.length, y.connections.length, y.notes.length, y.boundaries.length], [1, 0, 0, 0]);
+  await store.writeDesign(y);
+});
+
+test('exports Mermaid and a decision record', async () => {
+  const { toMermaid, toDecisionRecord } = await import('./export.ts');
+  const x = await store.createDesign({ id: 'export', title: 'Export' });
+  const vpc = m.addBoundary(x, { kind: 'vpc', label: 'VPC', detail: '10.0.0.0/16' });
+  const api = m.addComponent(x, { type: 'service', label: 'API', boundary: vpc });
+  const db = m.addComponent(x, { id: 'end', type: 'sql-db', label: 'Say "hi"', tech: 'PostgreSQL' });
+  m.connect(x, { from: api, to: db, label: 'SQL', async: true });
+  m.addDecision(x, { title: 'Postgres', why: 'Joins', alternatives: ['MySQL'], links: [db] });
+  assert.equal(
+    toMermaid(x),
+    ['%% Export', 'flowchart LR', '  subgraph vpc["VPC · 10.0.0.0/16"]', '    api["API"]', '  end', '  end_[("Say #quot;hi#quot; (PostgreSQL)")]', '  api -.->|"SQL"| end_', ''].join('\n'),
+  );
+  const adr = toDecisionRecord(x);
+  assert.match(adr, /## D1\. Postgres/);
+  assert.match(adr, /\*\*Affects:\*\* Say "hi"/);
+  assert.match(adr, /- MySQL/);
+});
+
 test('templates load and start unseen', async () => {
   const files = (await fs.readdir(store.TEMPLATES_DIR)).filter((f) => f.endsWith('.json'));
   const templates = await store.listTemplates();

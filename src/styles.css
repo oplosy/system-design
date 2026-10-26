@@ -1443,3 +1443,291 @@ select.ed option {
 .sketch .edge-label {
   font-size: 12px;
 }
+
+/* Undo / redo */
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 2px;
+  color: var(--muted);
+}
+
+.icon-btn:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.menu-right {
+  left: auto;
+  right: -4px;
+  width: 320px;
+}
+
+/* Step diff: outline what the current step added. */
+.sd-node.added {
+  outline: 1.5px solid var(--signal);
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+.sd-boundary.added .boundary-tab {
+  outline: 1.5px solid var(--signal);
+}
+
+.comment-badge {
+  position: absolute;
+  top: -9px;
+  left: -9px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  font: 600 11px/1 var(--mono);
+  color: var(--panel);
+  background: var(--select);
+  border-radius: 9px 9px 9px 2px;
+  box-shadow: 0 0 0 2px var(--canvas);
+}
+
+/* Bending a selected connection */
+.bend-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 2px solid var(--select);
+  pointer-events: all;
+  cursor: grab;
+}
+
+.edge-label.grab {
+  pointer-events: all;
+  cursor: grab;
+  outline: 1.5px solid var(--select);
+}
+
+.bend-handle:active,
+.edge-label.grab:active {
+  cursor: grabbing;
+}
+
+/* In-place rename on the canvas */
+.inline-edit {
+  position: absolute;
+  z-index: 1000;
+  min-width: 160px;
+  max-width: 280px;
+  padding: 6px 8px;
+  font: 500 13px/1.4 var(--sans);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1.5px solid var(--select);
+  border-radius: 3px;
+  box-shadow: var(--lift);
+  outline: none;
+  pointer-events: all;
+  resize: none;
+}
+
+/* Review bar: diff toggle, changes requested, the send-back form */
+.tb-toggle:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.tb-toggle[aria-pressed='true'] {
+  color: var(--signal);
+  box-shadow: inset 0 -2px 0 var(--signal);
+}
+
+.tb-step.changes::after {
+  content: ' ↺';
+  color: var(--signal);
+}
+
+.tb-pop {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: calc(100% + 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--ink);
+  box-shadow: var(--lift);
+}
+
+.tb-pop .ed {
+  border: 1px solid var(--rule-strong);
+}
+
+.tb-pop-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Comments in the inspector */
+.comment {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.comment.resolved .comment-text {
+  color: var(--quiet);
+  text-decoration: line-through;
+  text-decoration-color: var(--rule-strong);
+}
+
+.comment.agent .comment-text {
+  color: var(--muted);
+}
+
+.comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 11px var(--mono);
+  color: var(--quiet);
+}
+
+.comment-by {
+  font-weight: 600;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.comment.agent .comment-by {
+  color: var(--select);
+}
+
+.comment-meta .text-btn {
+  height: 22px;
+  margin-left: auto;
+  font: 500 11px var(--mono);
+}
+
+.comment-meta .ref {
+  font: 12px var(--sans);
+}
+
+.comment-text {
+  margin-top: 2px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.comment-new {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.comment-new .ed {
+  width: 100%;
+  border: 1px solid var(--rule-strong);
+}
+
+.comment-new .btn {
+  height: 28px;
+}
+
+/* Find on sheet */
+.find {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  width: 240px;
+}
+
+.find-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--panel);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  box-shadow: var(--lift);
+}
+
+.find-input:focus {
+  outline: none;
+  border-color: var(--select);
+}
+
+.find-menu {
+  top: calc(100% + 6px);
+  right: 0;
+  width: 300px;
+}
+
+/* Minimap sits above the review bar. */
+.react-flow__minimap.bottom.right {
+  margin-bottom: 104px;
+  border: 1px solid var(--rule-strong);
+  background: var(--panel);
+}
+
+/* Present mode: the canvas alone, full screen, with a caption bar. */
+.app.presenting .topbar,
+.app.presenting .palette,
+.app.presenting .inspector {
+  display: none;
+}
+
+.app.presenting .workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.present-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  width: min(860px, calc(100% - 48px));
+  background: var(--panel);
+  border: 1px solid var(--ink);
+  box-shadow: var(--lift);
+}
+
+.present-bar > .tb-key {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border-right: 1px solid var(--rule-strong);
+}
+
+.present-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+}
+
+.present-text strong {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.present-text span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.present-bar .tb-btn {
+  height: auto;
+}

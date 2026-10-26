@@ -252,7 +252,11 @@ export function Inspector({
         <header className="insp-head">
           <div className="insp-tagline">
             <span className="tag">Step {pad(stepNo(step.id))}</span>
-            <span className={`state${step.seen ? '' : ' new'}`}>{step.seen ? 'Reviewed' : 'Not reviewed'}</span>
+            {step.changesRequested ? (
+              <span className="state new">Changes requested</span>
+            ) : (
+              <span className={`state${step.seen ? '' : ' new'}`}>{step.seen ? 'Reviewed' : 'Not reviewed'}</span>
+            )}
           </div>
           <h2 className="insp-title">{step.title}</h2>
           {step.summary && <p className="insp-lead">{step.summary}</p>}
@@ -323,10 +327,24 @@ export function Inspector({
           </section>
         )}
 
+        <Comments design={design} step={stepId} change={change} onSelect={onSelect} />
+
         <p className="quiet pad">
           {!components.length && !boundaries.length && !decisions.length && !notes.length ? 'Nothing was added in this step. ' : ''}
-          Select anything on the sheet to read or edit it.
+          Select anything on the sheet to read or edit it. Double-click to rename.
         </p>
+        <footer className="insp-foot">
+          <button
+            className="text-btn danger"
+            title="Remove everything this step added (Ctrl+Z brings it back)"
+            onClick={() =>
+              confirm(`Revert step ${pad(stepNo(step.id))} “${step.title}”? Everything it added is removed.${design.steps.length > 1 ? ' The step goes too.' : ''}`) &&
+              change((d) => m.revertStep(d, stepId))
+            }
+          >
+            Revert step
+          </button>
+        </footer>
       </aside>
     );
   }
@@ -422,6 +440,20 @@ export function Inspector({
                 </button>
               </div>
             </Prop>
+            <Prop label="Line">
+              <div className="toggle" role="radiogroup" aria-label="Line">
+                {(['curve', 'straight', 'elbow'] as const).map((r) => (
+                  <button key={r} role="radio" aria-checked={(connection.route ?? 'curve') === r} onClick={() => edit((d: Design) => d.connections, { route: r === 'curve' ? undefined : r, bend: undefined })}>
+                    {r[0].toUpperCase() + r.slice(1)}
+                  </button>
+                ))}
+              </div>
+              {connection.bend !== undefined && (
+                <button className="text-btn" onClick={() => edit((d: Design) => d.connections, { bend: undefined })}>
+                  Reset bend
+                </button>
+              )}
+            </Prop>
           </>
         )}
         {decision && <Prop label="Affects">{decision.links.length ? decision.links.map(ref) : <span className="quiet">Drag from the decision to a component</span>}</Prop>}
@@ -470,8 +502,14 @@ export function Inspector({
             </Block>
           </>
         )}
-        {connection && <p className="quiet">Async connections are drawn dashed: queues, events and other fire-and-forget flows.</p>}
+        {connection && (
+          <p className="quiet">
+            Async connections are drawn dashed: queues, events and other fire-and-forget flows. Drag the middle of a selected line (or its label) to bend it; double-click it to edit the label.
+          </p>
+        )}
       </section>
+
+      <Comments design={design} step={item.step} target={item.id} change={change} onSelect={onSelect} />
 
       <footer className="insp-foot">
         <button className="text-btn danger" onClick={() => onDelete(item.id)}>
@@ -488,17 +526,64 @@ export function ReviewBar({
   maxIndex,
   onView,
   onSeenNext,
+  onRequestChanges,
+  diff,
+  onDiff,
 }: {
   design: Design;
   viewIndex: number;
   maxIndex: number;
   onView: (i: number) => void;
   onSeenNext: () => void;
+  onRequestChanges: (text: string) => void;
+  diff: boolean;
+  onDiff: () => void;
 }) {
   const step = design.steps[viewIndex];
   const seen = design.steps.filter((s) => s.seen).length;
+  const [asking, setAsking] = useState(false);
+  const [why, setWhy] = useState('');
+  const send = () => {
+    onRequestChanges(why);
+    setWhy('');
+    setAsking(false);
+  };
   return (
     <div className="titleblock" role="region" aria-label="Step review">
+      {asking && (
+        <form
+          className="tb-pop"
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
+          }}
+        >
+          <label className="block-label" htmlFor="changes-why">
+            Send step {pad(viewIndex + 1)} back to the agent
+          </label>
+          <textarea
+            id="changes-why"
+            className="ed"
+            autoFocus
+            rows={3}
+            value={why}
+            placeholder="What should change? The agent reads this through get_feedback."
+            onChange={(e) => setWhy(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setAsking(false);
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send();
+            }}
+          />
+          <div className="tb-pop-foot">
+            <button type="button" className="text-btn" onClick={() => setAsking(false)}>
+              Cancel
+            </button>
+            <button type="submit" className="btn ink">
+              Request changes
+            </button>
+          </div>
+        </form>
+      )}
       <div className="tb-row">
         <span className="tb-cell tb-key">
           Step {pad(viewIndex + 1)}/{pad(design.steps.length)}
@@ -506,6 +591,9 @@ export function ReviewBar({
         <span className="tb-cell tb-title" title={step.title}>
           {step.title}
         </span>
+        <button className="tb-cell tb-key tb-toggle" aria-pressed={diff} onClick={onDiff} title="Outline what this step added and dim the rest">
+          Diff
+        </button>
         <span className="tb-cell tb-key">
           {seen}/{design.steps.length} reviewed
         </span>
@@ -515,11 +603,15 @@ export function ReviewBar({
           {design.steps.map((s, i) => (
             <button
               key={s.id}
-              className={`tb-step${s.seen ? ' seen' : ''}${i === viewIndex ? ' current' : ''}${i > maxIndex ? ' locked' : ''}`}
+              className={`tb-step${s.seen ? ' seen' : ''}${s.changesRequested ? ' changes' : ''}${i === viewIndex ? ' current' : ''}${i > maxIndex ? ' locked' : ''}`}
               onClick={() => i <= maxIndex && onView(i)}
               aria-disabled={i > maxIndex}
               aria-current={i === viewIndex ? 'step' : undefined}
-              title={i > maxIndex ? `Step ${i + 1} is locked until the earlier steps are reviewed` : `Step ${i + 1}: ${s.title}`}
+              title={
+                i > maxIndex
+                  ? `Step ${i + 1} is locked until the earlier steps are reviewed`
+                  : `Step ${i + 1}: ${s.title}${s.changesRequested ? ' (changes requested)' : ''}`
+              }
             >
               {pad(i + 1)}
             </button>
@@ -527,6 +619,9 @@ export function ReviewBar({
         </div>
         <button className="tb-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} title="Previous step (←)">
           ← Back
+        </button>
+        <button className="tb-btn" aria-expanded={asking} onClick={() => setAsking((a) => !a)} title="Send this step back to the agent with a comment">
+          Request changes
         </button>
         {!step.seen ? (
           <button className="tb-btn ink" onClick={onSeenNext} title="Mark as seen and go to the next step (→)">
@@ -541,5 +636,150 @@ export function ReviewBar({
         )}
       </div>
     </div>
+  );
+}
+
+export function PresentBar({ design, viewIndex, maxIndex, onView, onExit }: { design: Design; viewIndex: number; maxIndex: number; onView: (i: number) => void; onExit: () => void }) {
+  const step = design.steps[viewIndex];
+  return (
+    <div className="present-bar" role="region" aria-label="Presentation">
+      <span className="tb-key">
+        {pad(viewIndex + 1)}/{pad(design.steps.length)}
+      </span>
+      <div className="present-text">
+        <strong>{step.title}</strong>
+        {step.summary && <span>{step.summary}</span>}
+      </div>
+      <button className="tb-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} aria-label="Previous step">
+        ←
+      </button>
+      <button className="tb-btn" onClick={() => onView(viewIndex + 1)} disabled={viewIndex >= maxIndex} aria-label="Next step">
+        →
+      </button>
+      <button className="tb-btn" onClick={onExit}>
+        Exit <kbd>Esc</kbd>
+      </button>
+    </div>
+  );
+}
+
+/** Finds a visible item by name, technology, text or kind, and flies to it. */
+export function FindBox({ design, visible, onPick, inputRef }: { design: Design; visible: string[]; onPick: (id: string) => void; inputRef: React.RefObject<HTMLInputElement | null> }) {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = new Set(visible);
+  const all = [
+    ...design.components.map((c) => ({ id: c.id, kind: SHAPES[c.type].name, text: c.label, extra: c.tech })),
+    ...design.boundaries.map((b) => ({ id: b.id, kind: BOUNDARY_SPECS[b.kind].name, text: b.label, extra: b.detail })),
+    ...design.decisions.map((x) => ({ id: x.id, kind: 'Decision', text: x.title, extra: x.why })),
+    ...design.notes.map((n) => ({ id: n.id, kind: 'Note', text: n.text, extra: '' })),
+    ...design.connections.filter((c) => c.label).map((c) => ({ id: c.id, kind: 'Connection', text: c.label!, extra: '' })),
+  ];
+  const hits = terms.length ? all.filter((x) => shown.has(x.id) && terms.every((t) => `${x.text} ${x.extra ?? ''} ${x.kind} ${x.id}`.toLowerCase().includes(t))).slice(0, 8) : [];
+  const pick = (id: string) => {
+    onPick(id);
+    setOpen(false);
+  };
+  return (
+    <div className="find">
+      <input
+        ref={inputRef}
+        type="search"
+        className="find-input"
+        value={q}
+        placeholder="Find on sheet"
+        aria-label="Find on sheet"
+        onChange={(e) => {
+          setQ(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && hits[0]) pick(hits[0].id);
+          if (e.key === 'Escape') {
+            setQ('');
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      {open && terms.length > 0 && (
+        <div className="menu menu-right find-menu" role="listbox" aria-label="Matches">
+          {hits.length ? (
+            hits.map((h) => (
+              <button key={h.id} role="option" aria-selected={false} className="menu-item" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(h.id)}>
+                <span className="menu-main">
+                  <span className="menu-title">{h.text}</span>
+                </span>
+                <span className="menu-meta">{h.kind}</span>
+              </button>
+            ))
+          ) : (
+            <p className="quiet pad">Nothing on this step matches “{q}”.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+/** Review comments on a step (`target` unset) or on one item, plus a box to add one for the agent. */
+function Comments({ design, step, target, change, onSelect }: { design: Design; step: string; target?: string; change: Change; onSelect: (id: string) => void }) {
+  const [text, setText] = useState('');
+  const list = design.comments.filter((c) => (target ? c.target === target : c.step === step));
+  const label = (id: string) => [...design.components, ...design.boundaries].find((x) => x.id === id)?.label ?? design.decisions.find((x) => x.id === id)?.title ?? id;
+  const send = () => {
+    if (!text.trim()) return;
+    change((d) => m.addComment(d, { step: target ? undefined : step, target, text, by: 'reviewer' }));
+    setText('');
+  };
+  const toggle = (id: string) =>
+    change((d) => {
+      const c = d.comments.find((x) => x.id === id);
+      if (c) c.resolved = c.resolved ? undefined : true;
+    });
+  return (
+    <section className="insp-sec">
+      <h3 className="rule-head">
+        Comments
+        <span className="rule-count">{pad(list.filter((c) => !c.resolved && c.by === 'reviewer').length)}</span>
+      </h3>
+      {list.map((c) => (
+        <div key={c.id} className={`comment${c.resolved ? ' resolved' : ''}${c.by === 'agent' ? ' agent' : ''}`}>
+          <div className="comment-meta">
+            <span className="comment-by">{c.by === 'agent' ? 'Agent' : 'You'}</span>
+            {!target && c.target && (
+              <button className="ref" onClick={() => onSelect(c.target!)}>
+                {label(c.target)}
+              </button>
+            )}
+            <span className="comment-at">{when(c.at)}</span>
+            {c.by === 'reviewer' && (
+              <button className="text-btn" onClick={() => toggle(c.id)}>
+                {c.resolved ? 'Reopen' : 'Resolve'}
+              </button>
+            )}
+          </div>
+          <p className="comment-text">{c.text}</p>
+        </div>
+      ))}
+      <div className="comment-new">
+        <textarea
+          className="ed"
+          rows={2}
+          value={text}
+          placeholder={target ? 'Comment on this for the agent' : 'Comment on this step for the agent'}
+          aria-label="New comment"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && send()}
+        />
+        <button className="btn" disabled={!text.trim()} onClick={send} title="Ctrl+Enter">
+          Comment
+        </button>
+      </div>
+    </section>
   );
 }

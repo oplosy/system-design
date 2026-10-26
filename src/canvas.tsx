@@ -1,18 +1,26 @@
-import { createContext, memo, useContext, useMemo } from 'react';
-import { BaseEdge, EdgeLabelRenderer, Handle, Position, useInternalNode, type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps } from '@xyflow/react';
+import { createContext, memo, useContext, useMemo, useState } from 'react';
+import { BaseEdge, EdgeLabelRenderer, Handle, Position, useInternalNode, useReactFlow, type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps } from '@xyflow/react';
 import type { PathInfo } from 'roughjs/bin/core';
 import type { BoundaryKind, ComponentType } from '../core/schema.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
+import { edgeGeometry, type Pt, type Route } from './edges.ts';
 import { DECISION_SIZE, NOTE_COLOR, NOTE_SIZE, SHAPES, drawShape, gen, hash, options, toPaths } from './shapes.ts';
 
 export const SketchContext = createContext(true);
+/** What edges need from the app: whether editing is allowed, and how to save a bend or start a label edit. */
+export const EdgeContext = createContext<{ locked: boolean; onBend: (id: string, bend: number | undefined) => void; onEditLabel: (id: string, at: Pt) => void }>({
+  locked: true,
+  onBend: () => {},
+  onEditLabel: () => {},
+});
 
-type Common = { unseen: boolean; faded: boolean };
+/** added: drawn as new in the step diff; comments: open review comments on the item. */
+type Common = { unseen: boolean; faded: boolean; added?: boolean; comments?: number };
 export type ComponentNode = Node<Common & { type: ComponentType; label: string; tech?: string }, 'component'>;
 export type NoteNode = Node<Common & { text: string }, 'note'>;
 export type DecisionNode = Node<Common & { title: string; why: string }, 'decision'>;
 export type BoundaryNode = Node<Common & { kind: BoundaryKind; label: string; detail?: string; w: number; h: number }, 'boundary'>;
-export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; unseen: boolean; faded: boolean }, 'rough'>;
+export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; route?: Route; bend?: number; unseen: boolean; faded: boolean; added?: boolean }, 'rough'>;
 
 function Paths({ paths, dashed }: { paths: PathInfo[]; dashed?: boolean }) {
   return paths.map((p, i) => (
@@ -28,9 +36,14 @@ function Paths({ paths, dashed }: { paths: PathInfo[]; dashed?: boolean }) {
 
 function Frame({ w, h, data, children }: { w: number; h: number; data: Common; children: React.ReactNode }) {
   return (
-    <div className={`sd-node${data.faded ? ' faded' : ''}`} style={{ width: w, height: h }}>
+    <div className={`sd-node${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}`} style={{ width: w, height: h }}>
       {children}
       {data.unseen && <span className="unseen-dot" title="Not reviewed yet" />}
+      {!!data.comments && (
+        <span className="comment-badge" title={`${data.comments} open comment${data.comments > 1 ? 's' : ''}`}>
+          {data.comments}
+        </span>
+      )}
       <Handle type="target" position={Position.Top} />
       <Handle type="source" position={Position.Bottom} />
     </div>
@@ -104,7 +117,7 @@ export const BoundaryNodeView = memo(function BoundaryNodeView({ id, data }: Nod
   // Narrow boxes drop the kind word (the line style still shows it) so the label stays readable.
   const roomy = w > 7.5 * (spec.name.length + data.label.length + (data.detail?.length ?? 0)) + 70;
   return (
-    <div className={`sd-boundary${data.faded ? ' faded' : ''}`} style={{ width: w, height: h, color: spec.color }}>
+    <div className={`sd-boundary${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}`} style={{ width: w, height: h, color: spec.color }}>
       <svg width={w} height={h} overflow="visible">
         <rect x={1} y={1} width={w - 2} height={h - 2} rx={sketch ? 0 : 6} style={{ fill: spec.color, fillOpacity: 0.05, stroke: 'none' }} />
         {paths.map((p, i) => (
@@ -127,59 +140,76 @@ function box(n: InternalNode) {
   return { x: x + w / 2, y: y + h / 2, w, h };
 }
 
-/** Where the line from a's center towards b leaves a's bounding box. */
-function exit(a: ReturnType<typeof box>, b: ReturnType<typeof box>) {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  if (!dx && !dy) return a;
-  const s = Math.min(dx ? a.w / 2 / Math.abs(dx) : Infinity, dy ? a.h / 2 / Math.abs(dy) : Infinity);
-  return { x: a.x + dx * s, y: a.y + dy * s };
-}
-
 /**
- * Excalidraw-style "floating" edge: a gentle curve between node borders, stopping just short of them.
- * It always bends to the same side of its direction, so A→B and B→A arc apart instead of overlapping.
+ * Excalidraw-style "floating" edge between node borders, drawn with rough.js.
+ * When selected, its middle (or its label) can be dragged to bend it; double-click edits the label.
  */
 export function RoughEdge({ id, source, target, data, selected }: EdgeProps<FlowEdge>) {
   const sketch = useContext(SketchContext);
+  const { locked, onBend, onEditLabel } = useContext(EdgeContext);
+  const { screenToFlowPosition } = useReactFlow();
+  const [drag, setDrag] = useState<number | null>(null);
   const s = useInternalNode(source), t = useInternalNode(target);
-  const geo = s && t ? (() => {
-    const a = box(s), b = box(t);
-    const e1 = exit(a, b), e2 = exit(b, a);
-    const len = Math.hypot(e2.x - e1.x, e2.y - e1.y) || 1;
-    const ux = (e2.x - e1.x) / len, uy = (e2.y - e1.y) / len;
-    const gap = Math.min(6, len / 4);
-    const p1 = { x: e1.x + ux * gap, y: e1.y + uy * gap }, p2 = { x: e2.x - ux * gap, y: e2.y - uy * gap };
-    const bend = Math.min(len * 0.12, 48);
-    // m is where the curve passes halfway; c is the quadratic control point that makes it do so.
-    const m = { x: (p1.x + p2.x) / 2 - uy * bend, y: (p1.y + p2.y) / 2 + ux * bend };
-    const c = { x: 2 * m.x - (p1.x + p2.x) / 2, y: 2 * m.y - (p1.y + p2.y) / 2 };
-    return { p1, p2, m, c, d: `M${p1.x},${p1.y} Q${c.x},${c.y} ${p2.x},${p2.y}` };
-  })() : null;
   const link = data?.kind === 'link';
+  const geo = s && t ? edgeGeometry(box(s), box(t), link ? 'curve' : data?.route, drag ?? data?.bend) : null;
   const paths = useMemo(() => {
     if (!geo) return [];
-    const { p2, c, d } = geo;
     const o = options(sketch, undefined, hash(id), { strokeWidth: link ? 1.1 : selected ? 2.2 : 1.4, roughness: sketch ? 1 : 0 });
-    const parts = [gen.path(d, o)];
+    const parts = [geo.points ? gen.linearPath(geo.points.map((p): [number, number] => [p.x, p.y]), o) : gen.path(geo.d, o)];
     if (!link) {
-      const a = Math.atan2(p2.y - c.y, p2.x - c.x), L = 12;
-      for (const da of [0.45, -0.45]) parts.push(gen.line(p2.x, p2.y, p2.x - L * Math.cos(a + da), p2.y - L * Math.sin(a + da), o));
+      const { tip, angle } = geo, L = 12;
+      for (const da of [0.45, -0.45]) parts.push(gen.line(tip.x, tip.y, tip.x - L * Math.cos(angle + da), tip.y - L * Math.sin(angle + da), o));
     }
     return toPaths(parts);
   }, [geo?.d, sketch, id, link, selected]);
   if (!geo) return null;
-  const { m, d } = geo;
+  const handle = !!selected && !locked && !link && geo.bendable;
+  const startBend = (e: React.PointerEvent<HTMLElement>) => {
+    if (!handle || e.button !== 0) return;
+    e.stopPropagation();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    let last: number | null = null;
+    const move = (ev: PointerEvent) => setDrag((last = Math.round(geo.bendAt(screenToFlowPosition({ x: ev.clientX, y: ev.clientY })))));
+    el.addEventListener('pointermove', move);
+    el.addEventListener(
+      'pointerup',
+      () => {
+        el.removeEventListener('pointermove', move);
+        if (last !== null) onBend(id, last);
+        setDrag(null);
+      },
+      { once: true },
+    );
+  };
+  const at = `translate(-50%, -50%) translate(${geo.mid.x}px, ${geo.mid.y}px)`;
   return (
     <>
-      <BaseEdge id={id} path={d} style={{ stroke: 'transparent' }} interactionWidth={18} />
+      <BaseEdge id={id} path={geo.d} style={{ stroke: 'transparent' }} interactionWidth={18} />
       <g className={`rough-edge${data?.faded ? ' faded' : ''}${selected ? ' selected' : ''}`} style={{ color: link ? NOTE_COLOR : undefined }}>
         <Paths paths={paths} dashed={link || data?.async} />
       </g>
-      {data?.label && (
+      {(data?.label || handle) && (
         <EdgeLabelRenderer>
-          <div className={`edge-label${data.faded ? ' faded' : ''}`} style={{ transform: `translate(-50%, -50%) translate(${m.x}px, ${m.y}px)` }}>
-            {data.label}
-          </div>
+          {data?.label ? (
+            <div
+              className={`edge-label${data.faded ? ' faded' : ''}${handle ? ' nodrag nopan grab' : ''}`}
+              style={{ transform: at }}
+              title={handle ? 'Drag to bend · double-click to edit' : undefined}
+              onPointerDown={startBend}
+              onDoubleClick={() => onEditLabel(id, geo.mid)}
+            >
+              {data.label}
+            </div>
+          ) : (
+            <div
+              className="bend-handle nodrag nopan"
+              style={{ transform: at }}
+              title="Drag to bend · double-click to add a label"
+              onPointerDown={startBend}
+              onDoubleClick={() => onEditLabel(id, geo.mid)}
+            />
+          )}
         </EdgeLabelRenderer>
       )}
     </>

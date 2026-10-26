@@ -84,6 +84,7 @@ export async function createDesign(input: { id: string; title: string; descripti
       notes: [],
       decisions: [],
       boundaries: [],
+      comments: [],
     };
   }
   return writeDesign(

@@ -3,23 +3,29 @@ import {
   Background,
   ConnectionMode,
   Controls,
+  MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  ViewportPortal,
   applyNodeChanges,
+  getNodesBounds,
   useReactFlow,
   type Connection as FlowConnection,
   type Node,
   type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type Design } from '../core/schema.ts';
+import { toPng, toSvg } from 'html-to-image';
+import { toDecisionRecord, toMermaid } from '../core/export.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { ApiError, api, type Summary } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
-import { SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
+import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
+import type { Pt } from './edges.ts';
 import { layout } from './layout.ts';
-import { DRAG_MIME, Inspector, Palette, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
-import { DECISION_SIZE, NOTE_SIZE, SHAPES } from './shapes.ts';
+import { DRAG_MIME, FindBox, Inspector, Palette, PresentBar, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
+import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES } from './shapes.ts';
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const boundaryKind = (k: string) => (k.startsWith('boundary:') && (BOUNDARY_KINDS as readonly string[]).includes(k.slice(9)) ? (k.slice(9) as BoundaryKind) : null);
@@ -27,6 +33,21 @@ const isEmpty = (d: Design, id: string) => !d.components.some((c) => c.boundary 
 /** Boundaries with nothing inside: the only ones whose own position matters. */
 const emptyBoundaries = (d: Design) => d.boundaries.filter((b) => isEmpty(d, b.id));
 const isAddKind = (k: string): k is AddKind => k === 'note' || k === 'decision' || !!boundaryKind(k) || (COMPONENT_TYPES as readonly string[]).includes(k);
+
+type Editing = { id: string; at: Pt; value: string; multiline: boolean };
+
+function download(url: string, name: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+}
+
+function downloadText(text: string, name: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  download(url, name);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 function loadStyle() {
   try {
@@ -54,15 +75,24 @@ function Shell() {
   const [sketch, setSketch] = useState(loadStyle);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [diff, setDiff] = useState(false);
+  const [presenting, setPresenting] = useState(false);
+  const [editing, setEditing] = useState<Editing | null>(null);
   const designRef = useRef<Design | null>(null);
   const saveState = useRef({ timer: undefined as number | undefined, pending: false, inFlight: false, dirty: false });
+  // Undo history of whole designs. It restarts whenever the design is replaced from disk.
+  const hist = useRef({ past: [] as Design[], future: [] as Design[], at: 0 });
+  const clip = useRef<{ items: m.Clip; pastes: number } | null>(null);
+  const pendingSelect = useRef<Set<string> | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const findRef = useRef<HTMLInputElement>(null);
   const fittedFor = useRef<string | null>(null);
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition, fitView, getNodes, getInternalNode } = useReactFlow();
 
-  const commit = useCallback((d: Design | null) => {
+  const commit = useCallback((d: Design | null, { fresh = false } = {}) => {
     designRef.current = d;
     setDesign(d);
+    if (fresh) hist.current = { past: [], future: [], at: 0 };
   }, []);
 
   const flush = useCallback(async () => {
@@ -83,7 +113,7 @@ function Shell() {
       if (e instanceof ApiError && e.status === 409) {
         // shortcut: on a conflict the local edit is dropped, not merged; add a merge if agents and you edit at the same time often.
         s.dirty = false;
-        commit(await api.get(d.id));
+        commit(await api.get(d.id), { fresh: true });
         setError('This design changed on disk (probably an agent), so it was reloaded. Your last edit was dropped.');
       } else setError(errorText(e));
     } finally {
@@ -95,9 +125,16 @@ function Shell() {
     }
   }, [commit]);
 
-  /** Applies an edit locally right away and saves shortly after. */
+  const schedule = useCallback(() => {
+    const s = saveState.current;
+    clearTimeout(s.timer);
+    s.pending = true;
+    s.timer = window.setTimeout(flush, 350);
+  }, [flush]);
+
+  /** Applies an edit locally right away and saves shortly after. `record: false` keeps it out of undo (automatic layout). */
   const change = useCallback(
-    (fn: (d: Design) => void) => {
+    (fn: (d: Design) => void, { record = true } = {}) => {
       const cur = designRef.current;
       if (!cur) return;
       const next = structuredClone(cur);
@@ -107,14 +144,31 @@ function Shell() {
         setError(errorText(e));
         return;
       }
+      if (record) {
+        const h = hist.current, now = Date.now();
+        // Edits in quick succession (typing, one drag) undo as one.
+        if (now - h.at > 600) h.past = [...h.past.slice(-99), cur];
+        h.at = now;
+        h.future = [];
+      }
       commit(next);
-      const s = saveState.current;
-      clearTimeout(s.timer);
-      s.pending = true;
-      s.timer = window.setTimeout(flush, 350);
+      schedule();
     },
-    [commit, flush],
+    [commit, schedule],
   );
+
+  const undo = (back: boolean) => {
+    const h = hist.current, cur = designRef.current;
+    const from = back ? h.past : h.future;
+    if (!cur || !from.length) return;
+    (back ? h.future : h.past).push(cur);
+    const snap = from.pop()!;
+    h.at = 0;
+    // Keep the newest revision so the save is not taken for a stale write.
+    commit({ ...snap, rev: cur.rev });
+    schedule();
+    setSelected(null);
+  };
 
   const refreshLists = useCallback(() => {
     api.designs().then(setDesigns).catch((e) => setError(errorText(e)));
@@ -131,7 +185,7 @@ function Shell() {
       if (!cur || cur.id !== changed || s.pending || s.inFlight) return;
       try {
         const fresh = await api.get(changed);
-        if (fresh.rev !== designRef.current?.rev) commit(fresh);
+        if (fresh.rev !== designRef.current?.rev) commit(fresh, { fresh: true });
       } catch (e) {
         setError(errorText(e));
       }
@@ -151,7 +205,7 @@ function Shell() {
       .get(id)
       .then((d) => {
         if (cancelled) return;
-        commit(d);
+        commit(d, { fresh: true });
         setSelected(null);
         const firstUnseen = d.steps.findIndex((s) => !s.seen);
         setViewIndex(firstUnseen >= 0 ? firstUnseen : d.steps.length - 1);
@@ -171,9 +225,12 @@ function Shell() {
     layout(design)
       .then((pos) => {
         if (cancelled) return;
-        change((d) => {
-          for (const x of [...d.components, ...d.notes, ...d.decisions, ...emptyBoundaries(d)]) if (!x.position) x.position = pos.get(x.id);
-        });
+        change(
+          (d) => {
+            for (const x of [...d.components, ...d.notes, ...d.decisions, ...emptyBoundaries(d)]) if (!x.position) x.position = pos.get(x.id);
+          },
+          { record: false },
+        );
       })
       .catch((e) => setError(errorText(e)));
     return () => {
@@ -191,11 +248,15 @@ function Shell() {
     const idx = m.stepIndex(design);
     const visibleStep = (step: string) => idx.get(step)! <= view;
     const reviewing = !current.seen;
-    const flags = (step: string) => ({ unseen: reviewing && step === current.id, faded: reviewing && step !== current.id });
+    // Reviewing, the diff view and presenting all put this step's items in front; the diff view also outlines them.
+    const focus = reviewing || diff || presenting;
+    const flags = (step: string) => ({ unseen: reviewing && step === current.id, faded: focus && step !== current.id, added: diff && step === current.id });
+    const open = new Map<string, number>();
+    for (const c of design.comments) if (c.target && c.by === 'reviewer' && !c.resolved) open.set(c.target, (open.get(c.target) ?? 0) + 1);
     const shown = new Set<string>();
     const node = (id: string, type: 'component' | 'note' | 'decision', position: { x: number; y: number } | undefined, data: object, step: string): Node => {
       shown.add(id);
-      return { id, type, position: position ?? { x: 0, y: 0 }, hidden: !position, selected: id === selected, data: { ...data, ...flags(step) } };
+      return { id, type, position: position ?? { x: 0, y: 0 }, hidden: !position, selected: id === selected, data: { ...data, ...flags(step), comments: open.get(id) } };
     };
     const boxes = boundaryBoxes(design, visibleStep);
     const nodes = [
@@ -233,24 +294,53 @@ function Shell() {
     const edges: FlowEdge[] = [
       ...design.connections
         .filter((c) => visibleStep(c.step) && both(c.from, c.to))
-        .map((c): FlowEdge => ({ id: c.id, source: c.from, target: c.to, type: 'rough', selected: c.id === selected, data: { kind: 'flow', label: c.label, async: c.async, ...flags(c.step) } })),
+        .map(
+          (c): FlowEdge => ({
+            id: c.id,
+            source: c.from,
+            target: c.to,
+            type: 'rough',
+            selected: c.id === selected,
+            data: { kind: 'flow', label: c.label, async: c.async, route: c.route, bend: c.bend, ...flags(c.step) },
+          }),
+        ),
       ...design.notes.filter((n) => n.attachTo && both(n.attachTo, n.id)).map((n) => link(`link-${n.id}`, n.attachTo!, n.id, n.step)),
       ...design.decisions.flatMap((x) => x.links.filter((l) => both(l, x.id)).map((l) => link(`link-${x.id}-${l}`, l, x.id, x.step))),
     ];
     return { nodes, edges, boxes };
-  }, [design, current, view, selected]);
+  }, [design, current, view, selected, diff, presenting]);
 
   const [nodes, setNodes] = useState<Node[]>([]);
-  useEffect(() => setNodes(derived.nodes), [derived.nodes]);
+  const lastSelected = useRef(selected);
+  // Rebuild nodes from the design, keeping a multi-selection (shift-drag or ctrl-click) across edits.
+  useEffect(() => {
+    const keep = lastSelected.current === selected;
+    lastSelected.current = selected;
+    const pending = pendingSelect.current;
+    if (pending && derived.nodes.some((n) => pending.has(n.id))) pendingSelect.current = null;
+    setNodes((prev) => {
+      if (pending) return derived.nodes.map((n) => ({ ...n, selected: pending.has(n.id) }));
+      if (!keep) return derived.nodes;
+      const sel = new Set(prev.filter((n) => n.selected).map((n) => n.id));
+      return derived.nodes.map((n) => (sel.has(n.id) && !n.selected ? { ...n, selected: true } : n));
+    });
+  }, [derived.nodes, selected]);
   const onNodesChange = useCallback((changes: NodeChange[]) => setNodes((ns) => applyNodeChanges(changes, ns)), []);
 
-  // Re-fit when a design opens or the walkthrough moves to another step, so new items are in view.
+  // Re-fit when a design opens, the walkthrough moves to another step, or presenting starts or ends.
   useEffect(() => {
-    const key = design && `${design.id}:${view}`;
+    const key = design && `${design.id}:${view}:${presenting}`;
     if (!key || fittedFor.current === key || !nodes.length || nodes.some((n) => n.hidden)) return;
     fittedFor.current = key;
-    setTimeout(() => fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 }), 60);
-  }, [design, view, nodes, fitView]);
+    // fitView skips nodes React Flow has not measured yet, so wait until every shown node has a size.
+    const fit = (tries: number) => {
+      const ready = getNodes().every((n) => n.hidden || getInternalNode(n.id)?.measured.width);
+      if (!ready && tries > 0) return void setTimeout(() => fit(tries - 1), 50);
+      void fitView({ padding: 0.15, duration: 300, maxZoom: 1.2 });
+    };
+    // Entering full screen resizes the canvas a moment later.
+    setTimeout(() => fit(40), presenting ? 250 : 60);
+  }, [design, view, nodes, fitView, getNodes, getInternalNode, presenting]);
 
   const add = (kind: AddKind, at?: { x: number; y: number }) => {
     if (!current) return;
@@ -285,6 +375,12 @@ function Shell() {
         const inTree = x.type === 'boundary' ? tree.has(x.id) : d.components.some((c) => c.id === x.id && c.boundary && tree.has(c.boundary));
         if (inTree) carried.current.set(x.id, { ...x.position });
       }
+    }
+    // Notes and decisions about the parts that move travel with them.
+    for (const x of nodes) {
+      const note = d.notes.find((i) => i.id === x.id), dec = d.decisions.find((i) => i.id === x.id);
+      const along = note ? !!note.attachTo && carried.current.has(note.attachTo) : !!dec?.links.length && dec.links.every((l) => carried.current.has(l));
+      if (along && !dragged.some((g) => g.id === x.id)) carried.current.set(x.id, { ...x.position });
     }
   };
   const onNodeDrag = (_: unknown, __: Node, dragged: Node[]) => {
@@ -358,6 +454,121 @@ function Shell() {
       }
     });
 
+  const selectedIds = () => {
+    const ids = nodes.filter((n) => n.selected).map((n) => n.id);
+    return ids.length ? ids : selected ? [selected] : [];
+  };
+  const pasteClip = (c: { items: m.Clip; pastes: number }) => {
+    if (!current) return;
+    c.pastes++;
+    let ids: string[] = [];
+    change((d) => {
+      ids = m.pasteItems(d, c.items, { step: current.id, offset: 40 * c.pastes });
+    });
+    pendingSelect.current = new Set(ids);
+    setSelected(ids.length === 1 ? ids[0] : null);
+  };
+  const copy = () => {
+    const d = designRef.current, ids = selectedIds();
+    if (!d || !ids.length) return false;
+    clip.current = { items: m.copyItems(d, ids), pastes: 0 };
+    return true;
+  };
+  const duplicate = () => {
+    const d = designRef.current, ids = selectedIds();
+    if (d && ids.length) pasteClip({ items: m.copyItems(d, ids), pastes: 0 });
+  };
+
+  /** Opens the in-place editor for an item's name, a note's text or a connection's label. */
+  const startEdit = (id: string, at: Pt) => {
+    const d = designRef.current;
+    if (!d || presenting) return;
+    const c = d.components.find((x) => x.id === id) ?? d.boundaries.find((x) => x.id === id);
+    const note = d.notes.find((x) => x.id === id), dec = d.decisions.find((x) => x.id === id), conn = d.connections.find((x) => x.id === id);
+    const value = c?.label ?? note?.text ?? dec?.title ?? (conn && (conn.label ?? ''));
+    if (value !== undefined) setEditing({ id, at, value, multiline: !!note || !!dec });
+  };
+  const finishEdit = (value: string | null) => {
+    const e = editing;
+    setEditing(null);
+    if (!e || value === null || value.trim() === e.value.trim()) return;
+    const v = value.trim();
+    const d = designRef.current;
+    // Names, notes and titles can't be empty; a connection label can.
+    if (!v && !d?.connections.some((x) => x.id === e.id)) return;
+    change((x) => {
+      const conn = x.connections.find((i) => i.id === e.id);
+      if (conn) conn.label = v || undefined;
+      const c = x.components.find((i) => i.id === e.id) ?? x.boundaries.find((i) => i.id === e.id);
+      if (c) c.label = v;
+      const note = x.notes.find((i) => i.id === e.id);
+      if (note) note.text = v;
+      const dec = x.decisions.find((i) => i.id === e.id);
+      if (dec) dec.title = v;
+    });
+  };
+  const edgeActions = {
+    locked: presenting,
+    onBend: (id: string, bend: number | undefined) =>
+      change((d) => {
+        const c = d.connections.find((x) => x.id === id);
+        if (c) c.bend = bend;
+      }),
+    onEditLabel: startEdit,
+  };
+
+  const present = (on: boolean) => {
+    setPresenting(on);
+    setSelected(null);
+    setEditing(null);
+    if (on) document.documentElement.requestFullscreen?.().catch(() => {});
+    else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  };
+  useEffect(() => {
+    const onChange = () => !document.fullscreenElement && setPresenting(false);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const exportAs = async (kind: 'png' | 'svg' | 'mermaid' | 'decisions') => {
+    if (!design) return;
+    if (kind === 'mermaid') return downloadText(toMermaid(design), `${design.id}.mmd`);
+    if (kind === 'decisions') return downloadText(toDecisionRecord(design), `${design.id}-decisions.md`);
+    const el = canvasRef.current?.querySelector<HTMLElement>('.react-flow__viewport');
+    const shown = getNodes().filter((n) => !n.hidden);
+    if (!el || !shown.length) return setError('Nothing on the sheet to export.');
+    const b = getNodesBounds(shown);
+    // Room around the parts for arcs and labels that reach past them.
+    const pad = 48, width = Math.ceil(b.width + 2 * pad), height = Math.ceil(b.height + 2 * pad);
+    const options = {
+      width,
+      height,
+      backgroundColor: getComputedStyle(canvasRef.current!).getPropertyValue('--canvas').trim(),
+      style: { width: `${width}px`, height: `${height}px`, transform: `translate(${pad - b.x}px, ${pad - b.y}px) scale(1)` },
+      filter: (n: HTMLElement) => !n.classList?.contains('inline-edit') && !n.classList?.contains('bend-handle'),
+    };
+    try {
+      download(kind === 'png' ? await toPng(el, { ...options, pixelRatio: 2 }) : await toSvg(el, options), `${design.id}.${kind}`);
+    } catch (e) {
+      setError(`Export failed: ${errorText(e)}`);
+    }
+  };
+
+  const findPick = (id: string) => {
+    const d = designRef.current;
+    const conn = d?.connections.find((c) => c.id === id);
+    setSelected(id);
+    fitView({ nodes: conn ? [{ id: conn.from }, { id: conn.to }] : [{ id }], duration: 300, maxZoom: 1.2, padding: 0.6 });
+  };
+
+  const requestChanges = (text: string) => {
+    if (!design || !current) return;
+    const wasSeen = current.seen;
+    change((d) => m.requestChanges(d, current.id, text));
+    setSelected(null);
+    if (!wasSeen) setViewIndex(Math.min(view + 1, design.steps.length - 1));
+  };
+
   const setStyle = (s: boolean) => {
     setSketch(s);
     try {
@@ -386,7 +597,32 @@ function Shell() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (creating || e.altKey || e.ctrlKey || e.metaKey || t.closest('input, textarea, select, [contenteditable]')) return;
+      if (creating) return;
+      if (presenting) {
+        if (['ArrowRight', ' ', 'PageDown'].includes(e.key)) goTo(view + 1);
+        else if (['ArrowLeft', 'PageUp'].includes(e.key)) goTo(view - 1);
+        else if (e.key === 'Escape') present(false);
+        else return;
+        e.preventDefault();
+        return;
+      }
+      const mod = e.ctrlKey || e.metaKey, key = e.key.toLowerCase();
+      if (mod && key === 'f' && design) {
+        e.preventDefault();
+        findRef.current?.focus();
+        return;
+      }
+      if (t.closest('input, textarea, select, [contenteditable]')) return;
+      if (mod) {
+        if (key === 'z') undo(!e.shiftKey);
+        else if (key === 'y') undo(false);
+        else if (key === 'd') duplicate();
+        else if (key === 'v' && clip.current) pasteClip(clip.current);
+        else if (!(key === 'c' && copy())) return;
+        e.preventDefault();
+        return;
+      }
+      if (e.altKey) return;
       if (e.key === 'Escape') setSelected(null);
       if (selected) return;
       if (e.key === 'ArrowRight') {
@@ -403,7 +639,7 @@ function Shell() {
 
   return (
     <SketchContext.Provider value={sketch}>
-      <div className="app">
+      <div className={`app${presenting ? ' presenting' : ''}`}>
         <header className="topbar">
           <span className="wordmark">
             system<span>/</span>design
@@ -420,6 +656,17 @@ function Shell() {
             </span>
           )}
           <div className="spacer" />
+          <button className="icon-btn" disabled={!hist.current.past.length} onClick={() => undo(true)} title="Undo (Ctrl+Z)" aria-label="Undo">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M5.5 3 2.5 6l3 3M3 6h6.5a4 4 0 0 1 0 8H7" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            </svg>
+          </button>
+          <button className="icon-btn" disabled={!hist.current.future.length} onClick={() => undo(false)} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M10.5 3l3 3-3 3M13 6H6.5a4 4 0 0 0 0 8H9" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            </svg>
+          </button>
+          <span className="vrule" />
           <div className="tabs" role="group" aria-label="Drawing style">
             <button aria-pressed={sketch} onClick={() => setStyle(true)}>
               Sketch
@@ -442,6 +689,10 @@ function Shell() {
           >
             Auto layout
           </button>
+          <ExportMenu disabled={!design} onPick={exportAs} />
+          <button className="text-btn" disabled={!design} onClick={() => present(true)} title="Walk through the steps full screen">
+            Present
+          </button>
           <button className="btn ink" onClick={() => setCreating(true)}>
             New design
           </button>
@@ -463,32 +714,71 @@ function Shell() {
                 if (isAddKind(kind)) add(kind, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
               }}
             >
-              <ReactFlow
-                key={design.id}
-                nodes={nodes}
-                edges={derived.edges}
-                nodeTypes={nodeTypes}
-                edgeTypes={edgeTypes}
-                onNodesChange={onNodesChange}
-                onNodeClick={(_, n) => setSelected(n.id)}
-                onEdgeClick={(_, e) => e.data?.kind === 'flow' && setSelected(e.id)}
-                onPaneClick={() => setSelected(null)}
-                onNodeDragStart={onNodeDragStart}
-                onNodeDrag={onNodeDrag}
-                onNodeDragStop={onNodeDragStop}
-                elevateNodesOnSelect={false}
-                onConnect={onConnect}
-                onDelete={({ nodes: ns, edges: es }) => remove([...ns.map((n) => n.id), ...es.filter((e) => e.data?.kind === 'flow').map((e) => e.id)])}
-                deleteKeyCode={['Delete', 'Backspace']}
-                connectionMode={ConnectionMode.Loose}
-                colorMode="system"
-                minZoom={0.2}
-                proOptions={{ hideAttribution: true }}
-              >
-                <Background gap={20} size={1.2} />
-                <Controls showInteractive={false} position="top-left" />
-              </ReactFlow>
-              <ReviewBar design={design} viewIndex={view} maxIndex={maxIndex} onView={goTo} onSeenNext={seenNext} />
+              <EdgeContext.Provider value={edgeActions}>
+                <ReactFlow
+                  key={design.id}
+                  nodes={nodes}
+                  edges={derived.edges}
+                  nodeTypes={nodeTypes}
+                  edgeTypes={edgeTypes}
+                  onNodesChange={onNodesChange}
+                  onNodeClick={(e, n) => !(e.shiftKey || e.ctrlKey || e.metaKey) && setSelected(n.id)}
+                  onEdgeClick={(_, e) => e.data?.kind === 'flow' && setSelected(e.id)}
+                  onNodeDoubleClick={(e, n) => startEdit(n.id, screenToFlowPosition({ x: e.clientX, y: e.clientY }))}
+                  onEdgeDoubleClick={(e, ed) => ed.data?.kind === 'flow' && startEdit(ed.id, screenToFlowPosition({ x: e.clientX, y: e.clientY }))}
+                  onPaneClick={() => setSelected(null)}
+                  onNodeDragStart={onNodeDragStart}
+                  onNodeDrag={onNodeDrag}
+                  onNodeDragStop={onNodeDragStop}
+                  elevateNodesOnSelect={false}
+                  onConnect={onConnect}
+                  onDelete={({ nodes: ns, edges: es }) => remove([...ns.map((n) => n.id), ...es.filter((e) => e.data?.kind === 'flow').map((e) => e.id)])}
+                  deleteKeyCode={presenting ? null : ['Delete', 'Backspace']}
+                  multiSelectionKeyCode={['Control', 'Meta', 'Shift']}
+                  nodesDraggable={!presenting}
+                  nodesConnectable={!presenting}
+                  elementsSelectable={!presenting}
+                  zoomOnDoubleClick={false}
+                  connectionMode={ConnectionMode.Loose}
+                  colorMode="system"
+                  minZoom={0.2}
+                  proOptions={{ hideAttribution: true }}
+                >
+                  <Background gap={20} size={1.2} />
+                  {!presenting && <Controls showInteractive={false} position="top-left" />}
+                  {!presenting && (
+                    <MiniMap
+                      position="bottom-right"
+                      pannable
+                      zoomable
+                      ariaLabel="Overview"
+                      nodeColor={(n) =>
+                        n.type === 'component' ? GROUP_COLOR[SHAPES[(n.data as { type: ComponentType }).type].group] : n.type === 'note' ? NOTE_COLOR : n.type === 'decision' ? 'var(--decision)' : 'transparent'
+                      }
+                      nodeStrokeColor={(n) => (n.type === 'boundary' ? BOUNDARY_SPECS[(n.data as { kind: BoundaryKind }).kind].color : 'transparent')}
+                      nodeStrokeWidth={3}
+                    />
+                  )}
+                  <ViewportPortal>{editing && <InlineEdit key={editing.id} {...editing} onDone={finishEdit} />}</ViewportPortal>
+                </ReactFlow>
+              </EdgeContext.Provider>
+              {presenting ? (
+                <PresentBar design={design} viewIndex={view} maxIndex={maxIndex} onView={goTo} onExit={() => present(false)} />
+              ) : (
+                <>
+                  <FindBox design={design} visible={nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id))} onPick={findPick} inputRef={findRef} />
+                  <ReviewBar
+                    design={design}
+                    viewIndex={view}
+                    maxIndex={maxIndex}
+                    onView={goTo}
+                    onSeenNext={seenNext}
+                    onRequestChanges={requestChanges}
+                    diff={diff}
+                    onDiff={() => setDiff((x) => !x)}
+                  />
+                </>
+              )}
             </div>
             <Inspector design={design} selected={selected} stepId={current.id} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
           </div>
@@ -551,6 +841,77 @@ function useDismiss(active: boolean, onDismiss: () => void, ref?: React.RefObjec
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
+
+/** Text box over the canvas for renaming in place. Enter or leaving it saves; Esc cancels; Shift+Enter adds a line. */
+function InlineEdit({ at, value, multiline, onDone }: Editing & { onDone: (value: string | null) => void }) {
+  const [v, setV] = useState(value);
+  const done = useRef(false);
+  const finish = (x: string | null) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(x);
+  };
+  const props = {
+    autoFocus: true,
+    value: v,
+    'aria-label': 'Edit text',
+    className: 'inline-edit nodrag nopan nowheel',
+    style: { transform: `translate(-50%, -50%) translate(${at.x}px, ${at.y}px)` },
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setV(e.target.value),
+    onFocus: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => e.currentTarget.select(),
+    onBlur: () => finish(v),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') finish(null);
+      else if (e.key === 'Enter' && !(multiline && e.shiftKey)) {
+        e.preventDefault();
+        finish(v);
+      }
+    },
+  };
+  return multiline ? <textarea rows={4} {...props} /> : <input {...props} />;
+}
+
+const EXPORTS = [
+  { kind: 'png', title: 'PNG image', desc: 'The sheet as it looks now, at 2× resolution' },
+  { kind: 'svg', title: 'SVG image', desc: 'Scalable, for docs and slides' },
+  { kind: 'mermaid', title: 'Mermaid diagram', desc: 'Flowchart text for Markdown, GitHub, Notion' },
+  { kind: 'decisions', title: 'Decision record', desc: 'Every decision with why, alternatives and cost, as Markdown' },
+] as const;
+
+function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (kind: (typeof EXPORTS)[number]['kind']) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, ref);
+  return (
+    <div className="switcher" ref={ref}>
+      <button className="text-btn" disabled={disabled} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        Export
+      </button>
+      {open && (
+        <div className="menu menu-right" role="menu" aria-label="Export">
+          {EXPORTS.map((x) => (
+            <button
+              key={x.kind}
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setOpen(false);
+                onPick(x.kind);
+              }}
+            >
+              <span className="menu-main">
+                <span className="menu-title">{x.title}</span>
+                <span className="menu-desc">{x.desc}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DesignSwitcher({ designs, current, onPick }: { designs: Summary[]; current: string | null; onPick: (id: string) => void }) {
   const [open, setOpen] = useState(false);

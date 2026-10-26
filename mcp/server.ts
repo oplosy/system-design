@@ -12,7 +12,8 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Ids are lowercase-dashed. Positions are optional: the app lays out new items automatically.
 - Component types: ${COMPONENT_TYPES.join(', ')}.
 - Group components with boundaries (${BOUNDARY_KINDS.join(', ')}): a box drawn around its members, nestable through parent (region > vpc > subnet, site > vlan). Give each component its innermost boundary; the box sizes itself.
-- Start from list_designs; call get_design before editing an existing one.`;
+- Start from list_designs; call get_design before editing an existing one.
+- The reviewer can send steps back with comments. Before continuing a design, call get_feedback; fix what it asks (in that step, or in a new step), then resolve_feedback with a short reply. Resolving hands the step back for review.`;
 
 const server = new McpServer({ name: 'system-design', version: '0.1.0' }, { instructions });
 
@@ -31,6 +32,7 @@ const connectionFields = {
   to: z.string().describe('Component id'),
   label: z.string().optional().describe('What flows, e.g. "HTTPS", "tweet events"'),
   async: z.boolean().optional().describe('true for queues, events and other async flows'),
+  route: z.enum(['curve', 'straight', 'elbow']).optional().describe('How the line is drawn; curve by default'),
 };
 const boundaryFields = {
   kind: z.enum(BOUNDARY_KINDS),
@@ -160,6 +162,29 @@ server.registerTool(
 
 server.registerTool('remove_item', { description: 'Remove a component, connection, note, decision or boundary (its contents move to its parent)', inputSchema: { design, id: z.string() } }, async ({ design: designId, id }) =>
   edit(designId, (d) => m.removeItem(d, id)),
+);
+
+server.registerTool(
+  'get_feedback',
+  { description: 'Steps the reviewer sent back, with their open comments (a comment may be about one item)', inputSchema: { id: design } },
+  async ({ id }) => ok(m.feedback(await readDesign(id))),
+);
+
+server.registerTool(
+  'resolve_feedback',
+  {
+    description: 'Mark feedback as handled, with an optional reply the reviewer will read. The affected steps go back to the review queue.',
+    inputSchema: {
+      design,
+      comments: z.array(z.string()).optional().describe('Comment ids to resolve'),
+      step: z.string().optional().describe('Resolve every open comment on this step, and its change request'),
+      reply: z.string().optional().describe('What you changed, or why you kept it'),
+    },
+  },
+  async ({ design: id, ...input }) => {
+    if (!input.comments?.length && !input.step) throw new Error('Pass comments or step.');
+    return edit(id, (d) => m.resolveFeedback(d, input));
+  },
 );
 
 await server.connect(new StdioServerTransport());
