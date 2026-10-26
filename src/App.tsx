@@ -12,16 +12,21 @@ import {
   type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { COMPONENT_TYPES, type Design } from '../core/schema.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { ApiError, api, type Summary } from './api.ts';
+import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
 import { SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import { layout } from './layout.ts';
 import { DRAG_MIME, Inspector, Palette, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
 import { DECISION_SIZE, NOTE_SIZE, SHAPES } from './shapes.ts';
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const isAddKind = (k: string): k is AddKind => k === 'note' || k === 'decision' || (COMPONENT_TYPES as readonly string[]).includes(k);
+const boundaryKind = (k: string) => (k.startsWith('boundary:') && (BOUNDARY_KINDS as readonly string[]).includes(k.slice(9)) ? (k.slice(9) as BoundaryKind) : null);
+const isEmpty = (d: Design, id: string) => !d.components.some((c) => c.boundary === id) && !d.boundaries.some((b) => b.parent === id);
+/** Boundaries with nothing inside: the only ones whose own position matters. */
+const emptyBoundaries = (d: Design) => d.boundaries.filter((b) => isEmpty(d, b.id));
+const isAddKind = (k: string): k is AddKind => k === 'note' || k === 'decision' || !!boundaryKind(k) || (COMPONENT_TYPES as readonly string[]).includes(k);
 
 function loadStyle() {
   try {
@@ -160,14 +165,14 @@ function Shell() {
   // New items (from agents or templates) arrive without positions: lay them out once.
   useEffect(() => {
     if (!design) return;
-    const items = [...design.components, ...design.notes, ...design.decisions];
+    const items = [...design.components, ...design.notes, ...design.decisions, ...emptyBoundaries(design)];
     if (!items.some((x) => !x.position)) return;
     let cancelled = false;
     layout(design)
       .then((pos) => {
         if (cancelled) return;
         change((d) => {
-          for (const x of [...d.components, ...d.notes, ...d.decisions]) if (!x.position) x.position = pos.get(x.id);
+          for (const x of [...d.components, ...d.notes, ...d.decisions, ...emptyBoundaries(d)]) if (!x.position) x.position = pos.get(x.id);
         });
       })
       .catch((e) => setError(errorText(e)));
@@ -182,7 +187,7 @@ function Shell() {
   const current = design?.steps[view];
 
   const derived = useMemo(() => {
-    if (!design || !current) return { nodes: [] as Node[], edges: [] as FlowEdge[] };
+    if (!design || !current) return { nodes: [] as Node[], edges: [] as FlowEdge[], boxes: new Map() as ReturnType<typeof boundaryBoxes> };
     const idx = m.stepIndex(design);
     const visibleStep = (step: string) => idx.get(step)! <= view;
     const reviewing = !current.seen;
@@ -192,7 +197,25 @@ function Shell() {
       shown.add(id);
       return { id, type, position: position ?? { x: 0, y: 0 }, hidden: !position, selected: id === selected, data: { ...data, ...flags(step) } };
     };
+    const boxes = boundaryBoxes(design, visibleStep);
     const nodes = [
+      // Outer boxes first, so inner ones and every part draw on top of them.
+      ...design.boundaries
+        .filter((b) => boxes.has(b.id))
+        .sort((a, b) => boxes.get(a.id)!.depth - boxes.get(b.id)!.depth)
+        .map((b): Node => {
+          const box = boxes.get(b.id)!;
+          return {
+            id: b.id,
+            type: 'boundary',
+            position: { x: box.x, y: box.y },
+            className: 'boundary-node',
+            dragHandle: '.boundary-tab',
+            connectable: false,
+            selected: b.id === selected,
+            data: { kind: b.kind, label: b.label, detail: b.detail, w: box.w, h: box.h, ...flags(b.step) },
+          };
+        }),
       ...design.components.filter((c) => visibleStep(c.step)).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech }, c.step)),
       ...design.notes.filter((n) => visibleStep(n.step)).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
       ...design.decisions.filter((x) => visibleStep(x.step)).map((x) => node(x.id, 'decision', x.position, { title: x.title, why: x.why }, x.step)),
@@ -214,7 +237,7 @@ function Shell() {
       ...design.notes.filter((n) => n.attachTo && both(n.attachTo, n.id)).map((n) => link(`link-${n.id}`, n.attachTo!, n.id, n.step)),
       ...design.decisions.flatMap((x) => x.links.filter((l) => both(l, x.id)).map((l) => link(`link-${x.id}-${l}`, l, x.id, x.step))),
     ];
-    return { nodes, edges };
+    return { nodes, edges, boxes };
   }, [design, current, view, selected]);
 
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -233,16 +256,78 @@ function Shell() {
     if (!current) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     const center = at ?? screenToFlowPosition({ x: (rect?.left ?? 0) + (rect?.width ?? 0) / 2, y: (rect?.top ?? 0) + (rect?.height ?? 0) / 2 });
-    const size = kind === 'note' ? NOTE_SIZE : kind === 'decision' ? DECISION_SIZE : SHAPES[kind];
+    const bKind = boundaryKind(kind);
+    const size = bKind ? EMPTY_BOUNDARY : kind === 'note' ? NOTE_SIZE : kind === 'decision' ? DECISION_SIZE : SHAPES[kind as keyof typeof SHAPES];
     const position = { x: Math.round(center.x - size.w / 2), y: Math.round(center.y - size.h / 2) };
+    // Dropping onto a boundary puts the new part (or boundary) inside it.
+    const inside = at ? boundaryAt(derived.boxes, center) : undefined;
     const step = current.id;
     let newId: string | null = null;
     change((d) => {
-      if (kind === 'note') newId = m.addNote(d, { text: 'New note', position, step, reopen: false });
+      if (bKind) newId = m.addBoundary(d, { kind: bKind, label: BOUNDARY_SPECS[bKind].name, parent: inside, position, step, reopen: false });
+      else if (kind === 'note') newId = m.addNote(d, { text: 'New note', position, step, reopen: false });
       else if (kind === 'decision') newId = m.addDecision(d, { title: 'New decision', why: 'Explain why', links: [], position, step, reopen: false });
-      else newId = m.addComponent(d, { type: kind, label: SHAPES[kind].name, position, step, reopen: false });
+      else newId = m.addComponent(d, { type: kind as keyof typeof SHAPES, label: SHAPES[kind as keyof typeof SHAPES].name, boundary: inside, position, step, reopen: false });
     });
     setSelected(newId);
+  };
+
+  // Dragging a boundary by its tab carries everything inside it along.
+  const carried = useRef(new Map<string, { x: number; y: number }>());
+  const onNodeDragStart = (_: unknown, __: Node, dragged: Node[]) => {
+    const d = designRef.current;
+    carried.current.clear();
+    if (!d) return;
+    for (const n of dragged) {
+      if (n.type !== 'boundary') continue;
+      const tree = m.boundaryTree(d, n.id);
+      for (const x of nodes) {
+        const inTree = x.type === 'boundary' ? tree.has(x.id) : d.components.some((c) => c.id === x.id && c.boundary && tree.has(c.boundary));
+        if (inTree) carried.current.set(x.id, { ...x.position });
+      }
+    }
+  };
+  const onNodeDrag = (_: unknown, __: Node, dragged: Node[]) => {
+    const lead = dragged.find((n) => carried.current.has(n.id));
+    if (!lead) return;
+    const start = carried.current.get(lead.id)!;
+    const dx = lead.position.x - start.x, dy = lead.position.y - start.y;
+    setNodes((ns) => ns.map((n) => (carried.current.has(n.id) && !dragged.some((g) => g.id === n.id) ? { ...n, position: { x: carried.current.get(n.id)!.x + dx, y: carried.current.get(n.id)!.y + dy } } : n)));
+  };
+  const onNodeDragStop = (_: unknown, __: Node, dragged: Node[]) => {
+    const moved = new Map(dragged.map((n) => [n.id, n.position]));
+    const lead = dragged.find((n) => carried.current.has(n.id));
+    const delta = lead ? { x: lead.position.x - carried.current.get(lead.id)!.x, y: lead.position.y - carried.current.get(lead.id)!.y } : null;
+    if (delta) for (const [id, p] of carried.current) if (!moved.has(id)) moved.set(id, { x: p.x + delta.x, y: p.y + delta.y });
+    const boxes = derived.boxes;
+    const round = (p: { x: number; y: number }) => ({ x: Math.round(p.x), y: Math.round(p.y) });
+    change((d) => {
+      const before = new Set(d.boundaries.filter((b) => !isEmpty(d, b.id)).map((b) => b.id));
+      for (const [id, p] of moved) {
+        const item = [...d.components, ...d.notes, ...d.decisions, ...d.boundaries].find((x) => x.id === id);
+        if (item) item.position = round(p);
+      }
+      // A part or boundary dragged on its own lands in whichever box it is dropped in.
+      for (const n of dragged) {
+        if (carried.current.has(n.id) && n !== lead) continue;
+        const c = d.components.find((x) => x.id === n.id);
+        if (c) {
+          const s = SHAPES[c.type];
+          c.boundary = boundaryAt(boxes, { x: n.position.x + s.w / 2, y: n.position.y + s.h / 2 });
+        }
+        const b = d.boundaries.find((x) => x.id === n.id);
+        if (b) b.parent = boundaryAt(boxes, { x: n.position.x + 20, y: n.position.y + 20 }, m.boundaryTree(d, b.id));
+      }
+      // A box that just lost its last member stays where it was instead of jumping.
+      for (const b of d.boundaries) {
+        const box = boxes.get(b.id);
+        if (before.has(b.id) && isEmpty(d, b.id) && box) {
+          b.position = { x: box.x, y: box.y };
+          b.size = { w: box.w, h: box.h };
+        }
+      }
+    });
+    carried.current.clear();
   };
 
   const onConnect = (c: FlowConnection) => {
@@ -268,7 +353,7 @@ function Shell() {
   const remove = (ids: string[]) =>
     change((d) => {
       for (const x of ids) {
-        const exists = [...d.components, ...d.connections, ...d.notes, ...d.decisions].some((i) => i.id === x);
+        const exists = [...d.components, ...d.connections, ...d.notes, ...d.decisions, ...d.boundaries].some((i) => i.id === x);
         if (exists) m.removeItem(d, x);
       }
     });
@@ -351,7 +436,7 @@ function Shell() {
             onClick={() => {
               fittedFor.current = null;
               change((d) => {
-                for (const x of [...d.components, ...d.notes, ...d.decisions]) x.position = undefined;
+                for (const x of [...d.components, ...d.notes, ...d.decisions, ...d.boundaries]) x.position = undefined;
               });
             }}
           >
@@ -388,14 +473,10 @@ function Shell() {
                 onNodeClick={(_, n) => setSelected(n.id)}
                 onEdgeClick={(_, e) => e.data?.kind === 'flow' && setSelected(e.id)}
                 onPaneClick={() => setSelected(null)}
-                onNodeDragStop={(_, __, dragged) =>
-                  change((d) => {
-                    for (const n of dragged) {
-                      const item = [...d.components, ...d.notes, ...d.decisions].find((x) => x.id === n.id);
-                      if (item) item.position = { x: Math.round(n.position.x), y: Math.round(n.position.y) };
-                    }
-                  })
-                }
+                onNodeDragStart={onNodeDragStart}
+                onNodeDrag={onNodeDrag}
+                onNodeDragStop={onNodeDragStop}
+                elevateNodesOnSelect={false}
                 onConnect={onConnect}
                 onDelete={({ nodes: ns, edges: es }) => remove([...ns.map((n) => n.id), ...es.filter((e) => e.data?.kind === 'flow').map((e) => e.id)])}
                 deleteKeyCode={['Delete', 'Backspace']}

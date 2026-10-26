@@ -83,6 +83,7 @@ export async function createDesign(input: { id: string; title: string; descripti
       connections: [],
       notes: [],
       decisions: [],
+      boundaries: [],
     };
   }
   return writeDesign(

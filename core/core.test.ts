@@ -43,6 +43,27 @@ test('validation rejects dangling references and unsafe ids', async () => {
   assert.throws(() => m.connect(x, { from: 'api', to: 'ghost' }), /unknown component/);
 });
 
+test('boundaries nest, refuse cycles and hand their contents up when removed', async () => {
+  const x = await store.createDesign({ id: 'net', title: 'Net' });
+  const pc = m.addComponent(x, { type: 'pc', label: 'PC' });
+  const region = m.addBoundary(x, { kind: 'region', label: 'eu-west-1' });
+  const vpc = m.addBoundary(x, { kind: 'vpc', label: 'Main VPC', parent: region });
+  const subnet = m.addBoundary(x, { kind: 'subnet', label: 'Private', detail: '10.0.1.0/24', parent: vpc, members: [pc] });
+  assert.equal(x.components[0].boundary, subnet);
+  assert.throws(() => m.placeIn(x, region, subnet), /inside itself/);
+  assert.throws(() => m.addComponent(x, { type: 'pc', label: 'PC 2', boundary: 'ghost' }), /unknown boundary/);
+
+  m.removeItem(x, subnet);
+  assert.equal(x.components[0].boundary, vpc);
+  m.removeItem(x, region);
+  assert.equal(x.boundaries.find((b) => b.id === vpc)!.parent, undefined);
+  await store.writeDesign(x);
+
+  const stored = await store.readDesign('net');
+  stored.boundaries[0].parent = stored.boundaries[0].id;
+  await assert.rejects(store.writeDesign(stored), /inside itself/);
+});
+
 test('templates load and start unseen', async () => {
   const files = (await fs.readdir(store.TEMPLATES_DIR)).filter((f) => f.endsWith('.json'));
   const templates = await store.listTemplates();

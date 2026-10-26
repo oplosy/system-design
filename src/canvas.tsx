@@ -1,7 +1,8 @@
 import { createContext, memo, useContext, useMemo } from 'react';
 import { BaseEdge, EdgeLabelRenderer, Handle, Position, useInternalNode, type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps } from '@xyflow/react';
 import type { PathInfo } from 'roughjs/bin/core';
-import type { ComponentType } from '../core/schema.ts';
+import type { BoundaryKind, ComponentType } from '../core/schema.ts';
+import { BOUNDARY_SPECS } from './boundaries.ts';
 import { DECISION_SIZE, NOTE_COLOR, NOTE_SIZE, SHAPES, drawShape, gen, hash, options, toPaths } from './shapes.ts';
 
 export const SketchContext = createContext(true);
@@ -10,6 +11,7 @@ type Common = { unseen: boolean; faded: boolean };
 export type ComponentNode = Node<Common & { type: ComponentType; label: string; tech?: string }, 'component'>;
 export type NoteNode = Node<Common & { text: string }, 'note'>;
 export type DecisionNode = Node<Common & { title: string; why: string }, 'decision'>;
+export type BoundaryNode = Node<Common & { kind: BoundaryKind; label: string; detail?: string; w: number; h: number }, 'boundary'>;
 export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; unseen: boolean; faded: boolean }, 'rough'>;
 
 function Paths({ paths, dashed }: { paths: PathInfo[]; dashed?: boolean }) {
@@ -90,6 +92,35 @@ export const DecisionNodeView = memo(function DecisionNodeView({ id, data }: Nod
   );
 });
 
+/** A box around a group of components. Only its label tab takes the pointer, so the parts inside stay clickable. */
+export const BoundaryNodeView = memo(function BoundaryNodeView({ id, data }: NodeProps<BoundaryNode>) {
+  const sketch = useContext(SketchContext);
+  const spec = BOUNDARY_SPECS[data.kind];
+  const { w, h } = data;
+  const paths = useMemo(
+    () => toPaths([gen.rectangle(1, 1, w - 2, h - 2, options(sketch, undefined, hash(id), { stroke: spec.color, strokeWidth: spec.strokeWidth, roughness: sketch ? 0.8 : 0 }))]),
+    [sketch, id, w, h, spec],
+  );
+  // Narrow boxes drop the kind word (the line style still shows it) so the label stays readable.
+  const roomy = w > 7.5 * (spec.name.length + data.label.length + (data.detail?.length ?? 0)) + 70;
+  return (
+    <div className={`sd-boundary${data.faded ? ' faded' : ''}`} style={{ width: w, height: h, color: spec.color }}>
+      <svg width={w} height={h} overflow="visible">
+        <rect x={1} y={1} width={w - 2} height={h - 2} rx={sketch ? 0 : 6} style={{ fill: spec.color, fillOpacity: 0.05, stroke: 'none' }} />
+        {paths.map((p, i) => (
+          <path key={i} d={p.d} style={{ stroke: p.stroke, strokeWidth: p.strokeWidth, fill: 'none' }} strokeDasharray={spec.dash} strokeLinecap="round" />
+        ))}
+      </svg>
+      <div className="boundary-tab" title={`${spec.name}: drag to move everything inside`}>
+        {roomy && <span className="boundary-kind">{spec.name}</span>}
+        <span className="boundary-label">{data.label}</span>
+        {data.detail && <span className="boundary-detail">{data.detail}</span>}
+        {data.unseen && <span className="unseen-dot inline" title="Not reviewed yet" />}
+      </div>
+    </div>
+  );
+});
+
 function box(n: InternalNode) {
   const { x, y } = n.internals.positionAbsolute;
   const w = n.measured.width ?? 0, h = n.measured.height ?? 0;
@@ -145,5 +176,5 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
   );
 }
 
-export const nodeTypes = { component: ComponentNodeView, note: NoteNodeView, decision: DecisionNodeView };
+export const nodeTypes = { component: ComponentNodeView, note: NoteNodeView, decision: DecisionNodeView, boundary: BoundaryNodeView };
 export const edgeTypes = { rough: RoughEdge };

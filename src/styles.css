@@ -405,6 +405,10 @@ kbd {
   height: 7px;
 }
 
+.swatch-sq.hollow {
+  border: 1px dashed var(--ink-2);
+}
+
 /* Workspace */
 
 .workspace {
@@ -1236,6 +1240,82 @@ select.ed option {
   outline: 1.5px dashed var(--select);
   outline-offset: 5px;
   border-radius: 4px;
+}
+
+/* Boundaries: the box ignores the pointer so parts and edges inside stay clickable; the tab is the handle. */
+.react-flow__node.boundary-node {
+  pointer-events: none !important;
+}
+
+.sd-boundary {
+  position: relative;
+  transition: opacity 0.2s;
+}
+
+.sd-boundary svg {
+  position: absolute;
+  inset: 0;
+}
+
+.sd-boundary.faded {
+  opacity: 0.45;
+}
+
+.boundary-tab {
+  position: absolute;
+  top: 9px;
+  left: 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: calc(100% - 20px);
+  padding: 3px 8px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  background: var(--canvas);
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: all;
+  cursor: grab;
+}
+
+.boundary-kind {
+  flex: none;
+  font: 500 10px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.boundary-label {
+  flex: 0 1 auto;
+  min-width: 3ch;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The detail gives way first when the tab runs out of room. */
+.boundary-detail {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font: 11px var(--mono);
+}
+
+.unseen-dot.inline {
+  position: static;
+  flex: none;
+  align-self: center;
+  box-shadow: none;
+}
+
+.react-flow__node.selected .boundary-tab {
+  outline: 1.5px dashed var(--select);
+  outline-offset: 3px;
 }
 
 .rough-edge {

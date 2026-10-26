@@ -83,6 +83,10 @@ export const COMPONENT_TYPES = [
 
 export type ComponentType = (typeof COMPONENT_TYPES)[number];
 
+/** Boxes that group components: cloud regions, networks, VLANs, sites, clusters. */
+export const BOUNDARY_KINDS = ['region', 'zone', 'datacenter', 'vpc', 'subnet', 'vlan', 'cluster', 'site', 'group'] as const;
+export type BoundaryKind = (typeof BOUNDARY_KINDS)[number];
+
 const Id = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'lowercase letters, digits and dashes');
 const Position = z.object({ x: z.number(), y: z.number() });
 
@@ -99,7 +103,24 @@ export const ComponentSchema = z.object({
   label: z.string().min(1),
   tech: z.string().optional(),
   description: z.string().optional(),
+  /** The innermost boundary this component sits in. */
+  boundary: Id.optional(),
   position: Position.optional(),
+  step: Id,
+});
+
+export const BoundarySchema = z.object({
+  id: Id,
+  kind: z.enum(BOUNDARY_KINDS),
+  label: z.string().min(1),
+  /** Short qualifier shown next to the label: a CIDR, VLAN number or region code. */
+  detail: z.string().optional(),
+  description: z.string().optional(),
+  /** The boundary this one sits in, e.g. a subnet's VPC. */
+  parent: Id.optional(),
+  /** Only used while the boundary is empty; otherwise it wraps its members. */
+  position: Position.optional(),
+  size: z.object({ w: z.number().positive(), h: z.number().positive() }).optional(),
   step: Id,
 });
 
@@ -143,6 +164,8 @@ export const DesignSchema = z
     connections: z.array(ConnectionSchema),
     notes: z.array(NoteSchema),
     decisions: z.array(DecisionSchema),
+    // Optional so designs written before boundaries existed still load.
+    boundaries: z.array(BoundarySchema).default([]),
   })
   .superRefine((d, ctx) => {
     const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
@@ -151,7 +174,7 @@ export const DesignSchema = z
 
     // Components, notes and decisions share one id space: they are all canvas nodes.
     const itemIds = new Set<string>();
-    for (const item of [...d.components, ...d.notes, ...d.decisions, ...d.connections]) {
+    for (const item of [...d.components, ...d.notes, ...d.decisions, ...d.connections, ...d.boundaries]) {
       if (itemIds.has(item.id)) issue(`duplicate id "${item.id}"`);
       itemIds.add(item.id);
       if (!stepIds.has(item.step)) issue(`"${item.id}" references unknown step "${item.step}"`);
@@ -167,6 +190,20 @@ export const DesignSchema = z
     for (const dec of d.decisions) {
       for (const l of dec.links) if (!componentIds.has(l)) issue(`decision "${dec.id}" links unknown "${l}"`);
     }
+    const parents = new Map(d.boundaries.map((b) => [b.id, b.parent]));
+    for (const c of d.components) {
+      if (c.boundary && !parents.has(c.boundary)) issue(`component "${c.id}" sits in unknown boundary "${c.boundary}"`);
+    }
+    for (const b of d.boundaries) {
+      if (b.parent && !parents.has(b.parent)) issue(`boundary "${b.id}" sits in unknown boundary "${b.parent}"`);
+      // Walk up the parents; coming back to b means a cycle.
+      for (let p = b.parent, hops = 0; p && hops <= d.boundaries.length; p = parents.get(p), hops++) {
+        if (p === b.id) {
+          issue(`boundary "${b.id}" is inside itself`);
+          break;
+        }
+      }
+    }
   });
 
 export type Step = z.infer<typeof StepSchema>;
@@ -174,6 +211,7 @@ export type Component = z.infer<typeof ComponentSchema>;
 export type Connection = z.infer<typeof ConnectionSchema>;
 export type Note = z.infer<typeof NoteSchema>;
 export type Decision = z.infer<typeof DecisionSchema>;
+export type Boundary = z.infer<typeof BoundarySchema>;
 export type Design = z.infer<typeof DesignSchema>;
 
 export const isId = (s: string) => Id.safeParse(s).success;

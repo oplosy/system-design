@@ -1,4 +1,4 @@
-import type { ComponentType, Design } from './schema.ts';
+import type { BoundaryKind, ComponentType, Design } from './schema.ts';
 
 // Pure, browser-safe edits shared by the UI and the MCP server. Each one mutates `d` in place.
 
@@ -14,7 +14,7 @@ export function slugify(s: string) {
 }
 
 function usedIds(d: Design) {
-  return new Set([...d.components, ...d.notes, ...d.decisions, ...d.connections, ...d.steps].map((x) => x.id));
+  return new Set([...d.components, ...d.notes, ...d.decisions, ...d.connections, ...d.boundaries, ...d.steps].map((x) => x.id));
 }
 
 export function uniqueId(d: Design, base: string) {
@@ -40,10 +40,15 @@ export function addStep(d: Design, input: { title: string; summary?: string; see
   return id;
 }
 
+function checkBoundary(d: Design, id: string | undefined) {
+  if (id && !d.boundaries.some((b) => b.id === id)) throw new Error(`unknown boundary "${id}"`);
+}
+
 export function addComponent(
   d: Design,
-  input: Edit & { id?: string; type: ComponentType; label: string; tech?: string; description?: string; position?: { x: number; y: number } },
+  input: Edit & { id?: string; type: ComponentType; label: string; tech?: string; description?: string; boundary?: string; position?: { x: number; y: number } },
 ) {
+  checkBoundary(d, input.boundary);
   const id = uniqueId(d, input.id ?? input.label);
   d.components.push({
     id,
@@ -51,10 +56,62 @@ export function addComponent(
     label: input.label,
     tech: input.tech,
     description: input.description,
+    boundary: input.boundary,
     position: input.position,
     step: useStep(d, input.step, input.reopen ?? true),
   });
   return id;
+}
+
+/** Adds a boundary box. `members` are existing component ids that move into it. */
+export function addBoundary(
+  d: Design,
+  input: Edit & { id?: string; kind: BoundaryKind; label: string; detail?: string; description?: string; parent?: string; members?: string[]; position?: { x: number; y: number } },
+) {
+  checkBoundary(d, input.parent);
+  for (const mId of input.members ?? []) {
+    if (!d.components.some((c) => c.id === mId)) throw new Error(`unknown component "${mId}"`);
+  }
+  const id = uniqueId(d, input.id ?? input.label);
+  d.boundaries.push({
+    id,
+    kind: input.kind,
+    label: input.label,
+    detail: input.detail,
+    description: input.description,
+    parent: input.parent,
+    position: input.position,
+    step: useStep(d, input.step, input.reopen ?? true),
+  });
+  for (const c of d.components) if (input.members?.includes(c.id)) c.boundary = id;
+  return id;
+}
+
+/** Ids of every boundary inside `id`, at any depth, plus `id` itself. */
+export function boundaryTree(d: Design, id: string) {
+  const out = new Set([id]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const b of d.boundaries) {
+      if (b.parent && out.has(b.parent) && !out.has(b.id)) {
+        out.add(b.id);
+        grew = true;
+      }
+    }
+  }
+  return out;
+}
+
+/** Moves a component (or a boundary, with everything in it) into `boundary`, or out of all boundaries. */
+export function placeIn(d: Design, id: string, boundary: string | undefined) {
+  checkBoundary(d, boundary);
+  const c = d.components.find((x) => x.id === id);
+  const b = d.boundaries.find((x) => x.id === id);
+  if (c) c.boundary = boundary;
+  else if (b) {
+    if (boundary && boundaryTree(d, id).has(boundary)) throw new Error('A boundary can’t sit inside itself.');
+    b.parent = boundary;
+  } else throw new Error(`unknown component or boundary "${id}"`);
 }
 
 export function connect(d: Design, input: Edit & { from: string; to: string; label?: string; async?: boolean }) {
@@ -94,15 +151,21 @@ export function addDecision(
   return id;
 }
 
-/** Removes any item by id, plus whatever points at it. */
+/** Removes any item by id, plus whatever points at it. A removed boundary hands its contents to its own parent. */
 export function removeItem(d: Design, id: string) {
-  const before = d.components.length + d.connections.length + d.notes.length + d.decisions.length;
+  const count = () => d.components.length + d.connections.length + d.notes.length + d.decisions.length + d.boundaries.length;
+  const before = count();
+  const gone = d.boundaries.find((b) => b.id === id);
+  if (gone) {
+    for (const c of d.components) if (c.boundary === id) c.boundary = gone.parent;
+    for (const b of d.boundaries) if (b.parent === id) b.parent = gone.parent;
+    d.boundaries = d.boundaries.filter((b) => b.id !== id);
+  }
   d.components = d.components.filter((c) => c.id !== id);
   d.connections = d.connections.filter((c) => c.id !== id && c.from !== id && c.to !== id);
   d.notes = d.notes.filter((n) => n.id !== id).map((n) => (n.attachTo === id ? { ...n, attachTo: undefined } : n));
   d.decisions = d.decisions.filter((x) => x.id !== id).map((x) => ({ ...x, links: x.links.filter((l) => l !== id) }));
-  const after = d.components.length + d.connections.length + d.notes.length + d.decisions.length;
-  if (before === after) throw new Error(`unknown item "${id}"`);
+  if (before === count()) throw new Error(`unknown item "${id}"`);
 }
 
 /** Where each step sits in the walkthrough, for filtering what is visible. */

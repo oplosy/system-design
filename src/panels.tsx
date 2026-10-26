@@ -1,9 +1,11 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
-import { COMPONENT_TYPES, type ComponentType, type Design } from '../core/schema.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
+import * as m from '../core/mutations.ts';
+import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SketchContext } from './canvas.tsx';
 import { GROUPS, KITS, NOTE_COLOR, SHAPES, drawShape, kitsOf, searchText, type Kit } from './shapes.ts';
 
-export type AddKind = ComponentType | 'note' | 'decision';
+export type AddKind = ComponentType | 'note' | 'decision' | `boundary:${BoundaryKind}`;
 export const DRAG_MIME = 'application/x-system-design';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -17,6 +19,15 @@ export function ShapePreview({ type, width = 56, height = 38 }: { type: Componen
       {paths.map((p, i) => (
         <path key={i} d={p.d} vectorEffect="non-scaling-stroke" style={{ stroke: p.stroke, strokeWidth: 1.1, fill: p.fill ?? 'none' }} />
       ))}
+    </svg>
+  );
+}
+
+function BoundaryPreview({ kind }: { kind: BoundaryKind }) {
+  const spec = BOUNDARY_SPECS[kind];
+  return (
+    <svg width={40} height={26} aria-hidden="true" style={{ flex: 'none' }}>
+      <rect x={2} y={3} width={36} height={20} rx={2} style={{ fill: spec.color, fillOpacity: 0.08, stroke: spec.color, strokeWidth: 1.4 }} strokeDasharray={spec.dash && '4 3'} />
     </svg>
   );
 }
@@ -67,6 +78,7 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
   const groups = [...GROUPS]
     .sort((a, b) => Number(b.kit === kit) - Number(a.kit === kit))
     .map((g) => ({ ...g, types: COMPONENT_TYPES.filter((t) => SHAPES[t].group === g.key && inView(t)) }));
+  const boundaries = BOUNDARY_KINDS.filter((k) => (terms.length ? match(`${BOUNDARY_SPECS[k].name} ${k} boundary box group network segment`) : BOUNDARY_SPECS[k].kits.includes(kit)));
   const explain = [
     { kind: 'note' as const, name: 'Note', preview: <span className="note-swatch" /> },
     { kind: 'decision' as const, name: 'Decision', preview: <span className="decision-swatch" /> },
@@ -103,6 +115,16 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
               </section>
             ),
         )}
+        {boundaries.length > 0 && (
+          <section>
+            <h3 className="rule-head">
+              <span className="swatch-sq hollow" />
+              Boundaries
+              <span className="rule-count">{pad(boundaries.length)}</span>
+            </h3>
+            {boundaries.map((k) => row(`boundary:${k}`, BOUNDARY_SPECS[k].name, <BoundaryPreview kind={k} />))}
+          </section>
+        )}
         {explain.length > 0 && (
           <section>
             <h3 className="rule-head">
@@ -113,9 +135,9 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
             {explain.map((x) => row(x.kind, x.name, x.preview))}
           </section>
         )}
-        {!groups.some((g) => g.types.length) && !explain.length && <p className="quiet pad">No part matches “{query}”.</p>}
+        {!groups.some((g) => g.types.length) && !boundaries.length && !explain.length && <p className="quiet pad">No part matches “{query}”.</p>}
       </div>
-      <p className="palette-foot">Drag a part onto the sheet, or click to drop it in the middle. Drag from one item to another to connect them.</p>
+      <p className="palette-foot">Drag a part onto the sheet, or click to drop it in the middle. Drag from one item to another to connect them. Drop parts into a boundary to group them.</p>
     </aside>
   );
 }
@@ -167,6 +189,22 @@ function Block({ label, children }: { label: string; children: React.ReactNode }
 
 type Change = (fn: (d: Design) => void) => void;
 
+/** Picks the boundary something sits in; `exclude` keeps a boundary out of its own subtree. */
+function InsideSelect({ design, value, exclude, onPick }: { design: Design; value?: string; exclude?: Set<string>; onPick: (id: string | undefined) => void }) {
+  return (
+    <select className="ed" value={value ?? ''} onChange={(e) => onPick(e.target.value || undefined)} aria-label="Inside">
+      <option value="">Nothing</option>
+      {design.boundaries
+        .filter((b) => !exclude?.has(b.id))
+        .map((b) => (
+          <option key={b.id} value={b.id}>
+            {BOUNDARY_SPECS[b.kind].name}: {b.label}
+          </option>
+        ))}
+    </select>
+  );
+}
+
 export function Inspector({
   design,
   selected,
@@ -186,8 +224,10 @@ export function Inspector({
   const connection = design.connections.find((c) => c.id === selected);
   const note = design.notes.find((n) => n.id === selected);
   const decision = design.decisions.find((x) => x.id === selected);
-  const item = component ?? connection ?? note ?? decision;
-  const labelOf = (id: string) => design.components.find((c) => c.id === id)?.label ?? id;
+  const boundary = design.boundaries.find((b) => b.id === selected);
+  const item = component ?? connection ?? note ?? decision ?? boundary;
+  const labelOf = (id: string) => [...design.components, ...design.boundaries].find((c) => c.id === id)?.label ?? id;
+  const placeIn = (to: string | undefined) => change((d) => selected && m.placeIn(d, selected, to));
   const stepNo = (id: string) => design.steps.findIndex((s) => s.id === id) + 1;
   const stepTitle = (id: string) => design.steps.find((s) => s.id === id)?.title;
   const ref = (id: string) => (
@@ -206,6 +246,7 @@ export function Inspector({
     const decisions = design.decisions.filter((x) => x.step === stepId);
     const notes = design.notes.filter((n) => n.step === stepId);
     const components = design.components.filter((c) => c.step === stepId);
+    const boundaries = design.boundaries.filter((b) => b.step === stepId);
     return (
       <aside className="inspector">
         <header className="insp-head">
@@ -217,12 +258,19 @@ export function Inspector({
           {step.summary && <p className="insp-lead">{step.summary}</p>}
         </header>
 
-        {components.length > 0 && (
+        {components.length + boundaries.length > 0 && (
           <section className="insp-sec">
             <h3 className="rule-head">
               Added
-              <span className="rule-count">{pad(components.length)}</span>
+              <span className="rule-count">{pad(components.length + boundaries.length)}</span>
             </h3>
+            {boundaries.map((b) => (
+              <button key={b.id} className="list-row" onClick={() => onSelect(b.id)}>
+                <BoundaryPreview kind={b.kind} />
+                <span className="list-main">{b.label}</span>
+                <span className="list-meta">{b.detail ?? BOUNDARY_SPECS[b.kind].name}</span>
+              </button>
+            ))}
             {components.map((c) => (
               <button key={c.id} className="list-row" onClick={() => onSelect(c.id)}>
                 <ShapePreview type={c.type} width={30} height={20} />
@@ -276,14 +324,14 @@ export function Inspector({
         )}
 
         <p className="quiet pad">
-          {!components.length && !decisions.length && !notes.length ? 'Nothing was added in this step. ' : ''}
+          {!components.length && !boundaries.length && !decisions.length && !notes.length ? 'Nothing was added in this step. ' : ''}
           Select anything on the sheet to read or edit it.
         </p>
       </aside>
     );
   }
 
-  const kind = component ? SHAPES[component.type].name : connection ? 'Connection' : note ? 'Note' : 'Decision';
+  const kind = component ? SHAPES[component.type].name : boundary ? BOUNDARY_SPECS[boundary.kind].name : connection ? 'Connection' : note ? 'Note' : 'Decision';
   return (
     <aside className="inspector" key={item.id}>
       <header className="insp-head">
@@ -296,6 +344,7 @@ export function Inspector({
         </div>
         {component && <Ed label="Label" required className="ed-title" value={component.label} onCommit={(v) => edit((d: Design) => d.components, { label: v })} />}
         {decision && <Ed label="Title" required multiline className="ed-title" value={decision.title} onCommit={(v) => edit((d: Design) => d.decisions, { title: v })} />}
+        {boundary && <Ed label="Label" required className="ed-title" value={boundary.label} onCommit={(v) => edit((d: Design) => d.boundaries, { label: v })} />}
         {connection && (
           <h2 className="insp-title route">
             {ref(connection.from)}
@@ -324,6 +373,37 @@ export function Inspector({
             </Prop>
             <Prop label="Technology">
               <Ed label="Technology" placeholder="e.g. Redis" value={component.tech} onCommit={(v) => edit((d: Design) => d.components, { tech: v })} />
+            </Prop>
+            {design.boundaries.length > 0 && (
+              <Prop label="Inside">
+                <InsideSelect design={design} value={component.boundary} onPick={placeIn} />
+              </Prop>
+            )}
+          </>
+        )}
+        {boundary && (
+          <>
+            <Prop label="Kind">
+              <select className="ed" value={boundary.kind} onChange={(e) => edit((d: Design) => d.boundaries, { kind: e.target.value as BoundaryKind })} aria-label="Kind">
+                {BOUNDARY_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {BOUNDARY_SPECS[k].name}
+                  </option>
+                ))}
+              </select>
+            </Prop>
+            <Prop label="Detail">
+              <Ed label="Detail" placeholder="e.g. 10.0.1.0/24, VLAN 20, us-east-1" value={boundary.detail} onCommit={(v) => edit((d: Design) => d.boundaries, { detail: v })} />
+            </Prop>
+            <Prop label="Inside">
+              <InsideSelect design={design} value={boundary.parent} exclude={m.boundaryTree(design, boundary.id)} onPick={placeIn} />
+            </Prop>
+            <Prop label="Holds">
+              {design.components.some((c) => c.boundary === boundary.id) ? (
+                design.components.filter((c) => c.boundary === boundary.id).map((c) => ref(c.id))
+              ) : (
+                <span className="quiet">Drag parts into the box</span>
+              )}
             </Prop>
           </>
         )}
@@ -357,6 +437,14 @@ export function Inspector({
           <Block label="Description">
             <Ed label="Description" multiline placeholder="What it does and why it is here" value={component.description} onCommit={(v) => edit((d: Design) => d.components, { description: v })} />
           </Block>
+        )}
+        {boundary && (
+          <>
+            <Block label="Description">
+              <Ed label="Description" multiline placeholder="What this boundary separates and why" value={boundary.description} onCommit={(v) => edit((d: Design) => d.boundaries, { description: v })} />
+            </Block>
+            <p className="quiet">Drag the label tab to move the box with everything in it. Deleting it keeps its parts.</p>
+          </>
         )}
         {note && (
           <Block label="Text">

@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { COMPONENT_TYPES, type Design } from '../core/schema.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { createDesign, listDesigns, listTemplates, readDesign, updateDesign } from '../core/store.ts';
 
@@ -11,6 +11,7 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Use notes for short explanations attached to a component.
 - Ids are lowercase-dashed. Positions are optional: the app lays out new items automatically.
 - Component types: ${COMPONENT_TYPES.join(', ')}.
+- Group components with boundaries (${BOUNDARY_KINDS.join(', ')}): a box drawn around its members, nestable through parent (region > vpc > subnet, site > vlan). Give each component its innermost boundary; the box sizes itself.
 - Start from list_designs; call get_design before editing an existing one.`;
 
 const server = new McpServer({ name: 'system-design', version: '0.1.0' }, { instructions });
@@ -23,12 +24,21 @@ const componentFields = {
   label: z.string().min(1),
   tech: z.string().optional().describe('Concrete technology, e.g. "Redis", "PostgreSQL"'),
   description: z.string().optional(),
+  boundary: z.string().optional().describe('Id of the innermost boundary this component sits in'),
 };
 const connectionFields = {
   from: z.string().describe('Component id'),
   to: z.string().describe('Component id'),
   label: z.string().optional().describe('What flows, e.g. "HTTPS", "tweet events"'),
   async: z.boolean().optional().describe('true for queues, events and other async flows'),
+};
+const boundaryFields = {
+  kind: z.enum(BOUNDARY_KINDS),
+  label: z.string().min(1).describe('e.g. "us-east-1", "Office LAN"'),
+  detail: z.string().optional().describe('Short qualifier: CIDR, VLAN number, region code'),
+  description: z.string().optional(),
+  parent: z.string().optional().describe('Id of the boundary this one sits in'),
+  members: z.array(z.string()).optional().describe('Ids of components that sit directly in this boundary'),
 };
 const noteFields = { text: z.string().min(1), attach_to: z.string().optional().describe('Component id') };
 const decisionFields = {
@@ -75,6 +85,7 @@ server.registerTool(
       design,
       title: z.string().min(1),
       summary: z.string().optional().describe('What changes in this step and why'),
+      boundaries: z.array(z.object({ id: z.string().describe('Id to reference from components and other boundaries in this call'), ...boundaryFields })).optional().describe('Parents before children'),
       components: z.array(z.object({ id: z.string().describe('Id to reference from connections in this call'), ...componentFields })).optional(),
       connections: z.array(z.object(connectionFields)).optional(),
       notes: z.array(z.object(noteFields)).optional(),
@@ -85,12 +96,14 @@ server.registerTool(
     edit(input.design, (d) => {
       const stepId = m.addStep(d, { title: input.title, summary: input.summary });
       const ids: Record<string, string> = {};
-      for (const c of input.components ?? []) ids[c.id] = m.addComponent(d, { ...c, step: stepId });
       const ref = (id: string) => ids[id] ?? id;
+      for (const { members: _, ...b } of input.boundaries ?? []) ids[b.id] = m.addBoundary(d, { ...b, parent: b.parent && ref(b.parent), step: stepId });
+      for (const c of input.components ?? []) ids[c.id] = m.addComponent(d, { ...c, boundary: c.boundary && ref(c.boundary), step: stepId });
+      for (const b of input.boundaries ?? []) for (const member of b.members ?? []) m.placeIn(d, ref(member), ids[b.id]);
       for (const c of input.connections ?? []) m.connect(d, { ...c, from: ref(c.from), to: ref(c.to), step: stepId });
       for (const n of input.notes ?? []) m.addNote(d, { text: n.text, attachTo: n.attach_to && ref(n.attach_to), step: stepId });
       for (const x of input.decisions ?? []) m.addDecision(d, { ...x, links: x.links?.map(ref), step: stepId });
-      return { step: stepId, components: ids };
+      return { step: stepId, ids };
     }),
 );
 
@@ -100,6 +113,25 @@ server.registerTool('add_component', { description: 'Add a component to a step',
 
 server.registerTool('connect', { description: 'Connect two components', inputSchema: { design, ...connectionFields, step } }, async ({ design: id, ...input }) =>
   edit(id, (d) => m.connect(d, input)),
+);
+
+server.registerTool('add_boundary', { description: 'Draw a boundary (region, VPC, subnet, VLAN, site...) around components', inputSchema: { design, ...boundaryFields, step } }, async ({ design: id, ...input }) =>
+  edit(id, (d) => m.addBoundary(d, input)),
+);
+
+server.registerTool(
+  'place_in',
+  {
+    description: 'Move a component or boundary into a boundary, or out of all boundaries with boundary: null',
+    inputSchema: { design, id: z.string(), boundary: z.string().nullable().describe('Boundary id, or null for none') },
+  },
+  async ({ design: designId, id, boundary }) =>
+    edit(designId, (d) => {
+      m.placeIn(d, id, boundary ?? undefined);
+      const item = d.components.find((x) => x.id === id) ?? d.boundaries.find((x) => x.id === id)!;
+      d.steps.find((s) => s.id === item.step)!.seen = false;
+      return id;
+    }),
 );
 
 server.registerTool('add_note', { description: 'Add an explanatory note, optionally attached to a component', inputSchema: { design, ...noteFields, step } }, async ({ design: id, attach_to, ...input }) =>
@@ -126,7 +158,7 @@ server.registerTool(
     }),
 );
 
-server.registerTool('remove_item', { description: 'Remove a component, connection, note or decision', inputSchema: { design, id: z.string() } }, async ({ design: designId, id }) =>
+server.registerTool('remove_item', { description: 'Remove a component, connection, note, decision or boundary (its contents move to its parent)', inputSchema: { design, id: z.string() } }, async ({ design: designId, id }) =>
   edit(designId, (d) => m.removeItem(d, id)),
 );
 
