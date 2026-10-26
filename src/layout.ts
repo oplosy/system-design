@@ -73,8 +73,9 @@ type Pos = { x: number; y: number };
  * Lays out every canvas item; notes and decisions sit next to what they point at, and boundaries are nested
  * boxes so their members stay together. Returns absolute top-left positions.
  *
- * With `only`, just those items move: they are laid out among themselves (boundaries ignored) and the result
- * keeps the top-left corner the selection had, given its current positions in `at`.
+ * With `only`, just those items are laid out: among themselves (boundaries ignored), keeping the top-left corner
+ * the selection had. `at` holds the current positions of every item; ones the result would cover are pushed aside
+ * and returned too.
  */
 export async function layout(d: Design, kind: LayoutKind = 'layered', only?: { ids: Set<string>; at: Map<string, Pos> }) {
   const inScope = (id: string) => !only || only.ids.has(id);
@@ -181,10 +182,42 @@ export async function layout(d: Design, kind: LayoutKind = 'layered', only?: { i
   walk(graph, 0, 0);
 
   if (only) {
-    const corner = (ps: Pos[]) => ({ x: Math.min(...ps.map((p) => p.x)), y: Math.min(...ps.map((p) => p.y)) });
-    const was = corner([...only.ids].map((id) => only.at.get(id)).filter((p): p is Pos => !!p));
-    const now = corner([...pos.values()]);
-    if (Number.isFinite(was.x)) for (const p of pos.values()) Object.assign(p, { x: p.x - now.x + was.x, y: p.y - now.y + was.y });
+    const size = new Map<string, { w: number; h: number }>([
+      ...d.components.map((c) => [c.id, SHAPES[c.type]] as const),
+      ...d.notes.map((n) => [n.id, NOTE_SIZE] as const),
+      ...d.decisions.map((x) => [x.id, DECISION_SIZE] as const),
+    ]);
+    const rect = (id: string, p: Pos) => ({ x: p.x, y: p.y, right: p.x + size.get(id)!.w, bottom: p.y + size.get(id)!.h });
+    const bounds = (ps: [string, Pos][]) => {
+      const rs = ps.map(([id, p]) => rect(id, p));
+      return { x: Math.min(...rs.map((r) => r.x)), y: Math.min(...rs.map((r) => r.y)), right: Math.max(...rs.map((r) => r.right)), bottom: Math.max(...rs.map((r) => r.bottom)) };
+    };
+    const was = bounds([...only.at].filter(([id]) => only.ids.has(id)));
+    if (Number.isFinite(was.x)) {
+      const now = bounds([...pos]);
+      for (const p of pos.values()) Object.assign(p, { x: p.x - now.x + was.x, y: p.y - now.y + was.y });
+      pushAside(was, bounds([...pos]));
+    }
+
+    // Items the new arrangement lands on make room: everything right of the old selection shifts right and
+    // everything below it shifts down by what the selection grew, like inserting a column and a row.
+    // Items that sat in the gaps of the old selection go down with the row, below the new one.
+    function pushAside(was: Box, after: Box) {
+      const hit = (r: Box) => r.x < after.right && after.x < r.right && r.y < after.bottom && after.y < r.bottom;
+      const others = [...only!.at].filter(([id]) => !only!.ids.has(id) && size.has(id));
+      if (!others.some(([id, p]) => hit(rect(id, p)))) return;
+      const between = others.filter(([id, p]) => p.x < was.right && p.y < was.bottom && hit(rect(id, p)));
+      const dx = Math.max(0, after.right - was.right);
+      const dy = Math.max(0, after.bottom - was.bottom, ...between.map(([, p]) => after.bottom + GAP - p.y));
+      for (const [id, p] of others) {
+        const right = p.x >= was.right;
+        const down = p.y >= was.bottom || (!right && between.some(([b]) => b === id));
+        if ((right && dx) || (down && dy)) pos.set(id, { x: p.x + (right ? dx : 0), y: p.y + (down ? dy : 0) });
+      }
+    }
   }
   return pos;
 }
+
+type Box = { x: number; y: number; right: number; bottom: number };
+const GAP = 40;

@@ -596,7 +596,7 @@ function Shell() {
         ...[...d0.notes, ...d0.decisions].filter((x) => picked.has(x.id)).map((x) => x.id),
         ...d0.components.filter((c) => picked.has(c.id) || (c.boundary && boxes.has(c.boundary))).map((c) => c.id),
       ]);
-      const at = new Map([...d0.components, ...d0.notes, ...d0.decisions].filter((x) => ids.has(x.id) && x.position).map((x) => [x.id, x.position!]));
+      const at = new Map([...d0.components, ...d0.notes, ...d0.decisions].filter((x) => x.position).map((x) => [x.id, x.position!]));
       only = { ids, at };
     }
     layout(d0, kind, only)
@@ -604,10 +604,11 @@ function Shell() {
         if (!only) fittedFor.current = null;
         change((d) => {
           for (const x of [...d.components, ...d.notes, ...d.decisions, ...d.boundaries]) if (pos.has(x.id)) x.position = pos.get(x.id);
-          // Flow draws right-angled lines; the other layouts keep each line as it was.
+          // Flow draws right-angled lines; the other layouts keep each line as it was. Pushed-aside items keep theirs.
+          const laid = only?.ids ?? pos;
           if (kind === 'flow')
             for (const c of d.connections)
-              if (pos.has(c.from) && pos.has(c.to)) {
+              if (laid.has(c.from) && laid.has(c.to)) {
                 c.route = 'elbow';
                 c.bend = undefined;
               }

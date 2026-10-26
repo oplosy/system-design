@@ -45,6 +45,24 @@ test('tiers put clients above the data they reach', async () => {
   assert.ok(Math.max(...y('client')) < Math.min(...y('data')));
 });
 
+test('a selection pushes aside what it would cover', async () => {
+  const d = sample();
+  const size = new Map<string, { w: number; h: number }>([
+    ...d.components.map((c) => [c.id, SHAPES[c.type]] as const),
+    ...d.notes.map((n) => [n.id, NOTE_SIZE] as const),
+    ...d.decisions.map((x) => [x.id, DECISION_SIZE] as const),
+  ]);
+  const w = Math.max(...[...size.values()].map((s) => s.w)) + 30, h = Math.max(...[...size.values()].map((s) => s.h)) + 30;
+  // A tight grid, five to a row; the first four of the first row get stacked into a tall tree.
+  const at = new Map(items(d).map((id, i) => [id, { x: (i % 5) * w, y: Math.floor(i / 5) * h }]));
+  const ids = new Set(d.components.slice(0, 4).map((c) => c.id));
+  const pos = await layout(d, 'tree', { ids, at });
+  const boxes = items(d).map((id) => ({ id, ...(pos.get(id) ?? at.get(id)!), ...size.get(id)! }));
+  for (const [i, a] of boxes.entries())
+    for (const b of boxes.slice(i + 1)) assert.ok(a.x >= b.x + b.w || b.x >= a.x + a.w || a.y >= b.y + b.h || b.y >= a.y + a.h, `overlaps ${a.id} and ${b.id}`);
+  assert.ok([...pos.keys()].some((id) => !ids.has(id)), 'nothing was pushed');
+});
+
 test('a selection moves alone and keeps its corner', async () => {
   const d = sample();
   const ids = new Set(d.components.slice(0, 4).map((c) => c.id));
