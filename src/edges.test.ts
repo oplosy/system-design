@@ -6,10 +6,15 @@ const a = { x: 0, y: 0, w: 100, h: 60 };
 const b = { x: 400, y: 0, w: 100, h: 60 };
 const near = (x: number, y: number) => Math.abs(x - y) < 1e-6;
 
-test('a curve bends to one side, and a dragged handle sets the bend', () => {
-  const ab = edgeGeometry(a, b), ba = edgeGeometry(b, a);
-  assert.ok(ab.mid.y > 0 && ba.mid.y < 0, 'A→B and B→A arc apart');
-  assert.ok(ab.tip.x < 350 && ab.tip.x > 340, 'stops just short of the target');
+test('a curve mirrors with the target side, and a dragged handle sets the bend', () => {
+  const below = (dx: number) => ({ ...a, x: dx, y: 300 });
+  const right = edgeGeometry(a, below(100)), left = edgeGeometry(a, below(-100));
+  assert.ok(right.mid.x < 50 && left.mid.x > -50, 'bows toward the corner under the source, on either side');
+  assert.ok(near(right.mid.x - 50, -(left.mid.x + 50)) && near(right.mid.y, left.mid.y), 'the two arcs are mirror images');
+  const ab = edgeGeometry(a, below(100)), ba = edgeGeometry(below(100), a);
+  assert.ok(ab.mid.x < 50 && ba.mid.x > 50, 'A→B and B→A arc apart');
+  assert.equal(edgeGeometry(a, b).mid.y, 0, 'aligned boxes join with a straight line');
+  assert.ok(edgeGeometry(a, b).tip.x < 350 && edgeGeometry(a, b).tip.x > 340, 'stops just short of the target');
   const g = edgeGeometry(a, b, 'curve', 80);
   assert.ok(near(g.bendAt({ x: 200, y: 80 }), 80));
   assert.deepEqual(g.mid, { x: 200, y: 80 }, 'the middle passes through the handle');

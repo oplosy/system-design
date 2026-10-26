@@ -155,6 +155,10 @@ kbd {
   opacity: 0.5;
 }
 
+kbd.lead {
+  margin: 0 6px 0 0;
+}
+
 /* Floating surfaces share one material. */
 .bar,
 .dock,
@@ -847,7 +851,7 @@ kbd {
   align-items: center;
   gap: 8px;
   width: min(760px, calc(100% - var(--left) - var(--right) - 24px));
-  padding: 8px 8px 8px 6px;
+  padding: 8px 8px 8px 16px;
   border-radius: var(--radius);
 }
 
@@ -868,12 +872,15 @@ kbd {
   white-space: nowrap;
 }
 
+/* Wraps to a second line before it gets cut off when the panels leave little room. */
 .review-title {
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .dots {

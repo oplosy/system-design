@@ -626,9 +626,6 @@ export function ReviewBar({
           </div>
         </form>
       )}
-      <button className="icon-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} title="Previous step (←)" aria-label="Previous step">
-        ‹
-      </button>
       <div className="review-main">
         <div className="review-meta">
           <span>
@@ -663,6 +660,10 @@ export function ReviewBar({
         </button>
         <button className="text-btn" aria-expanded={asking} onClick={() => setAsking((a) => !a)} title="Send this step back to the agent with a comment">
           Request changes
+        </button>
+        <span className="vrule" />
+        <button className="btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} title="Previous step (←)">
+          <kbd className="lead">←</kbd> Back
         </button>
         {!step.seen ? (
           <button className="btn ink" onClick={onSeenNext} title="Mark as seen and go to the next step (→)">

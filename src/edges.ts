@@ -37,8 +37,16 @@ function inset(p: Pt, to: Pt): Pt {
   return { x: p.x + ((to.x - p.x) / len) * g, y: p.y + ((to.y - p.y) / len) * g };
 }
 
-/** Default bend: a gentle arc, always to the same side of the direction so A→B and B→A arc apart. */
-export const defaultBend = (len: number) => Math.min(len * 0.12, 48);
+/**
+ * Default bend: the arc leaves along the dominant axis and sweeps toward the target, like a softened elbow.
+ * It mirrors when the target moves to the other side, is straight when aligned or exactly diagonal,
+ * and A→B / B→A bow toward opposite corners.
+ */
+export function defaultBend(a: Pt, b: Pt) {
+  const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1;
+  const k = (0.6 * dx * dy * (dy * dy - dx * dx)) / (l2 * Math.sqrt(l2));
+  return Math.max(-48, Math.min(48, k));
+}
 
 export function edgeGeometry(a: NodeBox, b: NodeBox, route: Route = 'curve', bend?: number): EdgeGeometry {
   if (route === 'elbow') return elbow(a, b, bend ?? 0);
@@ -50,7 +58,7 @@ export function edgeGeometry(a: NodeBox, b: NodeBox, route: Route = 'curve', ben
     const p1 = inset(e1, e2), p2 = inset(e2, e1);
     return { d: `M${p1.x},${p1.y} L${p2.x},${p2.y}`, tip: p2, angle: Math.atan2(uy, ux), mid: chord, bendable: false, bendAt: () => 0 };
   }
-  const k = bend ?? defaultBend(len);
+  const k = bend ?? defaultBend(a, b);
   const p1 = inset(e1, e2), p2 = inset(e2, e1);
   // c is the quadratic control point that makes the curve pass through mid (chord + k·normal) halfway.
   const mid = { x: chord.x - uy * k, y: chord.y + ux * k };
