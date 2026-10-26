@@ -210,12 +210,18 @@ export const BoundarySchema = z.object({
   step: Id,
 });
 
+/** UML relationships a line can show; a plain arrow when omitted. */
+export const CONNECTION_KINDS = ['inheritance', 'implementation', 'composition', 'aggregation', 'include', 'extend'] as const;
+export type ConnectionKind = (typeof CONNECTION_KINDS)[number];
+
 export const ConnectionSchema = z.object({
   id: Id,
   from: Id,
   to: Id,
   label: z.string().optional(),
   async: z.boolean().optional(),
+  /** Arrows point at `to` (the parent, interface or included case); diamonds sit at `from` (the whole). */
+  kind: z.enum(CONNECTION_KINDS).optional(),
   /** How the line runs; curve when omitted. */
   route: z.enum(['curve', 'straight', 'elbow']).optional(),
   /** Hand-set offset of the line's middle, in canvas pixels. */

@@ -31,6 +31,14 @@ test('an elbow runs at right angles and its middle run follows the bend', () => 
   assert.ok(near(down.angle, Math.PI / 2), 'stacked boxes connect top to bottom');
 });
 
+test('every route knows its start and which way it points there, for diamonds', () => {
+  for (const route of ['curve', 'straight', 'elbow'] as const) {
+    const g = edgeGeometry(a, b, route);
+    assert.ok(g.tail.x > 50 && g.tail.x < 60 && near(g.tail.y, 0), `${route} starts just outside the source`);
+    assert.ok(near(Math.cos(g.tailAngle), -1), `${route} points back into the source at its start`);
+  }
+});
+
 test('a straight line has no handle', () => {
   const g = edgeGeometry(a, b, 'straight');
   assert.equal(g.bendable, false);

@@ -7,6 +7,7 @@ import path from 'node:path';
 process.env.SYSTEM_DESIGN_DIR = await fs.mkdtemp(path.join(os.tmpdir(), 'sd-test-'));
 const store = await import('./store.ts');
 const m = await import('./mutations.ts');
+const { parseDesign } = await import('./schema.ts');
 
 test('create, edit through mutations, and reject stale writes', async () => {
   const d = await store.createDesign({ id: 'demo', title: 'Demo' });
@@ -127,6 +128,10 @@ test('exports Mermaid and a decision record', async () => {
     toMermaid(x),
     ['%% Export', 'flowchart LR', '  subgraph vpc["VPC · 10.0.0.0/16"]', '    api["API"]', '  end', '  end_[("Say #quot;hi#quot; (PostgreSQL)")]', '  api -.->|"SQL"| end_', ''].join('\n'),
   );
+  const iface = m.addComponent(x, { type: 'interface', label: 'Store' });
+  const impl = m.connect(x, { from: db, to: iface, kind: 'implementation' });
+  assert.equal(parseDesign(structuredClone(x)).connections.find((c) => c.id === impl)?.kind, 'implementation');
+  assert.match(toMermaid(x), /end_ -\.-> store/);
   const adr = toDecisionRecord(x);
   assert.match(adr, /## D1\. Postgres/);
   assert.match(adr, /\*\*Affects:\*\* Say "hi"/);

@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BOUNDARY_KINDS, COMPONENT_TYPES, type Design } from '../core/schema.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { createDesign, listDesigns, listTemplates, readDesign, updateDesign } from '../core/store.ts';
 
@@ -33,6 +33,10 @@ const connectionFields = {
   label: z.string().optional().describe('What flows, e.g. "HTTPS", "tweet events"'),
   async: z.boolean().optional().describe('true for queues, events and other async flows'),
   route: z.enum(['curve', 'straight', 'elbow']).optional().describe('How the line is drawn; curve by default'),
+  kind: z
+    .enum(CONNECTION_KINDS)
+    .optional()
+    .describe('UML relationship; omit for a plain arrow. inheritance/implementation/include/extend point from -> to (child -> parent, class -> interface); composition/aggregation put the diamond on from (the whole)'),
 };
 const boundaryFields = {
   kind: z.enum(BOUNDARY_KINDS),

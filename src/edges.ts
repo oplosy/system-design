@@ -12,6 +12,9 @@ export type EdgeGeometry = {
   tip: Pt;
   /** Direction the arrow points at the tip, in radians. */
   angle: number;
+  /** Start of the line, and the direction it points there (out of the line, into the source). */
+  tail: Pt;
+  tailAngle: number;
   /** Where the label and the bend handle sit. */
   mid: Pt;
   bendable: boolean;
@@ -56,7 +59,7 @@ export function edgeGeometry(a: NodeBox, b: NodeBox, route: Route = 'curve', ben
   const chord = { x: (e1.x + e2.x) / 2, y: (e1.y + e2.y) / 2 };
   if (route === 'straight') {
     const p1 = inset(e1, e2), p2 = inset(e2, e1);
-    return { d: `M${p1.x},${p1.y} L${p2.x},${p2.y}`, tip: p2, angle: Math.atan2(uy, ux), mid: chord, bendable: false, bendAt: () => 0 };
+    return { d: `M${p1.x},${p1.y} L${p2.x},${p2.y}`, tip: p2, angle: Math.atan2(uy, ux), tail: p1, tailAngle: Math.atan2(-uy, -ux), mid: chord, bendable: false, bendAt: () => 0 };
   }
   const k = bend ?? defaultBend(a, b);
   const p1 = inset(e1, e2), p2 = inset(e2, e1);
@@ -67,6 +70,8 @@ export function edgeGeometry(a: NodeBox, b: NodeBox, route: Route = 'curve', ben
     d: `M${p1.x},${p1.y} Q${c.x},${c.y} ${p2.x},${p2.y}`,
     tip: p2,
     angle: Math.atan2(p2.y - c.y, p2.x - c.x),
+    tail: p1,
+    tailAngle: Math.atan2(p1.y - c.y, p1.x - c.x),
     mid,
     bendable: true,
     bendAt: (p) => (p.x - chord.x) * -uy + (p.y - chord.y) * ux,
@@ -90,13 +95,16 @@ function elbow(a: NodeBox, b: NodeBox, bend: number): EdgeGeometry {
     points = [p1, { x: p1.x, y }, { x: p2.x, y }, p2];
     bendAt = (p) => p.y - base;
   }
-  const tip = points[3];
+  const tip = points[3], tail = points[0];
   const from = [...points].reverse().find((p) => p.x !== tip.x || p.y !== tip.y) ?? points[0];
+  const next = points.find((p) => p.x !== tail.x || p.y !== tail.y) ?? tip;
   return {
     d: `M${points.map((p) => `${p.x},${p.y}`).join(' L')}`,
     points,
     tip,
     angle: Math.atan2(tip.y - from.y, tip.x - from.x),
+    tail,
+    tailAngle: Math.atan2(tail.y - next.y, tail.x - next.x),
     mid: { x: (points[1].x + points[2].x) / 2, y: (points[1].y + points[2].y) / 2 },
     bendable: true,
     bendAt,

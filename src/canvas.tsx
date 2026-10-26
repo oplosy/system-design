@@ -1,7 +1,7 @@
 import { createContext, memo, useContext, useMemo, useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, Handle, Position, useInternalNode, useReactFlow, type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps } from '@xyflow/react';
 import type { PathInfo } from 'roughjs/bin/core';
-import type { BoundaryKind, ComponentType } from '../core/schema.ts';
+import type { BoundaryKind, ComponentType, ConnectionKind } from '../core/schema.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { edgeGeometry, type Pt, type Route } from './edges.ts';
 import { DECISION_SIZE, NOTE_COLOR, NOTE_SIZE, SHAPES, drawShape, gen, hash, options, toPaths } from './shapes.ts';
@@ -20,7 +20,7 @@ export type ComponentNode = Node<Common & { type: ComponentType; label: string; 
 export type NoteNode = Node<Common & { text: string }, 'note'>;
 export type DecisionNode = Node<Common & { title: string; why: string }, 'decision'>;
 export type BoundaryNode = Node<Common & { kind: BoundaryKind; label: string; detail?: string; w: number; h: number }, 'boundary'>;
-export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; route?: Route; bend?: number; unseen: boolean; faded: boolean; added?: boolean }, 'rough'>;
+export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; relation?: ConnectionKind; route?: Route; bend?: number; unseen: boolean; faded: boolean; added?: boolean }, 'rough'>;
 
 function Paths({ paths, dashed }: { paths: PathInfo[]; dashed?: boolean }) {
   return paths.map((p, i) => (
@@ -151,17 +151,25 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
   const [drag, setDrag] = useState<number | null>(null);
   const s = useInternalNode(source), t = useInternalNode(target);
   const link = data?.kind === 'link';
+  const rel = link ? undefined : data?.relation;
+  const dashed = link || data?.async || rel === 'implementation' || rel === 'include' || rel === 'extend';
   const geo = s && t ? edgeGeometry(box(s), box(t), link ? 'curve' : data?.route, drag ?? data?.bend) : null;
-  const paths = useMemo(() => {
-    if (!geo) return [];
+  // The line and its ends are drawn apart so a dashed line keeps solid arrowheads and diamonds.
+  const [line, ends] = useMemo(() => {
+    if (!geo) return [[], []];
     const o = options(sketch, undefined, hash(id), { strokeWidth: link ? 1.1 : selected ? 2.2 : 1.4, roughness: sketch ? 1 : 0 });
+    const hollow = { ...o, fill: 'var(--canvas)', fillStyle: 'solid' }, solid = { ...o, fill: 'currentColor', fillStyle: 'solid' };
+    const at = (p: Pt, a: number, back: number, side = 0): [number, number] => [p.x - back * Math.cos(a) - side * Math.sin(a), p.y - back * Math.sin(a) + side * Math.cos(a)];
     const parts = [geo.points ? gen.linearPath(geo.points.map((p): [number, number] => [p.x, p.y]), o) : gen.path(geo.d, o)];
-    if (!link) {
-      const { tip, angle } = geo, L = 12;
-      for (const da of [0.45, -0.45]) parts.push(gen.line(tip.x, tip.y, tip.x - L * Math.cos(angle + da), tip.y - L * Math.sin(angle + da), o));
-    }
-    return toPaths(parts);
-  }, [geo?.d, sketch, id, link, selected]);
+    const heads = [];
+    const { tip, angle, tail, tailAngle } = geo;
+    if (rel === 'inheritance' || rel === 'implementation') heads.push(gen.polygon([[tip.x, tip.y], at(tip, angle, 15, 8), at(tip, angle, 15, -8)], hollow));
+    else if (rel === 'composition' || rel === 'aggregation')
+      heads.push(gen.polygon([[tail.x, tail.y], at(tail, tailAngle, 10, 6), at(tail, tailAngle, 20), at(tail, tailAngle, 10, -6)], rel === 'composition' ? solid : hollow));
+    else if (!link) for (const side of [5.5, -5.5]) heads.push(gen.linearPath([[tip.x, tip.y], at(tip, angle, 11, side)], o));
+    return [toPaths(parts), toPaths(heads)];
+  }, [geo?.d, sketch, id, link, rel, selected]);
+  const label = data?.label ?? (rel === 'include' || rel === 'extend' ? `«${rel}»` : undefined);
   if (!geo) return null;
   const handle = !!selected && !locked && !link && geo.bendable;
   const startBend = (e: React.PointerEvent<HTMLElement>) => {
@@ -187,19 +195,20 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
     <>
       <BaseEdge id={id} path={geo.d} style={{ stroke: 'transparent' }} interactionWidth={18} />
       <g className={`rough-edge${data?.faded ? ' faded' : ''}${selected ? ' selected' : ''}`} style={{ color: link ? NOTE_COLOR : undefined }}>
-        <Paths paths={paths} dashed={link || data?.async} />
+        <Paths paths={line} dashed={dashed} />
+        <Paths paths={ends} />
       </g>
-      {(data?.label || handle) && (
+      {(label || handle) && (
         <EdgeLabelRenderer>
-          {data?.label ? (
+          {label ? (
             <div
-              className={`edge-label${data.faded ? ' faded' : ''}${handle ? ' nodrag nopan grab' : ''}`}
+              className={`edge-label${data?.faded ? ' faded' : ''}${handle ? ' nodrag nopan grab' : ''}`}
               style={{ transform: at }}
               title={handle ? 'Drag to bend · double-click to edit' : undefined}
               onPointerDown={startBend}
               onDoubleClick={() => onEditLabel(id, geo.mid)}
             >
-              {data.label}
+              {label}
             </div>
           ) : (
             <div

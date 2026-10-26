@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
-import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type BoundaryKind, type ComponentType, type ConnectionKind, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SketchContext } from './canvas.tsx';
@@ -233,6 +233,16 @@ function Block({ label, children }: { label: string; children: React.ReactNode }
 type Change = (fn: (d: Design) => void) => void;
 
 /** Picks the boundary something sits in; `exclude` keeps a boundary out of its own subtree. */
+/** UML relations, named by how they are drawn; the diamond sits at the line's start (the whole). */
+const RELATION_NAMES: Record<ConnectionKind, string> = {
+  inheritance: 'Inheritance ▷',
+  implementation: 'Implementation ┄▷',
+  composition: 'Composition ◆',
+  aggregation: 'Aggregation ◇',
+  include: '«include» ┄>',
+  extend: '«extend» ┄>',
+};
+
 function InsideSelect({ design, value, exclude, onPick }: { design: Design; value?: string; exclude?: Set<string>; onPick: (id: string | undefined) => void }) {
   return (
     <select className="ed" value={value ?? ''} onChange={(e) => onPick(e.target.value || undefined)} aria-label="Inside">
@@ -472,6 +482,21 @@ export function Inspector({
           <>
             <Prop label="Label">
               <Ed label="Label" placeholder="e.g. HTTPS" value={connection.label} onCommit={(v) => edit((d: Design) => d.connections, { label: v })} />
+            </Prop>
+            <Prop label="Relation">
+              <select
+                className="ed"
+                value={connection.kind ?? ''}
+                onChange={(e) => edit((d: Design) => d.connections, { kind: (e.target.value || undefined) as ConnectionKind | undefined })}
+                aria-label="Relation"
+              >
+                <option value="">Arrow</option>
+                {CONNECTION_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {RELATION_NAMES[k]}
+                  </option>
+                ))}
+              </select>
             </Prop>
             <Prop label="Mode">
               <div className="toggle" role="radiogroup" aria-label="Mode">

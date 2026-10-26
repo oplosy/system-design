@@ -1,4 +1,4 @@
-import type { BoundaryKind, Comment, ComponentType, Design } from './schema.ts';
+import type { BoundaryKind, Comment, ComponentType, ConnectionKind, Design } from './schema.ts';
 
 // Pure, browser-safe edits shared by the UI and the MCP server. Each one mutates `d` in place.
 
@@ -114,12 +114,12 @@ export function placeIn(d: Design, id: string, boundary: string | undefined) {
   } else throw new Error(`unknown component or boundary "${id}"`);
 }
 
-export function connect(d: Design, input: Edit & { from: string; to: string; label?: string; async?: boolean }) {
+export function connect(d: Design, input: Edit & { from: string; to: string; label?: string; async?: boolean; kind?: ConnectionKind }) {
   for (const end of [input.from, input.to]) {
     if (!d.components.some((c) => c.id === end)) throw new Error(`unknown component "${end}"`);
   }
   const id = uniqueId(d, `${input.from}-to-${input.to}`);
-  d.connections.push({ id, from: input.from, to: input.to, label: input.label, async: input.async, step: useStep(d, input.step, input.reopen ?? true) });
+  d.connections.push({ id, from: input.from, to: input.to, label: input.label, async: input.async, kind: input.kind, step: useStep(d, input.step, input.reopen ?? true) });
   return id;
 }
 

@@ -34,7 +34,7 @@ export function toMermaid(d: Design) {
   };
   write(undefined, '  ');
   for (const c of d.connections) {
-    const arrow = c.async ? '-.->' : '-->';
+    const arrow = c.async || c.kind === 'implementation' || c.kind === 'include' || c.kind === 'extend' ? '-.->' : '-->';
     out.push(`  ${mid(c.from)} ${arrow}${c.label ? `|${text(c.label)}|` : ''} ${mid(c.to)}`);
   }
   return out.join('\n') + '\n';
