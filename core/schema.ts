@@ -13,6 +13,7 @@ export const COMPONENT_TYPES = [
   'identity',
   'secrets',
   'rate-limiter',
+  'ids',
   'load-balancer',
   'api-gateway',
   'reverse-proxy',
@@ -59,6 +60,25 @@ export const COMPONENT_TYPES = [
   'llm',
   'external',
   'payment',
+  // Network diagrams
+  'router',
+  'switch',
+  'l3-switch',
+  'hub',
+  'access-point',
+  'wireless-controller',
+  'modem',
+  'patch-panel',
+  'pc',
+  'laptop',
+  'printer',
+  'ip-phone',
+  'camera',
+  'rack',
+  'nas',
+  'ups',
+  'internet',
+  'cell-tower',
 ] as const;
 
 export type ComponentType = (typeof COMPONENT_TYPES)[number];

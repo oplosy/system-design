@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { COMPONENT_TYPES } from '../core/schema.ts';
-import { GROUPS, SHAPES, drawShape, searchText } from './shapes.ts';
+import { GROUPS, KITS, SHAPES, drawShape, kitsOf, searchText } from './shapes.ts';
 
 test('every component type draws cleanly in both styles and sits in a palette group', () => {
   const groups = new Set<string>(GROUPS.map((g) => g.key));
@@ -20,4 +20,13 @@ test('search matches products, not just names', () => {
   assert.ok(find('kafka').includes('stream'));
   assert.ok(find('s3').includes('object-storage'));
   assert.ok(find('nginx').includes('reverse-proxy'));
+  assert.ok(find('wifi').includes('access-point'));
+  assert.ok(find('active directory').includes('identity'));
+});
+
+test('the network kit has its own devices plus the shared ones', () => {
+  const network = COMPONENT_TYPES.filter((t) => kitsOf(t).includes('network'));
+  for (const t of ['router', 'switch', 'pc', 'printer', 'firewall', 'vm'] as const) assert.ok(network.includes(t), `${t} missing from network kit`);
+  assert.ok(!network.includes('stream'), 'software-only parts stay out of the network kit');
+  for (const k of KITS) assert.ok(COMPONENT_TYPES.some((t) => kitsOf(t).includes(k.key)), `${k.key} kit is empty`);
 });

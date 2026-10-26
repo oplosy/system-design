@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { COMPONENT_TYPES, type ComponentType, type Design } from '../core/schema.ts';
 import { SketchContext } from './canvas.tsx';
-import { GROUPS, NOTE_COLOR, SHAPES, drawShape, searchText } from './shapes.ts';
+import { GROUPS, KITS, NOTE_COLOR, SHAPES, drawShape, kitsOf, searchText, type Kit } from './shapes.ts';
 
 export type AddKind = ComponentType | 'note' | 'decision';
 export const DRAG_MIME = 'application/x-system-design';
@@ -21,8 +21,25 @@ export function ShapePreview({ type, width = 56, height = 38 }: { type: Componen
   );
 }
 
+function savedKit(): Kit {
+  try {
+    return localStorage.getItem('sd-kit') === 'network' ? 'network' : 'system';
+  } catch {
+    return 'system';
+  }
+}
+
 export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
   const [query, setQuery] = useState('');
+  const [kit, setKitState] = useState<Kit>(savedKit);
+  const setKit = (k: Kit) => {
+    setKitState(k);
+    try {
+      localStorage.setItem('sd-kit', k);
+    } catch {
+      // The kit choice is a convenience; ignore blocked storage.
+    }
+  };
   // Every word must appear somewhere in the name, id or keywords ("kafka", "redis cache", "s3").
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   const match = (text: string) => terms.every((t) => text.toLowerCase().includes(t));
@@ -45,7 +62,11 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
       </span>
     </button>
   );
-  const groups = GROUPS.map((g) => ({ ...g, types: COMPONENT_TYPES.filter((t) => SHAPES[t].group === g.key && match(searchText(t))) }));
+  // A search looks through every kit; otherwise only the chosen kit, its own groups first.
+  const inView = (t: ComponentType) => (terms.length ? match(searchText(t)) : kitsOf(t).includes(kit));
+  const groups = [...GROUPS]
+    .sort((a, b) => Number(b.kit === kit) - Number(a.kit === kit))
+    .map((g) => ({ ...g, types: COMPONENT_TYPES.filter((t) => SHAPES[t].group === g.key && inView(t)) }));
   const explain = [
     { kind: 'note' as const, name: 'Note', preview: <span className="note-swatch" /> },
     { kind: 'decision' as const, name: 'Decision', preview: <span className="decision-swatch" /> },
@@ -58,9 +79,16 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
-        placeholder="Search parts: kafka, redis, s3…"
+        placeholder={kit === 'network' ? 'Search parts: router, printer, wifi…' : 'Search parts: kafka, redis, s3…'}
         aria-label="Search parts"
       />
+      <div className="tabs palette-kits" role="group" aria-label="Part kit">
+        {KITS.map((k) => (
+          <button key={k.key} aria-pressed={kit === k.key} onClick={() => setKit(k.key)}>
+            {k.title}
+          </button>
+        ))}
+      </div>
       <div className="palette-scroll">
         {groups.map(
           (g) =>

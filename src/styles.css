@@ -442,6 +442,13 @@ kbd {
   border-bottom-color: var(--ink);
 }
 
+.palette-kits {
+  flex: none;
+  height: 34px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--rule);
+}
+
 .palette-scroll {
   flex: 1;
   overflow-y: auto;
