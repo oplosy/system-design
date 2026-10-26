@@ -17,7 +17,6 @@ import * as m from '../core/mutations.ts';
 import { ApiError, api, type Summary } from './api.ts';
 import { SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import { layout } from './layout.ts';
-import { Icon } from './icons.tsx';
 import { DRAG_MIME, Inspector, Palette, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
 import { DECISION_SIZE, NOTE_SIZE, SHAPES } from './shapes.ts';
 
@@ -298,11 +297,13 @@ function Shell() {
     setViewIndex(Math.min(view + 1, design.steps.length - 1));
   };
 
-  // ← and → walk the steps while nothing is selected (with a selection, arrows move nodes).
+  // ← and → walk the steps while nothing is selected (with a selection, arrows move nodes). Esc clears the selection.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (selected || creating || e.altKey || e.ctrlKey || e.metaKey || t.closest('input, textarea, select, [contenteditable]')) return;
+      if (creating || e.altKey || e.ctrlKey || e.metaKey || t.closest('input, textarea, select, [contenteditable]')) return;
+      if (e.key === 'Escape') setSelected(null);
+      if (selected) return;
       if (e.key === 'ArrowRight') {
         e.preventDefault();
         seenNext();
@@ -319,31 +320,32 @@ function Shell() {
     <SketchContext.Provider value={sketch}>
       <div className="app">
         <header className="topbar">
-          <div className="brand">
-            <span className="brand-mark">
-              <Icon name="logo" size={15} />
+          <span className="wordmark">
+            system<span>/</span>design
+          </span>
+          {designs.length > 0 && (
+            <>
+              <span className="crumb-sep">/</span>
+              <DesignSwitcher designs={designs} current={id} onPick={setId} />
+            </>
+          )}
+          {design && (
+            <span className="doc-meta">
+              rev {design.rev} · {design.components.length} parts · {design.decisions.length} decisions
             </span>
-            System design
-          </div>
-          <span className="divider" />
-          {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={setId} />}
-          <button className="btn" onClick={() => setCreating(true)}>
-            <Icon name="plus" size={15} />
-            New design
-          </button>
+          )}
           <div className="spacer" />
-          <div className="segmented" role="group" aria-label="Drawing style">
+          <div className="tabs" role="group" aria-label="Drawing style">
             <button aria-pressed={sketch} onClick={() => setStyle(true)}>
-              <Icon name="pencil" size={14} />
               Sketch
             </button>
             <button aria-pressed={!sketch} onClick={() => setStyle(false)}>
-              <Icon name="square" size={14} />
               Clean
             </button>
           </div>
+          <span className="vrule" />
           <button
-            className="btn"
+            className="text-btn"
             disabled={!design}
             title="Re-arrange every item automatically"
             onClick={() => {
@@ -353,8 +355,10 @@ function Shell() {
               });
             }}
           >
-            <Icon name="layout" size={15} />
             Auto layout
+          </button>
+          <button className="btn ink" onClick={() => setCreating(true)}>
+            New design
           </button>
         </header>
 
@@ -412,15 +416,14 @@ function Shell() {
             <div className="empty">
               <div className="empty-art" aria-hidden="true">
                 <ShapePreview type="client" width={72} height={48} />
-                <Icon name="arrowRight" size={18} />
+                <span className="empty-wire" />
                 <ShapePreview type="api-gateway" width={84} height={40} />
-                <Icon name="arrowRight" size={18} />
+                <span className="empty-wire" />
                 <ShapePreview type="sql-db" width={64} height={48} />
               </div>
-              <h2>Start your first design</h2>
-              <p>Walk through a template one step at a time, or start from a blank canvas. Agents can also create designs through the MCP server.</p>
-              <button className="btn primary lg" onClick={() => setCreating(true)}>
-                <Icon name="plus" size={16} />
+              <h2>No designs yet</h2>
+              <p>Walk through a template one step at a time, or start from a blank sheet. Agents can also start one through the MCP server.</p>
+              <button className="btn ink lg" onClick={() => setCreating(true)}>
                 New design
               </button>
             </div>
@@ -440,10 +443,10 @@ function Shell() {
         )}
         {error && (
           <div className="toast" role="alert">
-            <Icon name="alert" size={16} />
-            <span>{error}</span>
-            <button className="icon-btn" onClick={() => setError(null)} aria-label="Dismiss">
-              <Icon name="x" size={14} />
+            <span className="tag signal">Error</span>
+            <span className="toast-msg">{error}</span>
+            <button className="text-btn" onClick={() => setError(null)} aria-label="Dismiss">
+              ×
             </button>
           </div>
         )}
@@ -466,6 +469,8 @@ function useDismiss(active: boolean, onDismiss: () => void, ref?: React.RefObjec
   }, [active, onDismiss, ref]);
 }
 
+const pad = (n: number) => String(n).padStart(2, '0');
+
 function DesignSwitcher({ designs, current, onPick }: { designs: Summary[]; current: string | null; onPick: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -475,9 +480,9 @@ function DesignSwitcher({ designs, current, onPick }: { designs: Summary[]; curr
   return (
     <div className="switcher" ref={ref}>
       <button className="switcher-btn" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <span className="switcher-title">{cur?.title ?? 'Select a design'}</span>
-        {cur?.unseen ? <span className="pill">{cur.unseen} new</span> : null}
-        <Icon name="chevronDown" size={14} />
+        {cur?.title ?? 'Select a design'}
+        {cur?.unseen ? <span className="new-count">{cur.unseen} new</span> : null}
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 3.5 5 7l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" /></svg>
       </button>
       {open && (
         <div className="menu" role="listbox" aria-label="Designs">
@@ -496,8 +501,7 @@ function DesignSwitcher({ designs, current, onPick }: { designs: Summary[]; curr
                 <span className="menu-title">{d.title}</span>
                 {d.description && <span className="menu-desc">{d.description}</span>}
               </span>
-              {d.unseen ? <span className="pill">{d.unseen} new</span> : <span className="menu-meta">{d.steps} steps</span>}
-              <span className="menu-check">{d.id === current && <Icon name="check" size={14} />}</span>
+              {d.unseen ? <span className="new-count">{d.unseen} new</span> : <span className="menu-meta">{pad(d.steps)} steps</span>}
             </button>
           ))}
         </div>
@@ -514,7 +518,7 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
   useDismiss(true, onCancel);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return setErr('Enter a title.');
+    if (!title.trim()) return setErr('Give the design a title.');
     if (!/[a-z0-9]/i.test(title)) return setErr('Use at least one letter or digit.');
     setBusy(true);
     try {
@@ -525,52 +529,49 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
       setBusy(false);
     }
   };
-  const options = [{ id: '', title: 'Blank canvas', description: 'An empty design you build yourself or with an agent.', steps: 1, unseen: 0 }, ...templates];
+  const options = [{ id: '', title: 'Blank sheet', description: 'Nothing on it yet. Build it yourself or let an agent fill it in.', steps: 1, unseen: 0 }, ...templates];
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
       <form className="dialog" role="dialog" aria-modal="true" aria-labelledby="new-design-title" onSubmit={submit}>
         <header className="dialog-head">
-          <h2 id="new-design-title">New design</h2>
-          <button type="button" className="icon-btn" onClick={onCancel} aria-label="Close">
-            <Icon name="x" />
+          <span className="tag" id="new-design-title">
+            New design
+          </span>
+          <button type="button" className="text-btn" onClick={onCancel}>
+            Close <kbd>Esc</kbd>
           </button>
         </header>
-        <label className="field">
-          <span className="field-label">Title</span>
-          <input
-            autoFocus
-            value={title}
-            placeholder="Design Twitter"
-            aria-invalid={err ? true : undefined}
-            onChange={(e) => {
-              setTitle(e.target.value);
-              setErr(null);
-            }}
-          />
-          {err && <em className="field-error">{err}</em>}
-        </label>
-        <span className="field-label">Start from</span>
-        <div className="template-grid" role="radiogroup" aria-label="Start from">
+        <input
+          className="title-input"
+          autoFocus
+          value={title}
+          placeholder="Untitled design"
+          aria-label="Title"
+          aria-invalid={err ? true : undefined}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            setErr(null);
+          }}
+        />
+        {err && <em className="ed-error">{err}</em>}
+        <h3 className="rule-head">Start from</h3>
+        <div role="radiogroup" aria-label="Start from">
           {options.map((t) => (
-            <button
-              key={t.id || 'blank'}
-              type="button"
-              role="radio"
-              aria-checked={template === t.id}
-              className={`template-card${template === t.id ? ' selected' : ''}`}
-              onClick={() => setTemplate(t.id)}
-            >
-              <span className="template-title">{t.title}</span>
-              {t.description && <span className="template-desc">{t.description}</span>}
-              <span className="template-meta">{t.id ? `${t.steps} steps to walk through` : 'Start from scratch'}</span>
+            <button key={t.id || 'blank'} type="button" role="radio" aria-checked={template === t.id} className="choice" onClick={() => setTemplate(t.id)}>
+              <span className="radio" aria-hidden="true" />
+              <span className="choice-main">
+                <strong>{t.title}</strong>
+                {t.description && <span>{t.description}</span>}
+              </span>
+              <span className="menu-meta">{t.id ? `${pad(t.steps)} steps` : '—'}</span>
             </button>
           ))}
         </div>
         <footer className="dialog-foot">
-          <button type="button" className="btn" onClick={onCancel}>
+          <button type="button" className="text-btn" onClick={onCancel}>
             Cancel
           </button>
-          <button type="submit" className="btn primary" disabled={busy}>
+          <button type="submit" className="btn ink" disabled={busy}>
             Create design
           </button>
         </footer>

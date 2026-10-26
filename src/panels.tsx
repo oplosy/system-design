@@ -1,11 +1,12 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { COMPONENT_TYPES, type ComponentType, type Design } from '../core/schema.ts';
 import { SketchContext } from './canvas.tsx';
-import { Icon } from './icons.tsx';
 import { CATEGORY_COLOR, SHAPES, drawShape } from './shapes.ts';
 
 export type AddKind = ComponentType | 'note' | 'decision';
 export const DRAG_MIME = 'application/x-system-design';
+
+const pad = (n: number) => String(n).padStart(2, '0');
 
 export function ShapePreview({ type, width = 56, height = 38 }: { type: ComponentType; width?: number; height?: number }) {
   const sketch = useContext(SketchContext);
@@ -21,18 +22,18 @@ export function ShapePreview({ type, width = 56, height = 38 }: { type: Componen
 }
 
 const GROUPS: { title: string; category: keyof typeof CATEGORY_COLOR }[] = [
-  { title: 'Edge and security', category: 'edge' },
-  { title: 'Network and compute', category: 'compute' },
+  { title: 'Edge / security', category: 'edge' },
+  { title: 'Network / compute', category: 'compute' },
   { title: 'Data', category: 'data' },
 ];
 
 export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
   const [query, setQuery] = useState('');
   const match = (name: string) => name.toLowerCase().includes(query.trim().toLowerCase());
-  const tile = (kind: AddKind, name: string, preview: React.ReactNode) => (
+  const row = (kind: AddKind, name: string, preview: React.ReactNode) => (
     <button
       key={kind}
-      className="tile"
+      className="part"
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData(DRAG_MIME, kind);
@@ -41,98 +42,98 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
       onClick={() => onAdd(kind)}
       title={`Add ${name}: drag onto the canvas or click`}
     >
-      <span className="tile-preview">{preview}</span>
-      <span className="tile-name">{name}</span>
+      <span className="part-shape">{preview}</span>
+      <span className="part-name">{name}</span>
+      <span className="part-add" aria-hidden="true">
+        +
+      </span>
     </button>
   );
+  const groups = GROUPS.map((g) => ({ ...g, types: COMPONENT_TYPES.filter((t) => SHAPES[t].category === g.category && match(SHAPES[t].name)) }));
   const explain = [
     { kind: 'note' as const, name: 'Note', preview: <span className="note-swatch" /> },
     { kind: 'decision' as const, name: 'Decision', preview: <span className="decision-swatch" /> },
   ].filter((x) => match(x.name));
   return (
     <aside className="palette">
-      <div className="search">
-        <Icon name="search" size={14} />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search components" aria-label="Search components" />
-      </div>
+      <input className="palette-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter parts…" aria-label="Filter parts" />
       <div className="palette-scroll">
-        {GROUPS.map((g) => {
-          const types = COMPONENT_TYPES.filter((t) => SHAPES[t].category === g.category && match(SHAPES[t].name));
-          if (!types.length) return null;
-          return (
-            <section key={g.category}>
-              <h3>
-                <span className="cat-dot" style={{ background: CATEGORY_COLOR[g.category] }} />
-                {g.title}
-              </h3>
-              <div className="tiles">{types.map((t) => tile(t, SHAPES[t].name, <ShapePreview type={t} />))}</div>
-            </section>
-          );
-        })}
+        {groups.map(
+          (g) =>
+            g.types.length > 0 && (
+              <section key={g.category}>
+                <h3 className="rule-head">
+                  <span className="swatch-sq" style={{ background: CATEGORY_COLOR[g.category] }} />
+                  {g.title}
+                  <span className="rule-count">{pad(g.types.length)}</span>
+                </h3>
+                {g.types.map((t) => row(t, SHAPES[t].name, <ShapePreview type={t} width={40} height={26} />))}
+              </section>
+            ),
+        )}
         {explain.length > 0 && (
           <section>
-            <h3>
-              <span className="cat-dot" style={{ background: '#EF9F27' }} />
-              Explain
+            <h3 className="rule-head">
+              <span className="swatch-sq" style={{ background: '#EF9F27' }} />
+              Annotate
+              <span className="rule-count">{pad(explain.length)}</span>
             </h3>
-            <div className="tiles">{explain.map((x) => tile(x.kind, x.name, x.preview))}</div>
+            {explain.map((x) => row(x.kind, x.name, x.preview))}
           </section>
         )}
+        {!groups.some((g) => g.types.length) && !explain.length && <p className="quiet pad">No part matches “{query}”.</p>}
       </div>
-      <p className="palette-hint">Drag onto the canvas or click to add. Drag between items to connect them.</p>
+      <p className="palette-foot">Drag a part onto the sheet, or click to drop it in the middle. Drag from one item to another to connect them.</p>
     </aside>
   );
 }
 
-function Field(props: { label: string; value: string | undefined; onCommit: (v: string | undefined) => void; required?: boolean; multiline?: boolean; placeholder?: string }) {
+/** A borderless text input that reads like the value it holds; edits commit as you type. */
+function Ed(props: {
+  value: string | undefined;
+  onCommit: (v: string | undefined) => void;
+  required?: boolean;
+  multiline?: boolean;
+  placeholder?: string;
+  className?: string;
+  label: string;
+}) {
   const [v, setV] = useState(props.value ?? '');
   useEffect(() => setV(props.value ?? ''), [props.value]);
   const invalid = props.required && !v.trim();
   const onChange = (next: string) => {
     setV(next);
-    // Required fields keep their last valid value until the input is valid again.
+    // Required values keep their last valid version until the text is valid again.
     if (!(props.required && !next.trim())) props.onCommit(next.trim() ? next : undefined);
   };
+  const common = { value: v, placeholder: props.placeholder ?? 'Empty', 'aria-label': props.label, 'aria-invalid': invalid || undefined, className: `ed ${props.className ?? ''}` };
   return (
-    <label className="field">
-      <span className="field-label">{props.label}</span>
-      {props.multiline ? (
-        <textarea value={v} placeholder={props.placeholder} rows={3} onChange={(e) => onChange(e.target.value)} aria-invalid={invalid || undefined} />
-      ) : (
-        <input value={v} placeholder={props.placeholder} onChange={(e) => onChange(e.target.value)} aria-invalid={invalid || undefined} />
-      )}
-      {invalid && <em className="field-error">Required</em>}
-    </label>
+    <>
+      {props.multiline ? <textarea {...common} rows={1} onChange={(e) => onChange(e.target.value)} /> : <input {...common} onChange={(e) => onChange(e.target.value)} />}
+      {invalid && <em className="ed-error">{props.label} can’t be empty</em>}
+    </>
+  );
+}
+
+function Prop({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="prop">
+      <span className="prop-label">{label}</span>
+      <div className="prop-value">{children}</div>
+    </div>
+  );
+}
+
+function Block({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="block">
+      <span className="block-label">{label}</span>
+      {children}
+    </div>
   );
 }
 
 type Change = (fn: (d: Design) => void) => void;
-
-function DecisionBody({ x }: { x: Design['decisions'][number] }) {
-  return (
-    <>
-      <p className="decision-why-text">{x.why}</p>
-      {x.alternatives?.length ? (
-        <div className="kv">
-          <span>Alternatives</span>
-          <div className="chips">
-            {x.alternatives.map((a) => (
-              <span key={a} className="chip">
-                {a}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {x.tradeoffs && (
-        <div className="kv">
-          <span>Trade-off</span>
-          <p>{x.tradeoffs}</p>
-        </div>
-      )}
-    </>
-  );
-}
 
 export function Inspector({
   design,
@@ -156,6 +157,12 @@ export function Inspector({
   const item = component ?? connection ?? note ?? decision;
   const labelOf = (id: string) => design.components.find((c) => c.id === id)?.label ?? id;
   const stepNo = (id: string) => design.steps.findIndex((s) => s.id === id) + 1;
+  const stepTitle = (id: string) => design.steps.find((s) => s.id === id)?.title;
+  const ref = (id: string) => (
+    <button key={id} className="ref" onClick={() => onSelect(id)}>
+      {labelOf(id)}
+    </button>
+  );
   const edit = <T extends { id: string }>(list: (d: Design) => T[], patch: Partial<NoInfer<T>>) =>
     change((d) => {
       const x = list(d).find((i) => i.id === selected);
@@ -170,160 +177,181 @@ export function Inspector({
     return (
       <aside className="inspector">
         <header className="insp-head">
-          <div className="insp-meta">
-            <span className="step-no">Step {stepNo(step.id)}</span>
-            <span className={`status ${step.seen ? 'ok' : 'new'}`}>{step.seen ? 'Reviewed' : 'Not reviewed'}</span>
+          <div className="insp-tagline">
+            <span className="tag">Step {pad(stepNo(step.id))}</span>
+            <span className={`state${step.seen ? '' : ' new'}`}>{step.seen ? 'Reviewed' : 'Not reviewed'}</span>
           </div>
-          <h2>{step.title}</h2>
-          {step.summary && <p className="lead">{step.summary}</p>}
+          <h2 className="insp-title">{step.title}</h2>
+          {step.summary && <p className="insp-lead">{step.summary}</p>}
         </header>
+
         {components.length > 0 && (
-          <section className="insp-section">
-            <h3>Added in this step</h3>
-            <div className="added">
-              {components.map((c) => (
-                <button key={c.id} className="added-item" onClick={() => onSelect(c.id)}>
-                  <ShapePreview type={c.type} width={30} height={22} />
-                  <span>{c.label}</span>
-                  {c.tech && <span className="muted small">{c.tech}</span>}
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-        {decisions.length > 0 && (
-          <section className="insp-section">
-            <h3>
-              Decisions <span className="count">{decisions.length}</span>
+          <section className="insp-sec">
+            <h3 className="rule-head">
+              Added
+              <span className="rule-count">{pad(components.length)}</span>
             </h3>
-            {decisions.map((x) => (
-              <button key={x.id} className="decision-card" onClick={() => onSelect(x.id)}>
-                <span className="decision-card-title">
-                  <Icon name="bulb" size={15} />
-                  {x.title}
-                </span>
-                <DecisionBody x={x} />
+            {components.map((c) => (
+              <button key={c.id} className="list-row" onClick={() => onSelect(c.id)}>
+                <ShapePreview type={c.type} width={30} height={20} />
+                <span className="list-main">{c.label}</span>
+                {c.tech && <span className="list-meta">{c.tech}</span>}
               </button>
             ))}
           </section>
         )}
+
+        {decisions.length > 0 && (
+          <section className="insp-sec">
+            <h3 className="rule-head">
+              Decisions
+              <span className="rule-count">{pad(decisions.length)}</span>
+            </h3>
+            {decisions.map((x, i) => (
+              <button key={x.id} className="decision-entry" onClick={() => onSelect(x.id)}>
+                <span className="decision-no">D{i + 1}</span>
+                <span className="decision-body">
+                  <strong>{x.title}</strong>
+                  <span className="decision-why">{x.why}</span>
+                  {x.alternatives?.length ? (
+                    <span className="decision-line">
+                      <em>instead of</em> {x.alternatives.join(' · ')}
+                    </span>
+                  ) : null}
+                  {x.tradeoffs && (
+                    <span className="decision-line">
+                      <em>cost</em> {x.tradeoffs}
+                    </span>
+                  )}
+                </span>
+              </button>
+            ))}
+          </section>
+        )}
+
         {notes.length > 0 && (
-          <section className="insp-section">
-            <h3>Notes</h3>
+          <section className="insp-sec">
+            <h3 className="rule-head">
+              Notes
+              <span className="rule-count">{pad(notes.length)}</span>
+            </h3>
             {notes.map((n) => (
-              <button key={n.id} className="note-card" onClick={() => onSelect(n.id)}>
+              <button key={n.id} className="note-entry" onClick={() => onSelect(n.id)}>
                 {n.text}
               </button>
             ))}
           </section>
         )}
-        {!components.length && !decisions.length && !notes.length && <p className="empty-hint">Nothing was added in this step yet.</p>}
-        <p className="empty-hint">Select anything on the canvas to see and edit its details.</p>
+
+        <p className="quiet pad">
+          {!components.length && !decisions.length && !notes.length ? 'Nothing was added in this step. ' : ''}
+          Select anything on the sheet to read or edit it.
+        </p>
       </aside>
     );
   }
 
   const kind = component ? SHAPES[component.type].name : connection ? 'Connection' : note ? 'Note' : 'Decision';
-  const title = component?.label ?? decision?.title ?? (connection ? `${labelOf(connection.from)} → ${labelOf(connection.to)}` : 'Note');
   return (
     <aside className="inspector" key={item.id}>
       <header className="insp-head">
-        <div className="insp-top">
-          {component ? (
-            <span className="insp-icon">
-              <ShapePreview type={component.type} width={40} height={28} />
-            </span>
-          ) : (
-            <span className="insp-icon">
-              <Icon name={decision ? 'bulb' : note ? 'note' : 'link'} size={18} />
-            </span>
-          )}
-          <div className="insp-title">
-            <span className="kicker">{kind}</span>
-            <h2>{title}</h2>
-          </div>
-          <button className="icon-btn" onClick={() => onSelect(null)} aria-label="Close details" title="Back to step overview">
-            <Icon name="x" />
+        <div className="insp-tagline">
+          <span className="tag">{kind}</span>
+          <span className="mono quiet">{item.id}</span>
+          <button className="text-btn close" onClick={() => onSelect(null)} title="Back to the step overview">
+            Close <kbd>Esc</kbd>
           </button>
         </div>
-        <span className="step-chip">
-          Step {stepNo(item.step)} · {design.steps.find((s) => s.id === item.step)?.title}
-        </span>
+        {component && <Ed label="Label" required className="ed-title" value={component.label} onCommit={(v) => edit((d: Design) => d.components, { label: v })} />}
+        {decision && <Ed label="Title" required multiline className="ed-title" value={decision.title} onCommit={(v) => edit((d: Design) => d.decisions, { title: v })} />}
+        {connection && (
+          <h2 className="insp-title route">
+            {ref(connection.from)}
+            <span className="route-arrow">→</span>
+            {ref(connection.to)}
+          </h2>
+        )}
+        {note && <h2 className="insp-title">Note</h2>}
       </header>
 
-      <section className="insp-section">
+      <section className="insp-sec props">
         {component && (
           <>
-            <label className="field">
-              <span className="field-label">Type</span>
-              <select value={component.type} onChange={(e) => edit((d: Design) => d.components, { type: e.target.value as ComponentType })}>
+            <Prop label="Type">
+              <select className="ed" value={component.type} onChange={(e) => edit((d: Design) => d.components, { type: e.target.value as ComponentType })} aria-label="Type">
                 {COMPONENT_TYPES.map((t) => (
                   <option key={t} value={t}>
                     {SHAPES[t].name}
                   </option>
                 ))}
               </select>
-            </label>
-            <Field label="Label" required value={component.label} onCommit={(v) => edit((d: Design) => d.components, { label: v })} />
-            <Field label="Technology" placeholder="Redis" value={component.tech} onCommit={(v) => edit((d: Design) => d.components, { tech: v })} />
-            <Field label="Description" multiline placeholder="What it does and why it is here" value={component.description} onCommit={(v) => edit((d: Design) => d.components, { description: v })} />
+            </Prop>
+            <Prop label="Technology">
+              <Ed label="Technology" placeholder="e.g. Redis" value={component.tech} onCommit={(v) => edit((d: Design) => d.components, { tech: v })} />
+            </Prop>
           </>
         )}
         {connection && (
           <>
-            <div className="route">
-              <button className="chip chip-btn" onClick={() => onSelect(connection.from)}>
-                {labelOf(connection.from)}
-              </button>
-              <Icon name="arrowRight" size={14} />
-              <button className="chip chip-btn" onClick={() => onSelect(connection.to)}>
-                {labelOf(connection.to)}
-              </button>
-            </div>
-            <Field label="Label" placeholder="HTTPS" value={connection.label} onCommit={(v) => edit((d: Design) => d.connections, { label: v })} />
-            <label className="switch">
-              <input type="checkbox" checked={!!connection.async} onChange={(e) => edit((d: Design) => d.connections, { async: e.target.checked || undefined })} />
-              <span>
-                Async
-                <small>Queues, events and other fire-and-forget flows. Drawn dashed.</small>
-              </span>
-            </label>
+            <Prop label="Label">
+              <Ed label="Label" placeholder="e.g. HTTPS" value={connection.label} onCommit={(v) => edit((d: Design) => d.connections, { label: v })} />
+            </Prop>
+            <Prop label="Mode">
+              <div className="toggle" role="radiogroup" aria-label="Mode">
+                <button role="radio" aria-checked={!connection.async} onClick={() => edit((d: Design) => d.connections, { async: undefined })}>
+                  Sync
+                </button>
+                <button role="radio" aria-checked={!!connection.async} onClick={() => edit((d: Design) => d.connections, { async: true })}>
+                  Async
+                </button>
+              </div>
+            </Prop>
           </>
         )}
-        {note && <Field label="Text" required multiline value={note.text} onCommit={(v) => edit((d: Design) => d.notes, { text: v })} />}
+        {decision && <Prop label="Affects">{decision.links.length ? decision.links.map(ref) : <span className="quiet">Drag from the decision to a component</span>}</Prop>}
+        {note && <Prop label="Attached to">{note.attachTo ? ref(note.attachTo) : <span className="quiet">Drag from the note to a component</span>}</Prop>}
+        <Prop label="Step">
+          <span className="mono">{pad(stepNo(item.step))}</span>
+          <span className="prop-text">{stepTitle(item.step)}</span>
+        </Prop>
+      </section>
+
+      <section className="insp-sec">
+        {component && (
+          <Block label="Description">
+            <Ed label="Description" multiline placeholder="What it does and why it is here" value={component.description} onCommit={(v) => edit((d: Design) => d.components, { description: v })} />
+          </Block>
+        )}
+        {note && (
+          <Block label="Text">
+            <Ed label="Text" required multiline value={note.text} onCommit={(v) => edit((d: Design) => d.notes, { text: v })} />
+          </Block>
+        )}
         {decision && (
           <>
-            <Field label="Title" required value={decision.title} onCommit={(v) => edit((d: Design) => d.decisions, { title: v })} />
-            <Field label="Why" required multiline value={decision.why} onCommit={(v) => edit((d: Design) => d.decisions, { why: v })} />
-            <Field
-              label="Alternatives"
-              multiline
-              placeholder="One per line"
-              value={decision.alternatives?.join('\n')}
-              onCommit={(v) => edit((d: Design) => d.decisions, { alternatives: v?.split('\n').map((s) => s.trim()).filter(Boolean) })}
-            />
-            <Field label="Trade-offs" multiline value={decision.tradeoffs} onCommit={(v) => edit((d: Design) => d.decisions, { tradeoffs: v })} />
+            <Block label="Why">
+              <Ed label="Why" required multiline value={decision.why} onCommit={(v) => edit((d: Design) => d.decisions, { why: v })} />
+            </Block>
+            <Block label="Instead of">
+              <Ed
+                label="Alternatives"
+                multiline
+                placeholder="One alternative per line"
+                value={decision.alternatives?.join('\n')}
+                onCommit={(v) => edit((d: Design) => d.decisions, { alternatives: v?.split('\n').map((s) => s.trim()).filter(Boolean) })}
+              />
+            </Block>
+            <Block label="Cost">
+              <Ed label="Trade-offs" multiline placeholder="What this choice gives up" value={decision.tradeoffs} onCommit={(v) => edit((d: Design) => d.decisions, { tradeoffs: v })} />
+            </Block>
           </>
         )}
-        {(decision || note) && (
-          <div className="kv">
-            <span>{decision ? 'Affects' : 'Attached to'}</span>
-            <div className="chips">
-              {(decision ? decision.links : note?.attachTo ? [note.attachTo] : []).map((l) => (
-                <button key={l} className="chip chip-btn" onClick={() => onSelect(l)}>
-                  {labelOf(l)}
-                </button>
-              ))}
-              {!(decision ? decision.links.length : note?.attachTo) && <span className="muted small">Drag from it to a component on the canvas to link it.</span>}
-            </div>
-          </div>
-        )}
+        {connection && <p className="quiet">Async connections are drawn dashed: queues, events and other fire-and-forget flows.</p>}
       </section>
 
       <footer className="insp-foot">
-        <button className="btn danger-ghost" onClick={() => onDelete(item.id)}>
-          <Icon name="trash" size={14} />
-          Delete
+        <button className="text-btn danger" onClick={() => onDelete(item.id)}>
+          Delete {kind.toLowerCase()}
         </button>
       </footer>
     </aside>
@@ -346,52 +374,48 @@ export function ReviewBar({
   const step = design.steps[viewIndex];
   const seen = design.steps.filter((s) => s.seen).length;
   return (
-    <div className="review" role="region" aria-label="Step review">
-      <button className="icon-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} aria-label="Previous step" title="Previous step (←)">
-        <Icon name="arrowLeft" />
-      </button>
-      <div className="review-main">
-        <div className="review-top">
-          <span className="review-count">
-            Step {viewIndex + 1} of {design.steps.length}
-          </span>
-          <span className="review-title" title={step.title}>
-            {step.title}
-          </span>
-        </div>
-        <div className="stepper">
+    <div className="titleblock" role="region" aria-label="Step review">
+      <div className="tb-row">
+        <span className="tb-cell tb-key">
+          Step {pad(viewIndex + 1)}/{pad(design.steps.length)}
+        </span>
+        <span className="tb-cell tb-title" title={step.title}>
+          {step.title}
+        </span>
+        <span className="tb-cell tb-key">
+          {seen}/{design.steps.length} reviewed
+        </span>
+      </div>
+      <div className="tb-row">
+        <div className="tb-steps">
           {design.steps.map((s, i) => (
             <button
               key={s.id}
-              className={`seg${s.seen ? ' seen' : ''}${i === viewIndex ? ' current' : ''}${i > maxIndex ? ' locked' : ''}`}
+              className={`tb-step${s.seen ? ' seen' : ''}${i === viewIndex ? ' current' : ''}${i > maxIndex ? ' locked' : ''}`}
               onClick={() => i <= maxIndex && onView(i)}
               aria-disabled={i > maxIndex}
               aria-current={i === viewIndex ? 'step' : undefined}
-              title={i > maxIndex ? `Step ${i + 1}: review the earlier steps first` : `Step ${i + 1}: ${s.title}`}
-              aria-label={`Step ${i + 1}: ${s.title}`}
-            />
+              title={i > maxIndex ? `Step ${i + 1} is locked until the earlier steps are reviewed` : `Step ${i + 1}: ${s.title}`}
+            >
+              {pad(i + 1)}
+            </button>
           ))}
         </div>
+        <button className="tb-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} title="Previous step (←)">
+          ← Back
+        </button>
+        {!step.seen ? (
+          <button className="tb-btn ink" onClick={onSeenNext} title="Mark as seen and go to the next step (→)">
+            Mark seen <kbd>→</kbd>
+          </button>
+        ) : viewIndex < maxIndex ? (
+          <button className="tb-btn" onClick={() => onView(viewIndex + 1)} title="Next step (→)">
+            Next <kbd>→</kbd>
+          </button>
+        ) : (
+          <span className="tb-btn done">All reviewed</span>
+        )}
       </div>
-      <span className="review-progress">
-        {seen}/{design.steps.length} reviewed
-      </span>
-      {!step.seen ? (
-        <button className="btn primary" onClick={onSeenNext} title="Mark as seen and go to the next step (→)">
-          <Icon name="check" size={15} />
-          Seen, next
-        </button>
-      ) : viewIndex < maxIndex ? (
-        <button className="btn" onClick={() => onView(viewIndex + 1)} title="Next step (→)">
-          Next
-          <Icon name="arrowRight" size={15} />
-        </button>
-      ) : (
-        <span className="all-done">
-          <Icon name="check" size={15} />
-          All reviewed
-        </span>
-      )}
     </div>
   );
 }
