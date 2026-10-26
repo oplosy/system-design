@@ -695,7 +695,7 @@ export const SHAPES: Record<ComponentType, Spec> = {
       }),
   },
   registry: {
-    name: 'Service registry / config',
+    name: 'Service registry',
     group: 'ops',
     keywords: 'consul etcd zookeeper eureka service discovery config configuration parameter store',
     w: 200,
