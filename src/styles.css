@@ -549,6 +549,28 @@ kbd.lead {
   color: var(--muted);
 }
 
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.check.off {
+  color: var(--quiet);
+  cursor: default;
+}
+
+.check input {
+  margin: 0;
+  accent-color: var(--ink);
+}
+
 .menu-item {
   display: flex;
   align-items: center;

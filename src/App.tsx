@@ -24,7 +24,7 @@ import { ApiError, api, type Summary } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
-import { layout } from './layout.ts';
+import { LAYOUTS, layout, type LayoutKind } from './layout.ts';
 import { DRAG_MIME, Dock, FindBox, Inspector, Palette, PresentBar, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
 import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES } from './shapes.ts';
 
@@ -584,6 +584,38 @@ function Shell() {
     onEditLabel: startEdit,
   };
 
+  /** Re-arranges the whole sheet, or only the selected items (a selected boundary brings what it holds). */
+  const arrange = (kind: LayoutKind, selectionOnly: boolean) => {
+    const d0 = designRef.current;
+    if (!d0) return;
+    let only: { ids: Set<string>; at: Map<string, { x: number; y: number }> } | undefined;
+    if (selectionOnly) {
+      const picked = new Set(getNodes().filter((n) => n.selected).map((n) => n.id));
+      const boxes = new Set([...picked].filter((id) => d0.boundaries.some((b) => b.id === id)).flatMap((id) => [...m.boundaryTree(d0, id)]));
+      const ids = new Set([
+        ...[...d0.notes, ...d0.decisions].filter((x) => picked.has(x.id)).map((x) => x.id),
+        ...d0.components.filter((c) => picked.has(c.id) || (c.boundary && boxes.has(c.boundary))).map((c) => c.id),
+      ]);
+      const at = new Map([...d0.components, ...d0.notes, ...d0.decisions].filter((x) => ids.has(x.id) && x.position).map((x) => [x.id, x.position!]));
+      only = { ids, at };
+    }
+    layout(d0, kind, only)
+      .then((pos) => {
+        if (!only) fittedFor.current = null;
+        change((d) => {
+          for (const x of [...d.components, ...d.notes, ...d.decisions, ...d.boundaries]) if (pos.has(x.id)) x.position = pos.get(x.id);
+          // Flow draws right-angled lines; the other layouts keep each line as it was.
+          if (kind === 'flow')
+            for (const c of d.connections)
+              if (pos.has(c.from) && pos.has(c.to)) {
+                c.route = 'elbow';
+                c.bend = undefined;
+              }
+        });
+      })
+      .catch((e) => setError(errorText(e)));
+  };
+
   const present = (on: boolean) => {
     setPresenting(on);
     setSelected(null);
@@ -759,19 +791,7 @@ function Shell() {
               {icon('M10.5 3l3 3-3 3M13 6H6.5a4 4 0 0 0 0 8H9')}
             </button>
             <span className="vrule" />
-            <button
-              className="text-btn"
-              disabled={!design}
-              title="Re-arrange every item automatically"
-              onClick={() => {
-                fittedFor.current = null;
-                change((d) => {
-                  for (const x of [...d.components, ...d.notes, ...d.decisions, ...d.boundaries]) x.position = undefined;
-                });
-              }}
-            >
-              Auto layout
-            </button>
+            <LayoutMenu disabled={!design} selected={nodes.filter((n) => n.selected).length} onPick={arrange} />
             <ExportMenu disabled={!design} onPick={exportAs} />
             <button className="text-btn" disabled={!design} onClick={() => present(true)} title="Walk through the steps full screen">
               Present
@@ -1016,6 +1036,46 @@ function AppearanceMenu({
           <span className="field-label">Drawing style</span>
           <Seg label="Drawing style" value={sketch ? 'sketch' : 'clean'} options={STYLES} onPick={(v) => onSketch(v === 'sketch')} />
           <p className="menu-note">Sketch draws hand-made lines like a whiteboard; Clean draws crisp ones for docs.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LayoutMenu({ disabled, selected, onPick }: { disabled: boolean; selected: number; onPick: (kind: LayoutKind, selectionOnly: boolean) => void }) {
+  const [open, setOpen] = useState(false);
+  const [onlySelected, setOnlySelected] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, ref);
+  const scoped = onlySelected && selected > 1;
+  return (
+    <div className="switcher" ref={ref}>
+      <button className="text-btn" disabled={disabled} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} title="Re-arrange items automatically (Ctrl+Z undoes it)">
+        Layout
+      </button>
+      {open && (
+        <div className="menu menu-right" role="menu" aria-label="Layout">
+          <label className={`check${selected > 1 ? '' : ' off'}`} title={selected > 1 ? undefined : 'Select two or more items first (Shift or Ctrl + click, or drag a box)'}>
+            <input type="checkbox" checked={scoped} disabled={selected < 2} onChange={(e) => setOnlySelected(e.target.checked)} />
+            Only the selected items{selected > 1 ? ` (${selected})` : ''}
+          </label>
+          {LAYOUTS.map((x) => (
+            <button
+              key={x.key}
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setOpen(false);
+                onPick(x.key, scoped);
+              }}
+            >
+              <span className="menu-main">
+                <span className="menu-title">{x.title}</span>
+                <span className="menu-desc">{x.desc}</span>
+              </span>
+            </button>
+          ))}
         </div>
       )}
     </div>
