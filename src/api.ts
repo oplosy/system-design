@@ -1,6 +1,6 @@
 import type { Design } from '../core/schema.ts';
 
-export type Summary = { id: string; title: string; description?: string; unseen: number };
+export type Summary = { id: string; title: string; description?: string; steps: number; unseen: number };
 
 export class ApiError extends Error {
   status: number;

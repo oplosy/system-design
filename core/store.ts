@@ -35,7 +35,7 @@ async function listFrom(dir: string) {
   for (const f of files) {
     try {
       const d = await readFrom(dir, f.slice(0, -5));
-      out.push({ id: d.id, title: d.title, description: d.description, unseen: d.steps.filter((s) => !s.seen).length });
+      out.push({ id: d.id, title: d.title, description: d.description, steps: d.steps.length, unseen: d.steps.filter((s) => !s.seen).length });
     } catch {
       // A broken file must not hide the others; readDesign reports its error when opened.
     }

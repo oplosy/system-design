@@ -17,7 +17,8 @@ import * as m from '../core/mutations.ts';
 import { ApiError, api, type Summary } from './api.ts';
 import { SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import { layout } from './layout.ts';
-import { DRAG_MIME, Inspector, Palette, ReviewBar, type AddKind } from './panels.tsx';
+import { Icon } from './icons.tsx';
+import { DRAG_MIME, Inspector, Palette, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
 import { DECISION_SIZE, NOTE_SIZE, SHAPES } from './shapes.ts';
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -282,33 +283,69 @@ function Shell() {
     }
   };
 
+  const goTo = (i: number) => {
+    setSelected(null);
+    setViewIndex(Math.max(0, Math.min(i, maxIndex)));
+  };
+
+  const seenNext = () => {
+    if (!design || !current) return;
+    if (current.seen) return goTo(view + 1);
+    change((d) => {
+      d.steps[view].seen = true;
+    });
+    setSelected(null);
+    setViewIndex(Math.min(view + 1, design.steps.length - 1));
+  };
+
+  // ← and → walk the steps while nothing is selected (with a selection, arrows move nodes).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (selected || creating || e.altKey || e.ctrlKey || e.metaKey || t.closest('input, textarea, select, [contenteditable]')) return;
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        seenNext();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goTo(view - 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   return (
     <SketchContext.Provider value={sketch}>
       <div className="app">
         <header className="topbar">
-          <strong className="brand">System design</strong>
-          {designs.length > 0 && (
-            <select value={id ?? ''} onChange={(e) => setId(e.target.value)} aria-label="Design">
-              {designs.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.title}
-                  {d.unseen ? ` (${d.unseen} unseen)` : ''}
-                </option>
-              ))}
-            </select>
-          )}
-          <button onClick={() => setCreating((v) => !v)}>New design</button>
+          <div className="brand">
+            <span className="brand-mark">
+              <Icon name="logo" size={15} />
+            </span>
+            System design
+          </div>
+          <span className="divider" />
+          {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={setId} />}
+          <button className="btn" onClick={() => setCreating(true)}>
+            <Icon name="plus" size={15} />
+            New design
+          </button>
           <div className="spacer" />
           <div className="segmented" role="group" aria-label="Drawing style">
             <button aria-pressed={sketch} onClick={() => setStyle(true)}>
+              <Icon name="pencil" size={14} />
               Sketch
             </button>
             <button aria-pressed={!sketch} onClick={() => setStyle(false)}>
+              <Icon name="square" size={14} />
               Clean
             </button>
           </div>
           <button
+            className="btn"
             disabled={!design}
+            title="Re-arrange every item automatically"
             onClick={() => {
               fittedFor.current = null;
               change((d) => {
@@ -316,28 +353,11 @@ function Shell() {
               });
             }}
           >
+            <Icon name="layout" size={15} />
             Auto layout
           </button>
         </header>
-        {creating && (
-          <NewDesign
-            templates={templates}
-            onCancel={() => setCreating(false)}
-            onCreated={(d) => {
-              setCreating(false);
-              refreshLists();
-              setId(d.id);
-            }}
-          />
-        )}
-        {error && (
-          <div className="banner" role="alert">
-            {error}
-            <button onClick={() => setError(null)} aria-label="Dismiss">
-              ×
-            </button>
-          </div>
-        )}
+
         {design && current ? (
           <div className="workspace">
             <Palette onAdd={(k) => add(k)} />
@@ -380,41 +400,109 @@ function Shell() {
                 minZoom={0.2}
                 proOptions={{ hideAttribution: true }}
               >
-                <Background gap={18} size={1} />
-                <Controls showInteractive={false} />
+                <Background gap={20} size={1.2} />
+                <Controls showInteractive={false} position="top-left" />
               </ReactFlow>
+              <ReviewBar design={design} viewIndex={view} maxIndex={maxIndex} onView={goTo} onSeenNext={seenNext} />
             </div>
             <Inspector design={design} selected={selected} stepId={current.id} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
-            <ReviewBar
-              design={design}
-              viewIndex={view}
-              maxIndex={maxIndex}
-              onView={(i) => {
-                setSelected(null);
-                setViewIndex(i);
-              }}
-              onSeenNext={() => {
-                change((d) => {
-                  d.steps[view].seen = true;
-                });
-                setSelected(null);
-                setViewIndex(Math.min(view + 1, design.steps.length - 1));
-              }}
-            />
           </div>
         ) : (
-          !creating && (
+          designs.length === 0 && (
             <div className="empty">
+              <div className="empty-art" aria-hidden="true">
+                <ShapePreview type="client" width={72} height={48} />
+                <Icon name="arrowRight" size={18} />
+                <ShapePreview type="api-gateway" width={84} height={40} />
+                <Icon name="arrowRight" size={18} />
+                <ShapePreview type="sql-db" width={64} height={48} />
+              </div>
               <h2>Start your first design</h2>
-              <p className="muted">Pick a template to walk through step by step, or start blank. Agents can also create designs through the MCP server.</p>
-              <button className="primary" onClick={() => setCreating(true)}>
+              <p>Walk through a template one step at a time, or start from a blank canvas. Agents can also create designs through the MCP server.</p>
+              <button className="btn primary lg" onClick={() => setCreating(true)}>
+                <Icon name="plus" size={16} />
                 New design
               </button>
             </div>
           )
         )}
+
+        {creating && (
+          <NewDesign
+            templates={templates}
+            onCancel={() => setCreating(false)}
+            onCreated={(d) => {
+              setCreating(false);
+              refreshLists();
+              setId(d.id);
+            }}
+          />
+        )}
+        {error && (
+          <div className="toast" role="alert">
+            <Icon name="alert" size={16} />
+            <span>{error}</span>
+            <button className="icon-btn" onClick={() => setError(null)} aria-label="Dismiss">
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </SketchContext.Provider>
+  );
+}
+
+function useDismiss(active: boolean, onDismiss: () => void, ref?: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onDismiss();
+    const onDown = (e: MouseEvent) => ref?.current && !ref.current.contains(e.target as HTMLElement) && onDismiss();
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown);
+    };
+  }, [active, onDismiss, ref]);
+}
+
+function DesignSwitcher({ designs, current, onPick }: { designs: Summary[]; current: string | null; onPick: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, ref);
+  const cur = designs.find((d) => d.id === current);
+  return (
+    <div className="switcher" ref={ref}>
+      <button className="switcher-btn" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span className="switcher-title">{cur?.title ?? 'Select a design'}</span>
+        {cur?.unseen ? <span className="pill">{cur.unseen} new</span> : null}
+        <Icon name="chevronDown" size={14} />
+      </button>
+      {open && (
+        <div className="menu" role="listbox" aria-label="Designs">
+          {designs.map((d) => (
+            <button
+              key={d.id}
+              role="option"
+              aria-selected={d.id === current}
+              className="menu-item"
+              onClick={() => {
+                onPick(d.id);
+                setOpen(false);
+              }}
+            >
+              <span className="menu-main">
+                <span className="menu-title">{d.title}</span>
+                {d.description && <span className="menu-desc">{d.description}</span>}
+              </span>
+              {d.unseen ? <span className="pill">{d.unseen} new</span> : <span className="menu-meta">{d.steps} steps</span>}
+              <span className="menu-check">{d.id === current && <Icon name="check" size={14} />}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -422,47 +510,71 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
   const [title, setTitle] = useState('');
   const [template, setTemplate] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useDismiss(true, onCancel);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return setErr('Enter a title.');
+    if (!/[a-z0-9]/i.test(title)) return setErr('Use at least one letter or digit.');
+    setBusy(true);
     try {
       onCreated(await api.create({ id: m.slugify(title), title: title.trim(), template: template || undefined }));
     } catch (e) {
       setErr(e instanceof ApiError && e.status === 409 ? 'A design with this name already exists. Try another.' : errorText(e));
+    } finally {
+      setBusy(false);
     }
   };
+  const options = [{ id: '', title: 'Blank canvas', description: 'An empty design you build yourself or with an agent.', steps: 1, unseen: 0 }, ...templates];
   return (
-    <form className="new-design" onSubmit={submit}>
-      <label className="field">
-        <span>Title</span>
-        <input
-          autoFocus
-          value={title}
-          placeholder="Design Twitter"
-          onChange={(e) => {
-            setTitle(e.target.value);
-            setErr(null);
-          }}
-        />
-      </label>
-      <label className="field">
-        <span>Template</span>
-        <select value={template} onChange={(e) => setTemplate(e.target.value)}>
-          <option value="">Blank</option>
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.title}
-            </option>
+    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
+      <form className="dialog" role="dialog" aria-modal="true" aria-labelledby="new-design-title" onSubmit={submit}>
+        <header className="dialog-head">
+          <h2 id="new-design-title">New design</h2>
+          <button type="button" className="icon-btn" onClick={onCancel} aria-label="Close">
+            <Icon name="x" />
+          </button>
+        </header>
+        <label className="field">
+          <span className="field-label">Title</span>
+          <input
+            autoFocus
+            value={title}
+            placeholder="Design Twitter"
+            aria-invalid={err ? true : undefined}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              setErr(null);
+            }}
+          />
+          {err && <em className="field-error">{err}</em>}
+        </label>
+        <span className="field-label">Start from</span>
+        <div className="template-grid" role="radiogroup" aria-label="Start from">
+          {options.map((t) => (
+            <button
+              key={t.id || 'blank'}
+              type="button"
+              role="radio"
+              aria-checked={template === t.id}
+              className={`template-card${template === t.id ? ' selected' : ''}`}
+              onClick={() => setTemplate(t.id)}
+            >
+              <span className="template-title">{t.title}</span>
+              {t.description && <span className="template-desc">{t.description}</span>}
+              <span className="template-meta">{t.id ? `${t.steps} steps to walk through` : 'Start from scratch'}</span>
+            </button>
           ))}
-        </select>
-      </label>
-      <button className="primary" type="submit">
-        Create
-      </button>
-      <button type="button" onClick={onCancel}>
-        Cancel
-      </button>
-      {err && <em className="field-error">{err}</em>}
-    </form>
+        </div>
+        <footer className="dialog-foot">
+          <button type="button" className="btn" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" className="btn primary" disabled={busy}>
+            Create design
+          </button>
+        </footer>
+      </form>
+    </div>
   );
 }
