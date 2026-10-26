@@ -85,21 +85,23 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
   ].filter((x) => match(x.name));
   return (
     <aside className="palette">
-      <input
-        className="palette-search"
-        type="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
-        placeholder={kit === 'network' ? 'Search parts: router, printer, wifi…' : 'Search parts: kafka, redis, s3…'}
-        aria-label="Search parts"
-      />
-      <div className="tabs palette-kits" role="group" aria-label="Part kit">
-        {KITS.map((k) => (
-          <button key={k.key} aria-pressed={kit === k.key} onClick={() => setKit(k.key)}>
-            {k.title}
-          </button>
-        ))}
+      <div className="palette-top">
+        <input
+          className="palette-search"
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
+          placeholder={kit === 'network' ? 'Search: router, printer, wifi…' : 'Search: kafka, redis, s3…'}
+          aria-label="Search parts"
+        />
+        <div className="seg" role="radiogroup" aria-label="Part kit">
+          {KITS.map((k) => (
+            <button key={k.key} role="radio" aria-checked={kit === k.key} onClick={() => setKit(k.key)}>
+              {k.title}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="palette-scroll">
         {groups.map(
@@ -137,8 +139,48 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
         )}
         {!groups.some((g) => g.types.length) && !boundaries.length && !explain.length && <p className="quiet pad">No part matches “{query}”.</p>}
       </div>
-      <p className="palette-foot">Drag a part onto the sheet, or click to drop it in the middle. Drag from one item to another to connect them. Drop parts into a boundary to group them.</p>
+      <p className="palette-foot">Drag onto the sheet or click to add. Drag between items to connect.</p>
     </aside>
+  );
+}
+
+/** A floating side panel; its inner edge drags (or arrow-keys) to resize, double-click resets. */
+export function Dock({ side, width, onResize, onReset, children }: { side: 'left' | 'right'; width: number; onResize: (w: number) => void; onReset: () => void; children: React.ReactNode }) {
+  const dir = side === 'left' ? 1 : -1;
+  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const el = e.currentTarget, x0 = e.clientX;
+    el.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => onResize(width + dir * (ev.clientX - x0));
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
+  return (
+    <div className={`dock dock-${side}`} style={{ width }}>
+      {children}
+      <div
+        className="dock-resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize panel"
+        aria-valuenow={width}
+        tabIndex={0}
+        title="Drag to resize, double-click to reset"
+        onPointerDown={drag}
+        onDoubleClick={onReset}
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+          e.preventDefault();
+          onResize(width + (e.key === 'ArrowRight' ? 16 : -16) * dir);
+        }}
+      />
+    </div>
   );
 }
 
@@ -549,16 +591,16 @@ export function ReviewBar({
     setAsking(false);
   };
   return (
-    <div className="titleblock" role="region" aria-label="Step review">
+    <div className="review" role="region" aria-label="Step review">
       {asking && (
         <form
-          className="tb-pop"
+          className="pop"
           onSubmit={(e) => {
             e.preventDefault();
             send();
           }}
         >
-          <label className="block-label" htmlFor="changes-why">
+          <label className="field-label" htmlFor="changes-why">
             Send step {pad(viewIndex + 1)} back to the agent
           </label>
           <textarea
@@ -574,7 +616,7 @@ export function ReviewBar({
               if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send();
             }}
           />
-          <div className="tb-pop-foot">
+          <div className="pop-foot">
             <button type="button" className="text-btn" onClick={() => setAsking(false)}>
               Cancel
             </button>
@@ -584,55 +626,54 @@ export function ReviewBar({
           </div>
         </form>
       )}
-      <div className="tb-row">
-        <span className="tb-cell tb-key">
-          Step {pad(viewIndex + 1)}/{pad(design.steps.length)}
-        </span>
-        <span className="tb-cell tb-title" title={step.title}>
+      <button className="icon-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} title="Previous step (←)" aria-label="Previous step">
+        ‹
+      </button>
+      <div className="review-main">
+        <div className="review-meta">
+          <span>
+            Step {viewIndex + 1} of {design.steps.length}
+          </span>
+          <span className="dots">
+            {design.steps.map((s, i) => (
+              <button
+                key={s.id}
+                className={`dot${s.seen ? ' seen' : ''}${s.changesRequested ? ' changes' : ''}${i === viewIndex ? ' current' : ''}${i > maxIndex ? ' locked' : ''}`}
+                onClick={() => i <= maxIndex && onView(i)}
+                aria-disabled={i > maxIndex}
+                aria-current={i === viewIndex ? 'step' : undefined}
+                aria-label={`Step ${i + 1}`}
+                title={
+                  i > maxIndex
+                    ? `Step ${i + 1} is locked until the earlier steps are reviewed`
+                    : `Step ${i + 1}: ${s.title}${s.seen ? ' (reviewed)' : ''}${s.changesRequested ? ' (changes requested)' : ''}`
+                }
+              />
+            ))}
+          </span>
+          <span>{seen} reviewed</span>
+        </div>
+        <div className="review-title" title={step.title}>
           {step.title}
-        </span>
-        <button className="tb-cell tb-key tb-toggle" aria-pressed={diff} onClick={onDiff} title="Outline what this step added and dim the rest">
+        </div>
+      </div>
+      <div className="review-actions">
+        <button className="chip" aria-pressed={diff} onClick={onDiff} title="Outline what this step added and dim the rest">
           Diff
         </button>
-        <span className="tb-cell tb-key">
-          {seen}/{design.steps.length} reviewed
-        </span>
-      </div>
-      <div className="tb-row">
-        <div className="tb-steps">
-          {design.steps.map((s, i) => (
-            <button
-              key={s.id}
-              className={`tb-step${s.seen ? ' seen' : ''}${s.changesRequested ? ' changes' : ''}${i === viewIndex ? ' current' : ''}${i > maxIndex ? ' locked' : ''}`}
-              onClick={() => i <= maxIndex && onView(i)}
-              aria-disabled={i > maxIndex}
-              aria-current={i === viewIndex ? 'step' : undefined}
-              title={
-                i > maxIndex
-                  ? `Step ${i + 1} is locked until the earlier steps are reviewed`
-                  : `Step ${i + 1}: ${s.title}${s.changesRequested ? ' (changes requested)' : ''}`
-              }
-            >
-              {pad(i + 1)}
-            </button>
-          ))}
-        </div>
-        <button className="tb-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} title="Previous step (←)">
-          ← Back
-        </button>
-        <button className="tb-btn" aria-expanded={asking} onClick={() => setAsking((a) => !a)} title="Send this step back to the agent with a comment">
+        <button className="text-btn" aria-expanded={asking} onClick={() => setAsking((a) => !a)} title="Send this step back to the agent with a comment">
           Request changes
         </button>
         {!step.seen ? (
-          <button className="tb-btn ink" onClick={onSeenNext} title="Mark as seen and go to the next step (→)">
+          <button className="btn ink" onClick={onSeenNext} title="Mark as seen and go to the next step (→)">
             Mark seen <kbd>→</kbd>
           </button>
         ) : viewIndex < maxIndex ? (
-          <button className="tb-btn" onClick={() => onView(viewIndex + 1)} title="Next step (→)">
+          <button className="btn" onClick={() => onView(viewIndex + 1)} title="Next step (→)">
             Next <kbd>→</kbd>
           </button>
         ) : (
-          <span className="tb-btn done">All reviewed</span>
+          <span className="review-done">All reviewed ✓</span>
         )}
       </div>
     </div>
@@ -643,20 +684,21 @@ export function PresentBar({ design, viewIndex, maxIndex, onView, onExit }: { de
   const step = design.steps[viewIndex];
   return (
     <div className="present-bar" role="region" aria-label="Presentation">
-      <span className="tb-key">
-        {pad(viewIndex + 1)}/{pad(design.steps.length)}
+      <span className="present-no">
+        {pad(viewIndex + 1)}
+        <span>/{pad(design.steps.length)}</span>
       </span>
       <div className="present-text">
         <strong>{step.title}</strong>
         {step.summary && <span>{step.summary}</span>}
       </div>
-      <button className="tb-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} aria-label="Previous step">
-        ←
+      <button className="icon-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} aria-label="Previous step">
+        ‹
       </button>
-      <button className="tb-btn" onClick={() => onView(viewIndex + 1)} disabled={viewIndex >= maxIndex} aria-label="Next step">
-        →
+      <button className="icon-btn" onClick={() => onView(viewIndex + 1)} disabled={viewIndex >= maxIndex} aria-label="Next step">
+        ›
       </button>
-      <button className="tb-btn" onClick={onExit}>
+      <button className="text-btn" onClick={onExit}>
         Exit <kbd>Esc</kbd>
       </button>
     </div>

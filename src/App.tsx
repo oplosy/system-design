@@ -11,6 +11,7 @@ import {
   getNodesBounds,
   useReactFlow,
   type Connection as FlowConnection,
+  type FitViewOptions,
   type Node,
   type NodeChange,
 } from '@xyflow/react';
@@ -24,7 +25,7 @@ import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './bou
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
 import { layout } from './layout.ts';
-import { DRAG_MIME, FindBox, Inspector, Palette, PresentBar, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
+import { DRAG_MIME, Dock, FindBox, Inspector, Palette, PresentBar, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
 import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES } from './shapes.ts';
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -34,8 +35,12 @@ const isEmpty = (d: Design, id: string) => !d.components.some((c) => c.boundary 
 const emptyBoundaries = (d: Design) => d.boundaries.filter((b) => isEmpty(d, b.id));
 const isAddKind = (k: string): k is AddKind => k === 'note' || k === 'decision' || !!boundaryKind(k) || (COMPONENT_TYPES as readonly string[]).includes(k);
 
-/** Fit the drawing with room at the bottom for the review or caption bar. */
-const FIT = { padding: { x: '48px', top: '48px', bottom: '120px' }, duration: 300, maxZoom: 1.2 } as const;
+type Theme = 'system' | 'light' | 'dark';
+type Docks = { left: { open: boolean; w: number }; right: { open: boolean; w: number } };
+const DOCKS: Docks = { left: { open: true, w: 248 }, right: { open: true, w: 352 } };
+const DOCK_LIMITS = { left: [200, 420], right: [280, 600] } as const;
+/** Gap between a floating panel and the window edge. */
+const GAP = 12;
 
 type Editing = { id: string; at: Pt; value: string; multiline: boolean };
 
@@ -60,6 +65,37 @@ function loadStyle() {
   }
 }
 
+function loadTheme(): Theme {
+  try {
+    const t = localStorage.getItem('sd-theme');
+    return t === 'light' || t === 'dark' ? t : 'system';
+  } catch {
+    return 'system';
+  }
+}
+
+function loadDocks(): Docks {
+  try {
+    const d = JSON.parse(localStorage.getItem('sd-docks') ?? 'null') as Docks | null;
+    const side = (k: keyof Docks) => ({
+      open: typeof d?.[k]?.open === 'boolean' ? d[k].open : DOCKS[k].open,
+      w: Number.isFinite(d?.[k]?.w) ? Math.min(Math.max(d![k].w, DOCK_LIMITS[k][0]), DOCK_LIMITS[k][1]) : DOCKS[k].w,
+    });
+    return { left: side('left'), right: side('right') };
+  } catch {
+    return DOCKS;
+  }
+}
+
+/** Saves a view preference; blocked storage only loses the convenience. */
+function remember(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore
+  }
+}
+
 export function App() {
   return (
     <ReactFlowProvider>
@@ -81,6 +117,8 @@ function Shell() {
   const [diff, setDiff] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [theme, setThemeState] = useState<Theme>(loadTheme);
+  const [docks, setDocks] = useState<Docks>(loadDocks);
   const designRef = useRef<Design | null>(null);
   const saveState = useRef({ timer: undefined as number | undefined, pending: false, inFlight: false, dirty: false });
   // Undo history of whole designs. It restarts whenever the design is replaced from disk.
@@ -91,6 +129,32 @@ function Shell() {
   const findRef = useRef<HTMLInputElement>(null);
   const fittedFor = useRef<string | null>(null);
   const { screenToFlowPosition, fitView, getNodes, getInternalNode } = useReactFlow();
+  // Floating panels cover the canvas edges, so fitting leaves room for them, the top bar and the review bar.
+  const inset = (k: keyof Docks) => (docks[k].open && !presenting ? docks[k].w + GAP : 0);
+  const fitOpts = useRef<FitViewOptions>({});
+  fitOpts.current = {
+    padding: { left: `${inset('left') + 40}px`, right: `${inset('right') + 40}px`, top: presenting ? '40px' : '84px', bottom: '120px' },
+    duration: 300,
+    maxZoom: 1.2,
+  };
+
+  useEffect(() => {
+    if (theme === 'system') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+  }, [theme]);
+  const setTheme = (t: Theme) => {
+    setThemeState(t);
+    remember('sd-theme', t);
+  };
+  const updateDocks = (fn: (d: Docks) => Docks) =>
+    setDocks((d) => {
+      const next = fn(d);
+      remember('sd-docks', JSON.stringify(next));
+      return next;
+    });
+  const toggleDock = (k: keyof Docks) => updateDocks((d) => ({ ...d, [k]: { ...d[k], open: !d[k].open } }));
+  const resizeDock = (k: keyof Docks, w: number) =>
+    updateDocks((d) => ({ ...d, [k]: { ...d[k], w: Math.round(Math.min(Math.max(w, DOCK_LIMITS[k][0]), DOCK_LIMITS[k][1])) } }));
 
   const commit = useCallback((d: Design | null, { fresh = false } = {}) => {
     designRef.current = d;
@@ -339,7 +403,7 @@ function Shell() {
     const fit = (tries: number) => {
       const ready = getNodes().every((n) => n.hidden || getInternalNode(n.id)?.measured.width);
       if (!ready && tries > 0) return void setTimeout(() => fit(tries - 1), 50);
-      void fitView(FIT);
+      void fitView(fitOpts.current);
     };
     // Entering full screen resizes the canvas a moment later.
     setTimeout(() => fit(40), presenting ? 250 : 60);
@@ -534,7 +598,7 @@ function Shell() {
     let t: number | undefined;
     const ro = new ResizeObserver(() => {
       clearTimeout(t);
-      t = window.setTimeout(() => fitView(FIT), 80);
+      t = window.setTimeout(() => fitView(fitOpts.current), 80);
     });
     ro.observe(el);
     return () => {
@@ -590,11 +654,7 @@ function Shell() {
 
   const setStyle = (s: boolean) => {
     setSketch(s);
-    try {
-      localStorage.setItem('sd-style', s ? 'sketch' : 'clean');
-    } catch {
-      // Style preference is a convenience; ignore blocked storage.
-    }
+    remember('sd-style', s ? 'sketch' : 'clean');
   };
 
   const goTo = (i: number) => {
@@ -656,62 +716,70 @@ function Shell() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  const icon = (d: string) => (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+  const dockToggle = (k: keyof Docks) => (
+    <button
+      className="icon-btn"
+      aria-pressed={docks[k].open}
+      onClick={() => toggleDock(k)}
+      title={`${docks[k].open ? 'Hide' : 'Show'} the ${k === 'left' ? 'parts' : 'details'} panel`}
+      aria-label={`${k === 'left' ? 'Parts' : 'Details'} panel`}
+    >
+      {icon(k === 'left' ? 'M2.5 3.5h11v9h-11zM6.5 3.5v9' : 'M2.5 3.5h11v9h-11zM9.5 3.5v9')}
+    </button>
+  );
+
   return (
     <SketchContext.Provider value={sketch}>
-      <div className={`app${presenting ? ' presenting' : ''}`}>
+      <div
+        className={`app${presenting ? ' presenting' : ''}`}
+        style={{ '--left': `${inset('left')}px`, '--right': `${inset('right')}px` } as React.CSSProperties}
+      >
         <header className="topbar">
-          <span className="wordmark">
-            system<span>/</span>design
-          </span>
-          {designs.length > 0 && (
-            <>
-              <span className="crumb-sep">/</span>
-              <DesignSwitcher designs={designs} current={id} onPick={setId} />
-            </>
-          )}
-          {design && (
-            <span className="doc-meta">
-              rev {design.rev} · {design.components.length} parts · {design.decisions.length} decisions
+          <div className="bar">
+            {design && dockToggle('left')}
+            <span className="wordmark">
+              system<span>/</span>design
             </span>
-          )}
-          <div className="spacer" />
-          <button className="icon-btn" disabled={!hist.current.past.length} onClick={() => undo(true)} title="Undo (Ctrl+Z)" aria-label="Undo">
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M5.5 3 2.5 6l3 3M3 6h6.5a4 4 0 0 1 0 8H7" fill="none" stroke="currentColor" strokeWidth="1.4" />
-            </svg>
-          </button>
-          <button className="icon-btn" disabled={!hist.current.future.length} onClick={() => undo(false)} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M10.5 3l3 3-3 3M13 6H6.5a4 4 0 0 0 0 8H9" fill="none" stroke="currentColor" strokeWidth="1.4" />
-            </svg>
-          </button>
-          <span className="vrule" />
-          <div className="tabs" role="group" aria-label="Drawing style">
-            <button aria-pressed={sketch} onClick={() => setStyle(true)}>
-              Sketch
-            </button>
-            <button aria-pressed={!sketch} onClick={() => setStyle(false)}>
-              Clean
-            </button>
+            {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={setId} meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined} />}
           </div>
-          <span className="vrule" />
-          <button
-            className="text-btn"
-            disabled={!design}
-            title="Re-arrange every item automatically"
-            onClick={() => {
-              fittedFor.current = null;
-              change((d) => {
-                for (const x of [...d.components, ...d.notes, ...d.decisions, ...d.boundaries]) x.position = undefined;
-              });
-            }}
-          >
-            Auto layout
-          </button>
-          <ExportMenu disabled={!design} onPick={exportAs} />
-          <button className="text-btn" disabled={!design} onClick={() => present(true)} title="Walk through the steps full screen">
-            Present
-          </button>
+          <div className="spacer" />
+          {design && (
+            <FindBox design={design} visible={nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id))} onPick={findPick} inputRef={findRef} />
+          )}
+          <div className="bar">
+            <button className="icon-btn" disabled={!hist.current.past.length} onClick={() => undo(true)} title="Undo (Ctrl+Z)" aria-label="Undo">
+              {icon('M5.5 3 2.5 6l3 3M3 6h6.5a4 4 0 0 1 0 8H7')}
+            </button>
+            <button className="icon-btn" disabled={!hist.current.future.length} onClick={() => undo(false)} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+              {icon('M10.5 3l3 3-3 3M13 6H6.5a4 4 0 0 0 0 8H9')}
+            </button>
+            <span className="vrule" />
+            <button
+              className="text-btn"
+              disabled={!design}
+              title="Re-arrange every item automatically"
+              onClick={() => {
+                fittedFor.current = null;
+                change((d) => {
+                  for (const x of [...d.components, ...d.notes, ...d.decisions, ...d.boundaries]) x.position = undefined;
+                });
+              }}
+            >
+              Auto layout
+            </button>
+            <ExportMenu disabled={!design} onPick={exportAs} />
+            <button className="text-btn" disabled={!design} onClick={() => present(true)} title="Walk through the steps full screen">
+              Present
+            </button>
+            <span className="vrule" />
+            <AppearanceMenu sketch={sketch} onSketch={setStyle} theme={theme} onTheme={setTheme} icon={icon} />
+            {design && dockToggle('right')}
+          </div>
           <button className="btn ink" onClick={() => setCreating(true)}>
             New design
           </button>
@@ -719,7 +787,6 @@ function Shell() {
 
         {design && current ? (
           <div className="workspace">
-            <Palette onAdd={(k) => add(k)} />
             <div
               className={`canvas${sketch ? ' sketch' : ''}`}
               ref={canvasRef}
@@ -759,15 +826,15 @@ function Shell() {
                   elementsSelectable={!presenting}
                   zoomOnDoubleClick={false}
                   connectionMode={ConnectionMode.Loose}
-                  colorMode="system"
+                  colorMode={theme}
                   minZoom={0.2}
                   proOptions={{ hideAttribution: true }}
                 >
                   <Background gap={20} size={1.2} />
-                  {!presenting && <Controls showInteractive={false} position="top-left" />}
+                  {!presenting && <Controls showInteractive={false} position="top-left" fitViewOptions={fitOpts.current} />}
                   {!presenting && (
                     <MiniMap
-                      position="bottom-right"
+                      position="top-right"
                       pannable
                       zoomable
                       ariaLabel="Overview"
@@ -785,22 +852,28 @@ function Shell() {
               {presenting ? (
                 <PresentBar design={design} viewIndex={view} maxIndex={maxIndex} onView={goTo} onExit={() => present(false)} />
               ) : (
-                <>
-                  <FindBox design={design} visible={nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id))} onPick={findPick} inputRef={findRef} />
-                  <ReviewBar
-                    design={design}
-                    viewIndex={view}
-                    maxIndex={maxIndex}
-                    onView={goTo}
-                    onSeenNext={seenNext}
-                    onRequestChanges={requestChanges}
-                    diff={diff}
-                    onDiff={() => setDiff((x) => !x)}
-                  />
-                </>
+                <ReviewBar
+                  design={design}
+                  viewIndex={view}
+                  maxIndex={maxIndex}
+                  onView={goTo}
+                  onSeenNext={seenNext}
+                  onRequestChanges={requestChanges}
+                  diff={diff}
+                  onDiff={() => setDiff((x) => !x)}
+                />
               )}
             </div>
-            <Inspector design={design} selected={selected} stepId={current.id} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
+            {docks.left.open && (
+              <Dock side="left" width={docks.left.w} onResize={(w) => resizeDock('left', w)} onReset={() => resizeDock('left', DOCKS.left.w)}>
+                <Palette onAdd={(k) => add(k)} />
+              </Dock>
+            )}
+            {docks.right.open && (
+              <Dock side="right" width={docks.right.w} onResize={(w) => resizeDock('right', w)} onReset={() => resizeDock('right', DOCKS.right.w)}>
+                <Inspector design={design} selected={selected} stepId={current.id} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
+              </Dock>
+            )}
           </div>
         ) : (
           designs.length === 0 && (
@@ -892,6 +965,63 @@ function InlineEdit({ at, value, multiline, onDone }: Editing & { onDone: (value
   return multiline ? <textarea rows={4} {...props} /> : <input {...props} />;
 }
 
+function Seg<T extends string>({ label, value, options, onPick }: { label: string; value: T; options: readonly { key: T; title: string }[]; onPick: (v: T) => void }) {
+  return (
+    <div className="seg" role="radiogroup" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.key} role="radio" aria-checked={value === o.key} onClick={() => onPick(o.key)}>
+          {o.title}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const THEMES = [
+  { key: 'light', title: 'Light' },
+  { key: 'dark', title: 'Dark' },
+  { key: 'system', title: 'System' },
+] as const;
+const STYLES = [
+  { key: 'sketch', title: 'Sketch' },
+  { key: 'clean', title: 'Clean' },
+] as const;
+
+function AppearanceMenu({
+  sketch,
+  onSketch,
+  theme,
+  onTheme,
+  icon,
+}: {
+  sketch: boolean;
+  onSketch: (s: boolean) => void;
+  theme: Theme;
+  onTheme: (t: Theme) => void;
+  icon: (d: string) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, ref);
+  return (
+    <div className="switcher" ref={ref}>
+      <button className="icon-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)} title="Appearance: theme and drawing style" aria-label="Appearance">
+        {icon('M8 2.5v1.2M8 12.3v1.2M2.5 8h1.2M12.3 8h1.2M4.1 4.1l.85.85M11.05 11.05l.85.85M4.1 11.9l.85-.85M11.05 4.95l.85-.85M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z')}
+      </button>
+      {open && (
+        <div className="menu menu-right menu-pad" role="dialog" aria-label="Appearance">
+          <span className="field-label">Theme</span>
+          <Seg label="Theme" value={theme} options={THEMES} onPick={onTheme} />
+          <span className="field-label">Drawing style</span>
+          <Seg label="Drawing style" value={sketch ? 'sketch' : 'clean'} options={STYLES} onPick={(v) => onSketch(v === 'sketch')} />
+          <p className="menu-note">Sketch draws hand-made lines like a whiteboard; Clean draws crisp ones for docs.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const EXPORTS = [
   { kind: 'png', title: 'PNG image', desc: 'The sheet as it looks now, at 2× resolution' },
   { kind: 'svg', title: 'SVG image', desc: 'Scalable, for docs and slides' },
@@ -933,7 +1063,7 @@ function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (kind: (t
   );
 }
 
-function DesignSwitcher({ designs, current, onPick }: { designs: Summary[]; current: string | null; onPick: (id: string) => void }) {
+function DesignSwitcher({ designs, current, meta, onPick }: { designs: Summary[]; current: string | null; meta?: string; onPick: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -941,13 +1071,14 @@ function DesignSwitcher({ designs, current, onPick }: { designs: Summary[]; curr
   const cur = designs.find((d) => d.id === current);
   return (
     <div className="switcher" ref={ref}>
-      <button className="switcher-btn" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {cur?.title ?? 'Select a design'}
+      <button className="switcher-btn" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)} title={meta}>
+        <span className="switcher-title">{cur?.title ?? 'Select a design'}</span>
         {cur?.unseen ? <span className="new-count">{cur.unseen} new</span> : null}
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 3.5 5 7l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" /></svg>
       </button>
       {open && (
         <div className="menu" role="listbox" aria-label="Designs">
+          {meta && <p className="menu-head">{meta}</p>}
           {designs.map((d) => (
             <button
               key={d.id}

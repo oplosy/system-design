@@ -102,7 +102,81 @@ const glyph = {
   sparkle: (o: Options, x: number, y: number) => [
     gen.path(`M${x} ${y - 11} Q${x + 1} ${y - 1} ${x + 11} ${y} Q${x + 1} ${y + 1} ${x} ${y + 11} Q${x - 1} ${y + 1} ${x - 11} ${y} Q${x - 1} ${y - 1} ${x} ${y - 11} Z`, line(o)),
   ],
+  bars: (o: Options, x: number, y: number) => {
+    const l = line(o);
+    return [gen.line(x - 12, y + 10, x + 12, y + 10, l), ...[10, 18, 13].map((bh, i) => gen.rectangle(x - 11 + i * 8, y + 10 - bh, 6, bh, l))];
+  },
+  trend: (o: Options, x: number, y: number) => {
+    const l = line(o);
+    return [gen.linearPath([[x - 12, y + 8], [x - 4, y], [x + 2, y + 4], [x + 12, y - 8]], l), gen.linearPath([[x + 6, y - 8], [x + 12, y - 8], [x + 12, y - 2]], l)];
+  },
+  play: (o: Options, x: number, y: number) => [gen.polygon([[x - 6, y - 9], [x + 9, y], [x - 6, y + 9]], line(o))],
+  pin: (o: Options, x: number, y: number) => {
+    const l = line(o);
+    return [gen.path(`M${x} ${y + 11} C${x - 10} ${y} ${x - 9} ${y - 11} ${x} ${y - 11} C${x + 9} ${y - 11} ${x + 10} ${y} ${x} ${y + 11} Z`, l), gen.circle(x, y - 3, 6, l)];
+  },
+  phone: (o: Options, x: number, y: number) => [
+    gen.path(`M${x - 9} ${y - 10} Q${x - 13} ${y - 5} ${x - 9} ${y + 1} Q${x - 3} ${y + 9} ${x + 6} ${y + 11} Q${x + 10} ${y + 12} ${x + 11} ${y + 8} L${x + 7} ${y + 4} L${x + 3} ${y + 6} Q${x - 2} ${y + 3} ${x - 5} ${y - 3} L${x - 3} ${y - 7} Z`, line(o)),
+  ],
+  branch: (o: Options, x: number, y: number) => {
+    const l = line(o);
+    return [gen.circle(x - 6, y - 8, 6, l), gen.circle(x - 6, y + 9, 6, l), gen.circle(x + 7, y - 4, 6, l), gen.line(x - 6, y - 5, x - 6, y + 6, l), gen.path(`M${x + 7} ${y - 1} Q${x + 7} ${y + 5} ${x - 4} ${y + 7}`, l)];
+  },
+  robot: (o: Options, x: number, y: number) => {
+    const l = line(o);
+    return [gen.path(roundRect(x - 11, y - 5, 22, 16, 4), l), gen.circle(x - 4, y + 3, 4, l), gen.circle(x + 4, y + 3, 4, l), gen.line(x, y - 5, x, y - 10, l), gen.circle(x, y - 11, 3, l)];
+  },
+  cycle: (o: Options, x: number, y: number) => {
+    const l = line(o);
+    return [gen.path(`M${x + 9} ${y - 5} A10 10 0 1 0 ${x + 10} ${y + 3}`, l), gen.linearPath([[x + 3, y - 5], [x + 9, y - 5], [x + 10, y - 11]], l)];
+  },
+  wave: (o: Options, x: number, y: number) => [gen.path(waves(x - 12, y, 4, 6), line(o))],
+  star: (o: Options, x: number, y: number) => [
+    gen.polygon(
+      Array.from({ length: 10 }, (_, k): [number, number] => {
+        const r = k % 2 ? 5 : 11, a = -Math.PI / 2 + (k * Math.PI) / 5;
+        return [x + r * Math.cos(a), y + r * Math.sin(a)];
+      }),
+      line(o),
+    ),
+  ],
+  doc: (o: Options, x: number, y: number) => {
+    const l = line(o);
+    return [gen.polygon([[x - 8, y - 11], [x + 4, y - 11], [x + 9, y - 6], [x + 9, y + 11], [x - 8, y + 11]], l), gen.line(x - 4, y - 2, x + 5, y - 2, l), gen.line(x - 4, y + 4, x + 5, y + 4, l)];
+  },
+  clock: (o: Options, x: number, y: number) => {
+    const l = line(o);
+    return [gen.circle(x, y, 22, l), gen.line(x, y, x, y - 7, l), gen.line(x, y, x + 6, y + 3, l)];
+  },
+  graph: (o: Options, x: number, y: number) => {
+    const l = line(o);
+    const pts: [number, number][] = [[x, y - 9], [x - 9, y + 7], [x + 9, y + 7]];
+    return [...pts.map(([px, py], i) => gen.line(px, py, pts[(i + 1) % 3][0], pts[(i + 1) % 3][1], l)), ...pts.map(([px, py]) => gen.circle(px, py, 6, l))];
+  },
+  gamepad: (o: Options, x: number, y: number) => {
+    const l = line(o);
+    return [gen.path(roundRect(x - 13, y - 7, 26, 14, 7), l), gen.line(x - 9, y, x - 3, y, l), gen.line(x - 6, y - 3, x - 6, y + 3, l), gen.circle(x + 5, y - 2, 3, l), gen.circle(x + 8, y + 2, 3, l)];
+  },
+  link: (o: Options, x: number, y: number) => {
+    const l = line(o);
+    return [gen.path(roundRect(x - 12, y - 5, 14, 10, 5), l), gen.path(roundRect(x - 2, y - 5, 14, 10, 5), l)];
+  },
 };
+
+type Glyph = (o: Options, x: number, y: number) => Drawable[];
+
+/** A rounded box with a glyph on the left and the label beside it. */
+const tiled = (name: string, group: Group, keywords: string, g: Glyph, w: number, extra: Partial<Spec> = {}): Spec => ({
+  name,
+  group,
+  keywords,
+  w,
+  h: 56,
+  labelX: w / 2 + 12,
+  labelY: 28,
+  draw: (o, bw, bh) => [box(o, bw, bh), ...g(o, 24, bh / 2)],
+  ...extra,
+});
 
 function cloud(o: Options, w: number, h: number) {
   const sx = w / 124, sy = h / 62;
@@ -1044,6 +1118,460 @@ export const SHAPES: Record<ComponentType, Spec> = {
       const t = 22;
       const arc = (r: number, side: 1 | -1) => gen.path(`M${c + side * r * 0.5} ${t - r * 0.866} A${r} ${r} 0 0 ${side > 0 ? 1 : 0} ${c + side * r * 0.5} ${t + r * 0.866}`, l);
       return [gen.polygon([[c, t], [c + 18, 66], [c - 18, 66]], o), gen.line(c - 9, 42, c + 9, 42, l), gen.line(c - 14, 54, c + 14, 54, l), gen.circle(c, t, 8, o), arc(14, 1), arc(22, 1), arc(14, -1), arc(22, -1)];
+    },
+  },
+
+  // Clients / users
+  'desktop-app': {
+    name: 'Desktop app',
+    group: 'client',
+    keywords: 'electron tauri native desktop windows macos linux app wpf qt winforms',
+    kits: ['system', 'network'],
+    w: 130,
+    h: 80,
+    labelY: 46,
+    draw: (o, w, h) => [gen.rectangle(4, 4, w - 8, h - 8, o), gen.line(4, 18, w - 4, 18, line(o)), ...[0, 1, 2].map((i) => gen.circle(14 + i * 9, 11, 4, line(o)))],
+  },
+  console: {
+    name: 'TV / console',
+    group: 'client',
+    keywords: 'smart tv game console playstation xbox nintendo switch set top box apple tv roku chromecast display digital signage projector screen',
+    kits: ['system', 'network'],
+    w: 130,
+    h: 86,
+    labelY: 78,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      return [gen.rectangle(c - 44, 4, 88, 52, o), gen.line(c - 12, 56, c - 16, 64, l), gen.line(c + 12, 56, c + 16, 64, l), gen.line(c - 24, 64, c + 24, 64, l)];
+    },
+  },
+  admin: tiled('Admin / back office', 'client', 'admin panel back office backoffice internal tool retool dashboard staff console cms ui', glyph.list, 190),
+
+  // Edge / security
+  ddos: {
+    name: 'DDoS protection',
+    group: 'edge',
+    keywords: 'ddos shield aws shield cloudflare magic transit scrubbing anti-ddos akamai prolexic volumetric',
+    kits: ['system', 'network'],
+    w: 100,
+    h: 90,
+    labelY: 80,
+    draw: (o, w) => {
+      const c = w / 2;
+      return [gen.path(`M${c} 2 L${w - 14} 12 L${w - 14} 32 Q${w - 14} 52 ${c} 64 Q14 52 14 32 L14 12 Z`, o), ...glyph.wave(o, c, 32)];
+    },
+  },
+  certificate: {
+    name: 'Certificates / PKI',
+    group: 'edge',
+    keywords: 'tls ssl certificate ca pki acm lets encrypt letsencrypt cert-manager mtls x509 signing',
+    kits: ['system', 'network'],
+    w: 100,
+    h: 90,
+    labelY: 80,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      return [
+        gen.rectangle(c - 28, 4, 56, 44, o),
+        gen.line(c - 20, 14, c + 20, 14, l),
+        gen.line(c - 20, 22, c + 6, 22, l),
+        gen.circle(c + 12, 46, 16, o),
+        gen.linearPath([[c + 6, 53], [c + 4, 66], [c + 12, 61], [c + 20, 66], [c + 18, 53]], l),
+      ];
+    },
+  },
+
+  // Network
+  'nat-gateway': {
+    name: 'NAT / internet gateway',
+    group: 'network',
+    keywords: 'nat gateway internet gateway igw egress cloud nat snat masquerade outbound',
+    kits: ['system', 'network'],
+    w: 120,
+    h: 86,
+    labelY: 78,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      return [gen.circle(c, 30, 56, o), gen.line(c - 14, 18, c - 14, 42, l), ...arrow(l, c - 14, c + 16, 30)];
+    },
+  },
+  'forward-proxy': {
+    name: 'Forward proxy',
+    group: 'network',
+    keywords: 'squid forward proxy egress proxy web filter zscaler secure web gateway swg content filter outbound proxy',
+    kits: ['system', 'network'],
+    w: 160,
+    h: 56,
+    labelY: 28,
+    draw: (o, w, h) => [gen.polygon([[3, 3], [w - 20, 3], [w - 3, h - 3], [20, h - 3]], o)],
+  },
+  'service-discovery': {
+    name: 'Service discovery',
+    group: 'network',
+    keywords: 'consul eureka zookeeper etcd service registry dns-sd discovery nacos',
+    w: 110,
+    h: 90,
+    labelY: 80,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      const around: [number, number][] = [[c, 8], [c - 26, 50], [c + 26, 50]];
+      return [...around.map(([x, y]) => gen.line(c, 34, x, y, l)), ...around.map(([x, y]) => gen.circle(x, y, 14, o)), gen.circle(c, 34, 20, o)];
+    },
+  },
+  webrtc: tiled('WebRTC / media relay', 'network', 'webrtc turn stun sfu mcu media server janus mediasoup livekit agora voice video call conferencing', glyph.wave, 190),
+
+  // Compute
+  bff: tiled('GraphQL / BFF', 'compute', 'graphql apollo hasura bff backend for frontend federation schema stitching resolver', glyph.graph, 170),
+  'game-server': tiled('Game server', 'compute', 'dedicated game server multiplayer authoritative tick netcode photon agones gamelift playfab matchmaking lobby relay', glyph.gamepad, 170),
+  gpu: {
+    name: 'GPU / accelerator',
+    group: 'compute',
+    keywords: 'gpu cuda nvidia tpu inference accelerator a100 h100 gpu node triton vllm',
+    w: 110,
+    h: 88,
+    labelY: 80,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      const pins = [0, 1, 2, 3].flatMap((i) => {
+        const x = c - 15 + i * 10, y = 17 + i * 10;
+        return [gen.line(x, 0, x, 6, l), gen.line(x, 58, x, 64, l), gen.line(c - 32, y, c - 26, y, l), gen.line(c + 26, y, c + 32, y, l)];
+      });
+      return [gen.rectangle(c - 26, 6, 52, 52, o), gen.rectangle(c - 12, 20, 24, 24, l), ...pins];
+    },
+  },
+  media: tiled('Media processing', 'compute', 'transcoding ffmpeg video audio image resize thumbnail encoder mediaconvert mux hls dash streaming vod', glyph.play, 180),
+  mainframe: {
+    name: 'Mainframe / legacy',
+    group: 'compute',
+    keywords: 'mainframe legacy cobol as400 ibm z erp on-prem monolith system of record',
+    w: 110,
+    h: 96,
+    labelY: 88,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      return [gen.rectangle(c - 30, 2, 60, 72, o), ...[0, 1, 2, 3, 4].map((i) => gen.line(c - 22, 12 + i * 10, c + 22, 12 + i * 10, l)), gen.circle(c + 18, 64, 5, l)];
+    },
+  },
+
+  // Data
+  olap: {
+    name: 'OLAP / columnar',
+    group: 'data',
+    keywords: 'clickhouse druid pinot olap columnar duckdb starrocks analytics database cube',
+    w: 150,
+    h: 76,
+    labelX: 88,
+    labelY: 46,
+    draw: (o, w, h) => [...cylinder(o, w, h), ...glyph.bars(o, 28, 44)],
+  },
+  'block-storage': {
+    name: 'Block storage',
+    group: 'data',
+    keywords: 'ebs disk volume block storage persistent volume pv pvc ssd persistent disk iscsi',
+    w: 120,
+    h: 78,
+    labelY: 70,
+    draw: (o, w) =>
+      [36, 22, 8].flatMap((y) => [gen.path(`M8 ${y} L8 ${y + 10} A${w / 2 - 8} 7 0 0 0 ${w - 8} ${y + 10} L${w - 8} ${y}`, o), gen.ellipse(w / 2, y, w - 16, 14, o)]),
+  },
+  'local-db': {
+    name: 'On-device storage',
+    group: 'data',
+    keywords: 'sqlite indexeddb localstorage local storage realm core data room on device embedded database offline keychain',
+    w: 110,
+    h: 90,
+    labelY: 82,
+    draw: (o, w) => {
+      const c = w / 2;
+      return [gen.path(roundRect(c - 24, 2, 48, 70, 8), line(o)), gen.path(`M${c - 14} 26 L${c - 14} 50 A14 5 0 0 0 ${c + 14} 50 L${c + 14} 26`, o), gen.ellipse(c, 26, 28, 10, o)];
+    },
+  },
+  backup: {
+    name: 'Backup / archive',
+    group: 'data',
+    keywords: 'backup snapshot archive glacier cold storage restore disaster recovery dr velero veeam borg restic',
+    kits: ['system', 'network'],
+    w: 110,
+    h: 78,
+    labelY: 70,
+    draw: (o, w) => {
+      const c = w / 2;
+      return [gen.rectangle(c - 28, 20, 56, 38, o), gen.rectangle(c - 32, 6, 64, 14, o), gen.path(roundRect(c - 9, 28, 18, 7, 3), line(o))];
+    },
+  },
+  ledger: {
+    name: 'Ledger / blockchain',
+    group: 'data',
+    keywords: 'blockchain ledger ethereum solana smart contract web3 immutable qldb chain crypto wallet',
+    w: 150,
+    h: 64,
+    labelY: 56,
+    draw: (o) => {
+      const l = line(o);
+      return [gen.line(40, 22, 60, 22, l), gen.line(90, 22, 110, 22, l), ...[10, 60, 110].map((x) => gen.rectangle(x, 7, 30, 30, o))];
+    },
+  },
+
+  // Messaging / events
+  webhook: tiled('Webhook', 'messaging', 'webhook callback http callback event delivery svix hookdeck outgoing webhooks', glyph.link, 150),
+  cdc: {
+    name: 'Change data capture',
+    group: 'messaging',
+    keywords: 'cdc debezium change data capture binlog wal outbox replication fivetran dms',
+    w: 160,
+    h: 72,
+    labelY: 64,
+    draw: (o, w) => {
+      const l = line(o);
+      return [
+        gen.path('M4 12 L4 40 A25 7 0 0 0 54 40 L54 12', o),
+        gen.ellipse(29, 12, 50, 14, o),
+        ...arrow(l, 62, 98, 26),
+        ...[16, 26, 36].map((y) => gen.line(108, y, w - 4, y, l)),
+      ];
+    },
+  },
+  mqtt: tiled('MQTT broker', 'messaging', 'mqtt broker mosquitto emqx hivemq aws iot core azure iot hub amqp coap telemetry', glyph.wifi, 160, {
+    kits: ['system', 'network'],
+    draw: (o, w, h) => [box(o, w, h), ...glyph.wifi(o, 26, 38)],
+  }),
+
+  // Observability / ops
+  iac: tiled('Infrastructure as code', 'ops', 'terraform pulumi cloudformation cdk ansible crossplane bicep opentofu iac provisioning', glyph.doc, 210),
+  git: tiled('Source control', 'ops', 'git github gitlab bitbucket repository repo source code version control monorepo pull request', glyph.branch, 170),
+  config: tiled('Config / settings', 'ops', 'config server parameter store app config consul kv spring cloud config remote config env settings', glyph.gear, 170),
+
+  // Analytics / AI
+  agent: tiled('AI agent', 'analytics', 'ai agent autonomous agent tool use function calling mcp langchain langgraph crewai assistant copilot planner', glyph.robot, 150),
+  bi: tiled('BI / dashboard', 'analytics', 'bi dashboard grafana metabase looker tableau power bi superset redash reporting kpi', glyph.bars, 170),
+  'product-analytics': tiled('Product analytics', 'analytics', 'segment amplitude mixpanel posthog google analytics ga4 heap events tracking telemetry snowplow rudderstack', glyph.trend, 190),
+  'feature-store': {
+    name: 'Feature store',
+    group: 'analytics',
+    keywords: 'feast tecton feature store ml features online offline hopsworks',
+    w: 150,
+    h: 76,
+    labelX: 86,
+    labelY: 46,
+    draw: (o, w, h) => [...cylinder(o, w, h), ...glyph.list(o, 28, 46)],
+  },
+  recommender: tiled('Recommendation engine', 'analytics', 'recommendation recommender personalization ranking collaborative filtering feed ranking two tower', glyph.star, 220),
+  notebook: {
+    name: 'Notebook',
+    group: 'analytics',
+    keywords: 'jupyter notebook databricks colab sagemaker studio hex data science experiment',
+    w: 100,
+    h: 82,
+    labelY: 74,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      return [gen.rectangle(c - 22, 4, 48, 58, o), ...[0, 1, 2, 3].map((i) => gen.circle(c - 22, 14 + i * 13, 6, l)), ...[18, 28, 38].map((y, i) => gen.line(c - 10, y, c + (i === 2 ? 6 : 16), y, l))];
+    },
+  },
+  training: tiled('Model training', 'analytics', 'training pipeline fine tuning fine-tune gpu cluster sagemaker vertex ai kubeflow mlflow mlops experiment tracking', glyph.cycle, 180),
+
+  // Third party
+  sms: tiled('SMS / voice', 'external', 'twilio sms voice otp call vonage messagebird whatsapp sinch phone verification', glyph.phone, 160, { dashed: true }),
+  maps: tiled('Maps / geo', 'external', 'google maps mapbox geocoding location gps here osm openstreetmap routing geolocation places', glyph.pin, 160, { dashed: true }),
+  crm: tiled('CRM / ERP', 'external', 'salesforce hubspot sap erp crm zendesk netsuite dynamics odoo customer support helpdesk', glyph.list, 160, { dashed: true }),
+  'cloud-provider': {
+    name: 'Cloud provider',
+    group: 'external',
+    keywords: 'aws amazon web services azure gcp google cloud oracle cloud ibm cloud digitalocean hetzner ovh cloud account tenant',
+    kits: ['system', 'network'],
+    w: 170,
+    h: 90,
+    labelY: 60,
+    dashed: true,
+    draw: (o, w, h) => [cloud(o, w, h)],
+  },
+
+  // Network: routing / switching
+  'sd-wan': {
+    name: 'SD-WAN edge',
+    group: 'net-core',
+    keywords: 'sd-wan sdwan velocloud meraki mx fortinet silver peak viptela branch wan edge',
+    w: 120,
+    h: 70,
+    labelY: 62,
+    draw: (o, w) => [...cylinder(o, w, 46), gen.path(waves(w / 2 - 24, 26, 4, 12), line(o))],
+  },
+  'media-converter': {
+    name: 'Media converter',
+    group: 'net-core',
+    keywords: 'media converter sfp sfp+ transceiver fiber copper gbic optics qsfp',
+    w: 110,
+    h: 60,
+    labelY: 52,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      return [gen.rectangle(c - 34, 8, 68, 26, o), gen.rectangle(c - 26, 16, 12, 10, l), gen.rectangle(c + 14, 16, 12, 10, l), gen.line(c - 10, 21, c + 10, 21, l)];
+    },
+  },
+  kvm: {
+    name: 'KVM / console server',
+    group: 'net-core',
+    keywords: 'kvm console server serial out of band oob ipmi idrac ilo bmc lantronix opengear',
+    w: 120,
+    h: 70,
+    labelY: 62,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      return [gen.rectangle(c - 30, 4, 60, 26, o), gen.rectangle(c - 40, 34, 80, 16, o), ...Array.from({ length: 6 }, (_, i) => gen.line(c - 32 + i * 12, 42, c - 26 + i * 12, 42, l))];
+    },
+  },
+  pbx: tiled('PBX / VoIP gateway', 'net-core', 'pbx voip gateway asterisk 3cx sip trunk freepbx call manager cucm session border controller sbc', glyph.phone, 190),
+  ntp: tiled('NTP / time server', 'net-core', 'ntp ptp time server gps clock stratum chrony', glyph.clock, 180),
+  ipam: tiled('DHCP / IPAM', 'net-core', 'dhcp ipam infoblox address management ip allocation dhcp server netbox phpipam', glyph.list, 160),
+
+  // Network: end devices
+  server: {
+    name: 'Rack server',
+    group: 'net-device',
+    keywords: 'rack server 1u 2u dell poweredge hp proliant supermicro bare metal hypervisor host esxi proxmox',
+    w: 150,
+    h: 58,
+    labelY: 50,
+    draw: (o, w) => {
+      const l = line(o);
+      return [gen.rectangle(4, 6, w - 8, 30, o), ...Array.from({ length: 5 }, (_, i) => gen.rectangle(12 + i * 16, 12, 12, 18, l)), gen.circle(w - 20, 21, 6, l)];
+    },
+  },
+  tablet: {
+    name: 'Tablet',
+    group: 'net-device',
+    keywords: 'ipad tablet android tablet surface kiosk handheld scanner',
+    w: 110,
+    h: 76,
+    labelY: 68,
+    draw: (o, w) => [gen.path(roundRect(w / 2 - 34, 4, 68, 50, 6), o), gen.circle(w / 2 + 28, 29, 3, line(o))],
+  },
+  pos: {
+    name: 'POS terminal',
+    group: 'net-device',
+    keywords: 'pos point of sale card reader payment terminal cash register checkout kiosk verifone ingenico',
+    w: 100,
+    h: 76,
+    labelY: 68,
+    draw: (o, w) => {
+      const c = w / 2;
+      return [gen.polygon([[c - 20, 4], [c + 20, 4], [c + 16, 30], [c - 16, 30]], o), gen.rectangle(c - 30, 32, 60, 24, o), gen.line(c - 20, 42, c + 20, 42, line(o))];
+    },
+  },
+  'badge-reader': {
+    name: 'Access control',
+    group: 'net-device',
+    keywords: 'badge reader card reader rfid nfc door access control turnstile biometric fingerprint intercom',
+    w: 100,
+    h: 80,
+    labelY: 72,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      return [gen.path(roundRect(c - 16, 2, 32, 58, 6), o), gen.circle(c, 22, 14, l), gen.line(c - 8, 42, c + 8, 42, l), gen.circle(c, 51, 3, l)];
+    },
+  },
+  nvr: {
+    name: 'NVR / recorder',
+    group: 'net-device',
+    keywords: 'nvr dvr video recorder surveillance storage cctv recorder hikvision',
+    w: 130,
+    h: 58,
+    labelY: 50,
+    draw: (o, w) => [gen.rectangle(4, 6, w - 8, 30, o), ...glyph.play(o, 26, 21), ...[0, 1, 2].map((i) => gen.circle(w - 40 + i * 10, 21, 4, line(o)))],
+  },
+
+  // Network: racks / storage / power
+  pdu: {
+    name: 'PDU',
+    group: 'net-infra',
+    keywords: 'pdu power distribution unit power strip rack power metered switched',
+    w: 150,
+    h: 46,
+    labelY: 38,
+    draw: (o, w) => [gen.rectangle(4, 6, w - 8, 18, o), ...Array.from({ length: 6 }, (_, i) => gen.rectangle(16 + i * 20, 11, 8, 8, line(o)))],
+  },
+  generator: {
+    name: 'Generator',
+    group: 'net-infra',
+    keywords: 'generator diesel backup power genset ats automatic transfer switch fuel',
+    w: 120,
+    h: 76,
+    labelY: 68,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      return [
+        gen.rectangle(c - 40, 4, 80, 46, o),
+        gen.circle(c - 16, 27, 28, l),
+        gen.linearPath([[c + 18, 14], [c + 10, 28], [c + 20, 28], [c + 12, 42]], { ...l, stroke: NOTE_COLOR, strokeWidth: 2 }),
+        gen.line(c - 34, 50, c - 34, 56, l),
+        gen.line(c + 34, 50, c + 34, 56, l),
+      ];
+    },
+  },
+  cooling: {
+    name: 'Cooling / HVAC',
+    group: 'net-infra',
+    keywords: 'crac crah hvac cooling air conditioning chiller in-row cooling airflow temperature',
+    w: 100,
+    h: 82,
+    labelY: 74,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      const blades = [0, 1, 2].map((i) => {
+        const a = (i * 2 * Math.PI) / 3;
+        return gen.path(`M${c} 32 Q${c + 16 * Math.cos(a + 0.6)} ${32 + 16 * Math.sin(a + 0.6)} ${c + 17 * Math.cos(a)} ${32 + 17 * Math.sin(a)}`, l);
+      });
+      return [gen.rectangle(c - 30, 2, 60, 60, o), gen.circle(c, 32, 44, l), ...blades];
+    },
+  },
+  tape: {
+    name: 'Tape library',
+    group: 'net-infra',
+    keywords: 'tape library lto backup archive tape drive autoloader',
+    w: 110,
+    h: 66,
+    labelY: 58,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      return [gen.rectangle(c - 36, 4, 72, 42, o), ...[-16, 16].flatMap((d) => [gen.circle(c + d, 24, 22, l), gen.circle(c + d, 24, 6, l)]), gen.line(c - 16, 35, c + 16, 35, l)];
+    },
+  },
+
+  // Network: WAN / internet
+  satellite: {
+    name: 'Satellite link',
+    group: 'net-wan',
+    keywords: 'satellite starlink vsat oneweb geo leo uplink dish ground station',
+    w: 100,
+    h: 86,
+    labelY: 78,
+    draw: (o, w) => {
+      const c = w / 2, l = line(o);
+      return [gen.path(`M${c - 26} 12 A30 30 0 0 0 ${c + 20} 54 Z`, o), gen.line(c - 4, 33, c + 12, 20, l), gen.circle(c + 14, 18, 6, l), gen.line(c - 8, 44, c - 12, 64, l), gen.line(c - 24, 64, c, 64, l)];
+    },
+  },
+  mpls: {
+    name: 'MPLS / leased line',
+    group: 'net-wan',
+    keywords: 'mpls leased line metro ethernet private wan dark fiber e-line carrier circuit vpls',
+    w: 170,
+    h: 58,
+    labelY: 50,
+    draw: (o, w) => {
+      const l = line(o);
+      return [gen.path(roundRect(4, 10, w - 8, 24, 12), o), gen.circle(18, 22, 10, l), gen.circle(w - 18, 22, 10, l), gen.line(30, 22, w - 30, 22, { ...l, strokeWidth: 2 })];
+    },
+  },
+  microwave: {
+    name: 'Wireless bridge',
+    group: 'net-wan',
+    keywords: 'microwave point to point p2p ptp ptmp radio link wireless bridge airfiber nanobeam licensed',
+    w: 150,
+    h: 72,
+    labelY: 64,
+    draw: (o, w) => {
+      const l = line(o);
+      return [...[22, w - 22].flatMap((x) => [gen.line(x, 46, x, 56, l), gen.ellipse(x, 26, 14, 40, o)]), gen.path(waves(36, 26, 6, (w - 72) / 6), l)];
     },
   },
 };
