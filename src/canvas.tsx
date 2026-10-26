@@ -135,39 +135,49 @@ function exit(a: ReturnType<typeof box>, b: ReturnType<typeof box>) {
   return { x: a.x + dx * s, y: a.y + dy * s };
 }
 
-/** Straight "floating" edge between node borders, drawn with rough.js. */
+/**
+ * Excalidraw-style "floating" edge: a gentle curve between node borders, stopping just short of them.
+ * It always bends to the same side of its direction, so A→B and B→A arc apart instead of overlapping.
+ */
 export function RoughEdge({ id, source, target, data, selected }: EdgeProps<FlowEdge>) {
   const sketch = useContext(SketchContext);
   const s = useInternalNode(source), t = useInternalNode(target);
   const geo = s && t ? (() => {
     const a = box(s), b = box(t);
-    const p1 = exit(a, b), p2 = exit(b, a);
-    return { p1: { x: p1.x, y: p1.y }, p2: { x: p2.x, y: p2.y } };
+    const e1 = exit(a, b), e2 = exit(b, a);
+    const len = Math.hypot(e2.x - e1.x, e2.y - e1.y) || 1;
+    const ux = (e2.x - e1.x) / len, uy = (e2.y - e1.y) / len;
+    const gap = Math.min(6, len / 4);
+    const p1 = { x: e1.x + ux * gap, y: e1.y + uy * gap }, p2 = { x: e2.x - ux * gap, y: e2.y - uy * gap };
+    const bend = Math.min(len * 0.12, 48);
+    // m is where the curve passes halfway; c is the quadratic control point that makes it do so.
+    const m = { x: (p1.x + p2.x) / 2 - uy * bend, y: (p1.y + p2.y) / 2 + ux * bend };
+    const c = { x: 2 * m.x - (p1.x + p2.x) / 2, y: 2 * m.y - (p1.y + p2.y) / 2 };
+    return { p1, p2, m, c, d: `M${p1.x},${p1.y} Q${c.x},${c.y} ${p2.x},${p2.y}` };
   })() : null;
   const link = data?.kind === 'link';
-  const key = geo ? `${geo.p1.x},${geo.p1.y},${geo.p2.x},${geo.p2.y}` : '';
   const paths = useMemo(() => {
     if (!geo) return [];
-    const { p1, p2 } = geo;
-    const o = options(sketch, undefined, hash(id), { strokeWidth: link ? 1.1 : selected ? 2.2 : 1.4, roughness: sketch ? 0.9 : 0 });
-    const parts = [gen.line(p1.x, p1.y, p2.x, p2.y, o)];
+    const { p2, c, d } = geo;
+    const o = options(sketch, undefined, hash(id), { strokeWidth: link ? 1.1 : selected ? 2.2 : 1.4, roughness: sketch ? 1 : 0 });
+    const parts = [gen.path(d, o)];
     if (!link) {
-      const a = Math.atan2(p2.y - p1.y, p2.x - p1.x), L = 11;
-      for (const d of [0.42, -0.42]) parts.push(gen.line(p2.x, p2.y, p2.x - L * Math.cos(a + d), p2.y - L * Math.sin(a + d), o));
+      const a = Math.atan2(p2.y - c.y, p2.x - c.x), L = 12;
+      for (const da of [0.45, -0.45]) parts.push(gen.line(p2.x, p2.y, p2.x - L * Math.cos(a + da), p2.y - L * Math.sin(a + da), o));
     }
     return toPaths(parts);
-  }, [key, sketch, id, link, selected]);
+  }, [geo?.d, sketch, id, link, selected]);
   if (!geo) return null;
-  const { p1, p2 } = geo;
+  const { m, d } = geo;
   return (
     <>
-      <BaseEdge id={id} path={`M${p1.x},${p1.y} L${p2.x},${p2.y}`} style={{ stroke: 'transparent' }} interactionWidth={18} />
+      <BaseEdge id={id} path={d} style={{ stroke: 'transparent' }} interactionWidth={18} />
       <g className={`rough-edge${data?.faded ? ' faded' : ''}${selected ? ' selected' : ''}`} style={{ color: link ? NOTE_COLOR : undefined }}>
         <Paths paths={paths} dashed={link || data?.async} />
       </g>
       {data?.label && (
         <EdgeLabelRenderer>
-          <div className={`edge-label${data.faded ? ' faded' : ''}`} style={{ transform: `translate(-50%, -50%) translate(${(p1.x + p2.x) / 2}px, ${(p1.y + p2.y) / 2}px)` }}>
+          <div className={`edge-label${data.faded ? ' faded' : ''}`} style={{ transform: `translate(-50%, -50%) translate(${m.x}px, ${m.y}px)` }}>
             {data.label}
           </div>
         </EdgeLabelRenderer>
