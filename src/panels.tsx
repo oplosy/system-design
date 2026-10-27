@@ -341,13 +341,14 @@ export function Inspector({
   const decision = design.decisions.find((x) => x.id === selected);
   const boundary = design.boundaries.find((b) => b.id === selected);
   const item = component ?? connection ?? note ?? decision ?? boundary;
-  const labelOf = (id: string) => [...design.components, ...design.boundaries].find((c) => c.id === id)?.label ?? id;
+  const labelOf = (id: string) => [...design.components, ...design.boundaries].find((c) => c.id === id)?.label;
+  const fieldText = (field: string, v: string | undefined) => (v === undefined ? '—' : field === 'boundary' || field === 'parent' ? (labelOf(v) ?? v) : v);
   const placeIn = (to: string | undefined) => change((d) => selected && m.placeIn(d, selected, to));
   const stepNo = (id: string) => design.steps.findIndex((s) => s.id === id) + 1;
   const stepTitle = (id: string) => design.steps.find((s) => s.id === id)?.title;
   const ref = (id: string) => (
     <button key={id} className="ref" onClick={() => onSelect(id)}>
-      {labelOf(id)}
+      {labelOf(id) ?? id}
     </button>
   );
   const edit = <T extends { id: string }>(list: (d: Design) => T[], patch: Partial<NoInfer<T>>) =>
@@ -396,6 +397,40 @@ export function Inspector({
                 <span className="list-main">{c.label}</span>
                 {c.tech && <span className="list-meta">{c.tech}</span>}
               </button>
+            ))}
+          </section>
+        )}
+
+        {!!step.changed?.length && (
+          <section className="insp-sec">
+            <h3 className="rule-head">
+              Changed
+              <span className="rule-count">{pad(step.changed.length)}</span>
+            </h3>
+            {step.changed.map((c) => (
+              <button key={`${c.id}:${c.field}`} className="list-row change-row" onClick={() => onSelect(c.id)} disabled={!labelOf(c.id)}>
+                <span className="list-main">
+                  {labelOf(c.id) ?? c.id} <span className="quiet">{c.field}</span>
+                </span>
+                <span className="list-meta">
+                  <s>{fieldText(c.field, c.from)}</s> → {fieldText(c.field, c.to)}
+                </span>
+              </button>
+            ))}
+          </section>
+        )}
+
+        {!!step.removed?.length && (
+          <section className="insp-sec">
+            <h3 className="rule-head">
+              Removed
+              <span className="rule-count">{pad(step.removed.length)}</span>
+            </h3>
+            {step.removed.map((r) => (
+              <div key={r.id} className="list-row removed-row">
+                {r.type && <ShapePreview type={r.type} width={30} height={20} />}
+                <s className="list-main">{r.label}</s>
+              </div>
             ))}
           </section>
         )}
@@ -745,7 +780,7 @@ export function ReviewBar({
         </div>
       </div>
       <div className="review-actions">
-        <button className="chip" aria-pressed={diff} onClick={onDiff} title="Outline what this step added and dim the rest">
+        <button className="chip" aria-pressed={diff} onClick={onDiff} title="Outline what this step added or changed, show what it removed, and dim the rest">
           Diff
         </button>
         <button className="text-btn" aria-expanded={asking} onClick={() => setAsking((a) => !a)} title="Send this step back to the agent with a comment">

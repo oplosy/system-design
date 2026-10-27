@@ -181,6 +181,10 @@ export const StepSchema = z.object({
   seen: z.boolean(),
   /** The reviewer sent this step back; cleared when the agent resolves the feedback. */
   changesRequested: z.boolean().optional(),
+  /** What an agent removed in this step, kept so the diff can show it; components keep their shape and place. */
+  removed: z.array(z.object({ id: Id, label: z.string(), type: z.enum(COMPONENT_TYPES).optional(), position: Position.optional() })).optional(),
+  /** Fields an agent changed in this step on items from earlier steps, with the value before the step. */
+  changed: z.array(z.object({ id: Id, field: z.string(), from: z.string().optional(), to: z.string().optional() })).optional(),
 });
 
 export const ComponentSchema = z.object({

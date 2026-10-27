@@ -331,10 +331,13 @@ function Shell() {
       hops.set(c.id, [...(hops.get(c.id) ?? []), i + 1]);
       if (i === flow!.at) hopOn = c.id;
     });
+    // The diff also outlines what this step changed and draws what it removed as ghosts.
+    const changed = new Set(current.changed?.map((c) => c.id));
     const flags = (step: string, id: string) => ({
       unseen: reviewing && step === current.id,
-      faded: playing ? !onPath.has(id) && !hops.has(id) : focus && step !== current.id,
+      faded: playing ? !onPath.has(id) && !hops.has(id) : focus && step !== current.id && !changed.has(id),
       added: diff && step === current.id,
+      changed: diff && changed.has(id),
     });
     const issues = new Map<string, string[]>();
     if (!presenting) {
@@ -368,6 +371,11 @@ function Shell() {
             data: { kind: b.kind, label: b.label, detail: b.detail, w: box.w, h: box.h, ...flags(b.step, b.id) },
           };
         }),
+      ...(diff ? current.removed ?? [] : []).flatMap((r): Node[] =>
+        r.type && r.position
+          ? [{ id: `ghost-${r.id}`, type: 'component', position: r.position, selectable: false, draggable: false, connectable: false, deletable: false, data: { type: r.type, label: r.label, removed: true, unseen: false, faded: false } }]
+          : [],
+      ),
       ...design.components.filter((c) => visibleStep(c.step)).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech }, c.step)),
       ...design.notes.filter((n) => visibleStep(n.step)).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
       ...design.decisions.filter((x) => visibleStep(x.step)).map((x) => node(x.id, 'decision', x.position, { title: x.title, why: x.why }, x.step)),

@@ -139,13 +139,11 @@ server.registerTool(
   'place_in',
   {
     description: 'Move a component or boundary into a boundary, or out of all boundaries with boundary: null',
-    inputSchema: { design, id: z.string(), boundary: z.string().nullable().describe('Boundary id, or null for none') },
+    inputSchema: { design, id: z.string(), boundary: z.string().nullable().describe('Boundary id, or null for none'), step },
   },
-  async ({ design: designId, id, boundary }) =>
+  async ({ design: designId, id, boundary, step }) =>
     edit(designId, (d) => {
-      m.placeIn(d, id, boundary ?? undefined);
-      const item = d.components.find((x) => x.id === id) ?? d.boundaries.find((x) => x.id === id)!;
-      d.steps.find((s) => s.id === item.step)!.seen = false;
+      m.updateTracked(d, id, { [d.boundaries.some((b) => b.id === id) ? 'parent' : 'boundary']: boundary ?? undefined }, step);
       return id;
     }),
 );
@@ -169,21 +167,24 @@ server.registerTool('lint', { description: 'Check a design for likely smells: is
 server.registerTool(
   'update_component',
   {
-    description: 'Change a component; its step is reopened for review',
-    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional() },
+    description: 'Change a component. The change is recorded on the step (latest by default) for review, with its old values',
+    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), step },
   },
-  async ({ design: designId, id, ...fields }) =>
+  async ({ design: designId, id, step, ...fields }) =>
     edit(designId, (d) => {
-      const c = d.components.find((x) => x.id === id);
-      if (!c) throw new Error(`unknown component "${id}"`);
-      Object.assign(c, Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)));
-      d.steps.find((s) => s.id === c.step)!.seen = false;
+      if (!d.components.some((x) => x.id === id)) throw new Error(`unknown component "${id}"`);
+      m.updateTracked(d, id, Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)), step);
       return id;
     }),
 );
 
-server.registerTool('remove_item', { description: 'Remove a component, connection, note, decision, flow or boundary (its contents move to its parent)', inputSchema: { design, id: z.string() } }, async ({ design: designId, id }) =>
-  edit(designId, (d) => m.removeItem(d, id)),
+server.registerTool(
+  'remove_item',
+  {
+    description: 'Remove a component, connection, note, decision, flow or boundary (its contents move to its parent). The removal is recorded on the step (latest by default) for review',
+    inputSchema: { design, id: z.string(), step },
+  },
+  async ({ design: designId, id, step }) => edit(designId, (d) => m.removeTracked(d, id, step)),
 );
 
 server.registerTool(

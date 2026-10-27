@@ -194,6 +194,39 @@ export function removeItem(d: Design, id: string) {
 
 const items = (d: Design) => [...d.components, ...d.connections, ...d.notes, ...d.decisions, ...d.boundaries, ...d.flows];
 
+// Agent edits to earlier items are recorded on the step they land in (latest by default), which reopens for review.
+// Items that step added itself need no record: the diff already shows them as new.
+
+/** Removes an item as an agent edit, remembering it on the step so its diff can show what went. */
+export function removeTracked(d: Design, id: string, step?: string) {
+  const x = items(d).find((i) => i.id === id);
+  if (!x) throw new Error(`unknown item "${id}"`);
+  const s = d.steps.find((t) => t.id === useStep(d, step, true))!;
+  const label = 'from' in x ? `${labelOf(d, x.from)} → ${labelOf(d, x.to)}` : 'label' in x ? x.label : 'title' in x ? x.title : x.text;
+  removeItem(d, id);
+  if (x.step === s.id) return;
+  (s.removed ??= []).push({ id, label, type: 'type' in x ? x.type : undefined, position: 'position' in x ? x.position : undefined });
+}
+
+/** Changes fields of a component or boundary as an agent edit; each field keeps its value from before the step. */
+export function updateTracked(d: Design, id: string, fields: Record<string, string | undefined>, step?: string) {
+  const x = [...d.components, ...d.boundaries].find((i) => i.id === id) as Record<string, unknown> | undefined;
+  if (!x) throw new Error(`unknown component or boundary "${id}"`);
+  const s = d.steps.find((t) => t.id === useStep(d, step, true))!;
+  for (const [field, to] of Object.entries(fields)) {
+    const from = x[field] as string | undefined;
+    if (from === to) continue;
+    if (field === 'boundary' || field === 'parent') placeIn(d, id, to);
+    else x[field] = to;
+    if (x.step === s.id) continue;
+    const seen = s.changed?.find((c) => c.id === id && c.field === field);
+    if (seen) seen.to = to;
+    else (s.changed ??= []).push({ id, field, from, to });
+  }
+  // A field changed back to where it started is no change.
+  s.changed = s.changed?.filter((c) => c.from !== c.to);
+}
+
 /** Removes everything a step added. The step goes too, unless it is the only one. */
 export function revertStep(d: Design, id: string) {
   if (!d.steps.some((s) => s.id === id)) throw new Error(`unknown step "${id}"`);

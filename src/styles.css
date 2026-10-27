@@ -1716,6 +1716,38 @@ select.ed option {
   outline: 1.5px solid var(--signal);
 }
 
+/* Changed in this step: amber; removed: a struck-out ghost where it stood. */
+.sd-node.changed {
+  outline: 1.5px solid var(--decision);
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+.sd-boundary.changed .boundary-tab {
+  outline: 1.5px solid var(--decision);
+}
+
+.sd-node.removed {
+  opacity: 0.45;
+  outline: 1.5px dashed var(--danger);
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+.sd-node.removed .node-label {
+  text-decoration: line-through;
+}
+
+.removed-row {
+  cursor: default;
+  color: var(--muted);
+}
+
+.change-row .list-meta s,
+.removed-row s {
+  color: var(--danger);
+}
+
 .comment-badge {
   position: absolute;
   top: -9px;

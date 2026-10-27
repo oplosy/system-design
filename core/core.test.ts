@@ -161,6 +161,38 @@ test('flows follow connections and skip removed stops', async () => {
   assert.equal(x.flows.length, 0);
 });
 
+test('agent removals and changes are recorded on the step for its diff', async () => {
+  const x = await store.createDesign({ id: 'tracked', title: 'Tracked' });
+  const api = m.addComponent(x, { type: 'service', label: 'API', position: { x: 10, y: 20 } });
+  const cache = m.addComponent(x, { type: 'cache', label: 'Cache', tech: 'Redis' });
+  const vpc = m.addBoundary(x, { kind: 'vpc', label: 'VPC' });
+  m.connect(x, { from: api, to: cache });
+  x.steps[0].seen = true;
+  const step = m.addStep(x, { title: 'Swap cache', seen: true });
+
+  m.updateTracked(x, cache, { tech: 'Memcached' });
+  m.updateTracked(x, cache, { tech: 'Valkey', label: 'Cache' });
+  m.updateTracked(x, cache, { boundary: vpc });
+  m.removeTracked(x, 'api-to-cache');
+  m.removeTracked(x, api);
+  const fresh = m.addComponent(x, { type: 'worker', label: 'Worker' });
+  m.updateTracked(x, fresh, { tech: 'Go' });
+  m.removeTracked(x, fresh);
+
+  const s = x.steps.find((t) => t.id === step)!;
+  assert.equal(s.seen, false, 'the step reopens for review');
+  assert.deepEqual(s.changed, [
+    { id: cache, field: 'tech', from: 'Redis', to: 'Valkey' },
+    { id: cache, field: 'boundary', from: undefined, to: vpc },
+  ]);
+  assert.deepEqual(s.removed, [
+    { id: 'api-to-cache', label: 'API → Cache', type: undefined, position: undefined },
+    { id: api, label: 'API', type: 'service', position: { x: 10, y: 20 } },
+  ]);
+  assert.equal(x.components.find((c) => c.id === cache)!.boundary, vpc);
+  await store.writeDesign(x);
+});
+
 test('lint flags likely smells', async () => {
   const { lint } = await import('./lint.ts');
   const x = await store.createDesign({ id: 'lint', title: 'Lint' });

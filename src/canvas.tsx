@@ -31,8 +31,8 @@ function Trash() {
   );
 }
 
-/** added: drawn as new in the step diff; comments: open review comments on the item; issues: lint warnings. */
-type Common = { unseen: boolean; faded: boolean; added?: boolean; comments?: number; issues?: string[] };
+/** added / changed / removed: how the step diff draws it; comments: open review comments on the item; issues: lint warnings. */
+type Common = { unseen: boolean; faded: boolean; added?: boolean; changed?: boolean; removed?: boolean; comments?: number; issues?: string[] };
 export type ComponentNode = Node<Common & { type: ComponentType; label: string; tech?: string }, 'component'>;
 export type NoteNode = Node<Common & { text: string }, 'note'>;
 export type DecisionNode = Node<Common & { title: string; why: string }, 'decision'>;
@@ -53,7 +53,7 @@ function Paths({ paths, dashed }: { paths: PathInfo[]; dashed?: boolean }) {
 
 function Frame({ w, h, data, children }: { w: number; h: number; data: Common; children: React.ReactNode }) {
   return (
-    <div className={`sd-node${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}`} style={{ width: w, height: h }}>
+    <div className={`sd-node${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}${data.changed ? ' changed' : ''}${data.removed ? ' removed' : ''}`} style={{ width: w, height: h }}>
       {children}
       {data.unseen && <span className="unseen-dot" title="Not reviewed yet" />}
       {!!data.comments && (
@@ -140,7 +140,7 @@ export const BoundaryNodeView = memo(function BoundaryNodeView({ id, data }: Nod
   // Narrow boxes drop the kind word (the line style still shows it) so the label stays readable.
   const roomy = w > 7.5 * (spec.name.length + data.label.length + (data.detail?.length ?? 0)) + 70;
   return (
-    <div className={`sd-boundary${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}`} style={{ width: w, height: h, color: spec.color }}>
+    <div className={`sd-boundary${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}${data.changed ? ' changed' : ''}`} style={{ width: w, height: h, color: spec.color }}>
       <svg width={w} height={h} overflow="visible">
         <rect x={1} y={1} width={w - 2} height={h - 2} rx={sketch ? 0 : 6} style={{ fill: spec.color, fillOpacity: 0.05, stroke: 'none' }} />
         {paths.map((p, i) => (
