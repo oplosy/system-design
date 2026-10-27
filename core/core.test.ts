@@ -153,6 +153,24 @@ test('flows follow connections and skip removed stops', async () => {
   assert.throws(() => m.addFlow(x, { title: 'Skip', path: [user, db] }), /no connection/);
   const login = m.addFlow(x, { title: 'Login', path: [user, api, db, api, user] });
   await store.writeDesign(x);
+  const { toMermaidSequence } = await import('./export.ts');
+  assert.equal(
+    toMermaidSequence(x, x.flows[0]),
+    [
+      'sequenceDiagram',
+      '  title Login',
+      '  autonumber',
+      '  participant user as User',
+      '  participant api as API',
+      '  participant db as DB',
+      '  user->>api: call',
+      '  api->>db: call',
+      '  db-->>api: reply',
+      '  api-->>user: reply',
+      '',
+    ].join('\n'),
+    'hops against the line are replies',
+  );
 
   const y = await store.readDesign('flows');
   m.removeItem(y, db);

@@ -1,6 +1,6 @@
-import type { ComponentType, Design } from './schema.ts';
+import type { ComponentType, Design, Flow } from './schema.ts';
 
-// Text exports: a Mermaid flowchart of the design and a Markdown record of its decisions.
+// Text exports: a Mermaid flowchart of the design, Mermaid sequence diagrams of its flows and a Markdown record of its decisions.
 
 const RESERVED = new Set(['end', 'graph', 'subgraph', 'style', 'class', 'click', 'flowchart', 'direction']);
 const mid = (id: string) => (RESERVED.has(id) ? `${id}_` : id.replace(/-/g, '_'));
@@ -36,6 +36,31 @@ export function toMermaid(d: Design) {
   for (const c of d.connections) {
     const arrow = c.async || c.kind === 'implementation' || c.kind === 'include' || c.kind === 'extend' ? '-.->' : '-->';
     out.push(`  ${mid(c.from)} ${arrow}${c.label ? `|${text(c.label)}|` : ''} ${mid(c.to)}`);
+  }
+  return out.join('\n') + '\n';
+}
+
+/**
+ * A flow as a sequence diagram: participants in order of first visit, one message per hop.
+ * A hop against its connection's direction is a reply; a hop along an async connection is async.
+ */
+export function flowSequence(d: Design, flow: Flow) {
+  const participants = [...new Set(flow.path)].flatMap((id) => d.components.filter((c) => c.id === id));
+  const messages = flow.path.slice(1).map((to, i) => {
+    const from = flow.path[i];
+    const c = d.connections.find((x) => (x.from === from && x.to === to) || (x.from === to && x.to === from));
+    return { from, to, label: c?.label, reply: !!c && c.from === to, async: !!c?.async, missing: !c };
+  });
+  return { participants, messages };
+}
+
+export function toMermaidSequence(d: Design, flow: Flow) {
+  const { participants, messages } = flowSequence(d, flow);
+  const out = ['sequenceDiagram', `  title ${flow.title.replace(/\n/g, ' ')}`, '  autonumber'];
+  for (const p of participants) out.push(`  participant ${mid(p.id)} as ${p.label.replace(/[\n;:]/g, ' ')}`);
+  for (const x of messages) {
+    const arrow = x.reply ? '-->>' : x.async ? '-)' : '->>';
+    out.push(`  ${mid(x.from)}${arrow}${mid(x.to)}: ${(x.label ?? (x.reply ? 'reply' : 'call')).replace(/[\n;]/g, ' ')}`);
   }
   return out.join('\n') + '\n';
 }

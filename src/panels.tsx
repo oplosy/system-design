@@ -268,6 +268,7 @@ function Flows({
   onFlow,
   recording,
   onRecording,
+  onSequence,
   change,
 }: {
   design: Design;
@@ -276,6 +277,7 @@ function Flows({
   onFlow: (f: FlowAt | null) => void;
   recording: string[] | null;
   onRecording: (r: string[] | null) => void;
+  onSequence: (id: string) => void;
   change: Change;
 }) {
   const [title, setTitle] = useState('');
@@ -350,6 +352,9 @@ function Flows({
                 <button className="btn" disabled={at === hops - 1} onClick={() => onFlow({ id: f.id, at: at + 1 })} aria-label="Next hop">
                   →
                 </button>
+                <button className="text-btn" onClick={() => onSequence(f.id)} title="Show as a sequence diagram">
+                  Sequence
+                </button>
                 <button
                   className="text-btn danger"
                   onClick={() => {
@@ -376,6 +381,7 @@ export function Inspector({
   onFlow,
   recording,
   onRecording,
+  onSequence,
   change,
   onSelect,
   onDelete,
@@ -387,6 +393,7 @@ export function Inspector({
   onFlow: (f: FlowAt | null) => void;
   recording: string[] | null;
   onRecording: (r: string[] | null) => void;
+  onSequence: (id: string) => void;
   change: Change;
   onSelect: (id: string | null) => void;
   onDelete: (id: string) => void;
@@ -533,7 +540,7 @@ export function Inspector({
           </section>
         )}
 
-        <Flows design={design} stepId={stepId} flow={flow} onFlow={onFlow} recording={recording} onRecording={onRecording} change={change} />
+        <Flows design={design} stepId={stepId} flow={flow} onFlow={onFlow} recording={recording} onRecording={onRecording} onSequence={onSequence} change={change} />
 
         <Comments design={design} step={stepId} change={change} onSelect={onSelect} />
 

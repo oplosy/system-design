@@ -26,6 +26,7 @@ import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './bou
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
 import { LAYOUTS, layout, type LayoutKind } from './layout.ts';
+import { SequenceView } from './sequence.tsx';
 import { DRAG_MIME, Dock, FindBox, Inspector, type FlowAt, Palette, PresentBar, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
 import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES } from './shapes.ts';
 
@@ -136,6 +137,8 @@ function Shell() {
   const [flow, setFlow] = useState<FlowAt | null>(null);
   // Stops of a flow being drawn by clicking parts on the sheet.
   const [recording, setRecording] = useState<string[] | null>(null);
+  // The flow shown as a sequence diagram over the sheet.
+  const [sequence, setSequence] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [theme, setThemeState] = useState<Theme>(loadTheme);
   const [docks, setDocks] = useState<Docks>(loadDocks);
@@ -295,6 +298,7 @@ function Shell() {
         commit(d, { fresh: true });
         setSelected(null);
         setFlow(null);
+        setSequence(null);
         const firstUnseen = d.steps.findIndex((s) => !s.seen);
         setViewIndex(firstUnseen >= 0 ? firstUnseen : d.steps.length - 1);
       })
@@ -806,6 +810,7 @@ function Shell() {
       if (e.key === 'Escape') {
         setSelected(null);
         setRecording(null);
+        setSequence(null);
       }
       if (selected) return;
       if (e.key === 'ArrowRight') {
@@ -946,6 +951,10 @@ function Shell() {
                   <ViewportPortal>{editing && <InlineEdit key={editing.id} {...editing} onDone={finishEdit} />}</ViewportPortal>
                 </ReactFlow>
               </EdgeContext.Provider>
+              {(() => {
+                const f = sequence && design.flows.find((x) => x.id === sequence);
+                return f && !presenting && <SequenceView design={design} flow={f} at={flow?.id === f.id ? flow.at : undefined} onClose={() => setSequence(null)} />;
+              })()}
               {presenting ? (
                 <PresentBar design={design} viewIndex={view} maxIndex={maxIndex} onView={goTo} onExit={() => present(false)} flow={flow} onFlow={setFlow} />
               ) : (
@@ -968,7 +977,7 @@ function Shell() {
             )}
             {docks.right.open && (
               <Dock side="right" width={docks.right.w} onResize={(w) => resizeDock('right', w)} onReset={() => resizeDock('right', DOCKS.right.w)}>
-                <Inspector design={design} selected={selected} stepId={current.id} flow={flow} onFlow={setFlow} recording={recording} onRecording={startRecording} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
+                <Inspector design={design} selected={selected} stepId={current.id} flow={flow} onFlow={setFlow} recording={recording} onRecording={startRecording} onSequence={setSequence} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
               </Dock>
             )}
           </div>

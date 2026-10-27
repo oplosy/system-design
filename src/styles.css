@@ -167,6 +167,7 @@ kbd.lead {
 .dock,
 .review,
 .present-bar,
+.sequence,
 .menu,
 .pop,
 .react-flow__controls,
@@ -864,6 +865,84 @@ kbd.lead {
 }
 
 /* Review bar: where the walkthrough is, what this step is, and what to do with it. */
+
+/* A flow as a sequence diagram, floating over the sheet. */
+.sequence {
+  position: absolute;
+  top: 64px;
+  left: calc(var(--left) + (100% - var(--left) - var(--right)) / 2);
+  transform: translateX(-50%);
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100% - var(--left) - var(--right) - 24px);
+  max-height: calc(100% - 160px);
+  border-radius: var(--radius);
+}
+
+.sequence-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sequence-head strong {
+  margin-right: auto;
+}
+
+.sequence-head .quiet {
+  order: -1;
+  font: 11px var(--mono);
+  text-transform: uppercase;
+}
+
+.sequence-body {
+  overflow: auto;
+  padding: 4px 4px 12px;
+}
+
+.seq-life {
+  stroke: var(--rule-strong);
+  stroke-dasharray: 4 4;
+}
+
+.seq-box {
+  fill: var(--panel);
+  stroke: var(--rule-strong);
+}
+
+.seq-name {
+  fill: var(--ink);
+  font: 600 13px var(--sans);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.seq-msg line {
+  stroke: var(--ink-2);
+  stroke-width: 1.4;
+}
+
+.seq-label {
+  fill: var(--muted);
+  font: 11px var(--mono);
+  text-anchor: middle;
+}
+
+.seq-msg.on line {
+  stroke: var(--signal);
+  stroke-width: 2.2;
+}
+
+.seq-msg.on .seq-label {
+  fill: var(--signal);
+}
+
+.seq-msg.missing line {
+  stroke: var(--danger);
+}
 
 .review {
   position: absolute;
@@ -1824,6 +1903,7 @@ select.ed option {
 
 .flow-steps {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   padding: 2px 8px 8px;
@@ -1853,7 +1933,8 @@ select.ed option {
 }
 
 .flow-hop {
-  flex: 1;
+  order: -1;
+  flex: 1 0 100%;
   min-width: 0;
   font-size: 12px;
   color: var(--ink-2);
