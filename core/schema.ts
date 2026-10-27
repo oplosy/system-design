@@ -248,6 +248,14 @@ export const DecisionSchema = z.object({
   step: Id,
 });
 
+/** A request path walked hop by hop ("User logs in"): component ids in order, each hop along a connection either way. */
+export const FlowSchema = z.object({
+  id: Id,
+  title: z.string().min(1),
+  path: z.array(Id).min(2),
+  step: Id,
+});
+
 /** Review feedback on a step, or on one item in it. */
 export const CommentSchema = z.object({
   id: Id,
@@ -274,6 +282,7 @@ export const DesignSchema = z
     // Optional so designs written before boundaries existed still load.
     boundaries: z.array(BoundarySchema).default([]),
     comments: z.array(CommentSchema).default([]),
+    flows: z.array(FlowSchema).default([]),
   })
   .superRefine((d, ctx) => {
     const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
@@ -282,7 +291,7 @@ export const DesignSchema = z
 
     // Components, notes and decisions share one id space: they are all canvas nodes.
     const itemIds = new Set<string>();
-    for (const item of [...d.components, ...d.notes, ...d.decisions, ...d.connections, ...d.boundaries]) {
+    for (const item of [...d.components, ...d.notes, ...d.decisions, ...d.connections, ...d.boundaries, ...d.flows]) {
       if (itemIds.has(item.id)) issue(`duplicate id "${item.id}"`);
       itemIds.add(item.id);
       if (!stepIds.has(item.step)) issue(`"${item.id}" references unknown step "${item.step}"`);
@@ -304,6 +313,10 @@ export const DesignSchema = z
     }
     for (const dec of d.decisions) {
       for (const l of dec.links) if (!componentIds.has(l)) issue(`decision "${dec.id}" links unknown "${l}"`);
+    }
+    // Hops may lose their connection when the reviewer edits; the canvas skips those, so only the stops are checked.
+    for (const f of d.flows) {
+      for (const p of f.path) if (!componentIds.has(p)) issue(`flow "${f.id}" passes unknown "${p}"`);
     }
     const parents = new Map(d.boundaries.map((b) => [b.id, b.parent]));
     for (const c of d.components) {
@@ -328,6 +341,7 @@ export type Note = z.infer<typeof NoteSchema>;
 export type Decision = z.infer<typeof DecisionSchema>;
 export type Boundary = z.infer<typeof BoundarySchema>;
 export type Comment = z.infer<typeof CommentSchema>;
+export type Flow = z.infer<typeof FlowSchema>;
 export type Design = z.infer<typeof DesignSchema>;
 
 export const isId = (s: string) => Id.safeParse(s).success;

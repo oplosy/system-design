@@ -8,6 +8,8 @@ A local canvas for system and architecture designs that agents build and you rev
 - Two looks for the same data: **Sketch** (hand-drawn, rough.js) and **Clean**.
 - Designs are built in **steps**. Each step carries its components, connections, notes and decisions (why, alternatives, trade-offs).
 - **Review queue:** steps added by an agent start unseen. You walk them in order and cannot jump past the first unseen step.
+- **Flows:** a request path ("User logs in") through the components. Play it hop by hop from the step panel: the path lights up and each hop is numbered.
+- **Lint:** amber badges flag likely smells (isolated parts, a balancer with one target, a datastore in a public network or reached straight from clients, a one-sided queue, an unlinked decision). Hover a badge to read it.
 - Everything is a JSON file in `designs/`, so changes are versioned and diffable.
 
 ## Run
@@ -31,7 +33,7 @@ Inside this repo, Claude Code picks it up from `.mcp.json`. To use it from any p
 claude mcp add system-design -s user -- node C:/Users/mesut/Desktop/workspace/A-projects/system-design/mcp/server.ts
 ```
 
-Main tool: `add_step` adds one reviewable change (components, connections, notes, decisions) in a single write. Smaller tools: `create_design`, `add_component`, `connect`, `add_note`, `add_decision`, `update_component`, `remove_item`, `get_design`, `list_designs`, `list_templates`.
+Main tool: `add_step` adds one reviewable change (components, connections, notes, decisions) in a single write, and can carry flows. Smaller tools: `create_design`, `add_component`, `connect`, `add_note`, `add_decision`, `update_component`, `remove_item`, `add_flow`, `lint`, `get_design`, `list_designs`, `list_templates`.
 
 ## Layout
 

@@ -1732,7 +1732,78 @@ select.ed option {
   box-shadow: 0 0 0 2px var(--canvas);
 }
 
-/* Bending a selected connection */
+/* Lint warning: hover shows what looks wrong. */
+.lint-badge {
+  position: absolute;
+  bottom: -9px;
+  left: -9px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  font: 700 11px/1 var(--mono);
+  color: var(--panel);
+  background: var(--decision);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--canvas);
+  cursor: help;
+}
+
+/* A playing flow: its path takes the signal colour and each hop shows its number. */
+.rough-edge.on-path {
+  color: var(--signal);
+}
+
+.rough-edge.on-path:not(.hop-on) {
+  opacity: 0.55;
+}
+
+.hop-badge {
+  position: absolute;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  font: 600 11px/1 var(--mono);
+  color: var(--signal);
+  background: var(--canvas);
+  border: 1.5px solid var(--signal);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.hop-badge.on {
+  color: var(--panel);
+  background: var(--signal);
+}
+
+.flow-entry.on {
+  background: var(--hover);
+  border-radius: 8px;
+}
+
+.flow-play {
+  width: 30px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--signal);
+}
+
+.flow-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 8px;
+}
+
+.flow-hop {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
 /* Delete button over a selected item; it keeps its size at any zoom. */
 .node-trash {
   display: grid;
@@ -1756,6 +1827,7 @@ select.ed option {
   outline-offset: 2px;
 }
 
+/* Bending a selected connection */
 .bend-handle {
   position: absolute;
   width: 12px;

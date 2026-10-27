@@ -141,6 +141,47 @@ test('exports Mermaid and a decision record', async () => {
   assert.match(adr, /- MySQL/);
 });
 
+test('flows follow connections and skip removed stops', async () => {
+  const x = await store.createDesign({ id: 'flows', title: 'Flows' });
+  const user = m.addComponent(x, { type: 'user', label: 'User' });
+  const api = m.addComponent(x, { type: 'service', label: 'API' });
+  const db = m.addComponent(x, { type: 'sql-db', label: 'DB' });
+  m.connect(x, { from: user, to: api });
+  m.connect(x, { from: api, to: db });
+  assert.throws(() => m.addFlow(x, { title: 'Skip', path: [user, db] }), /no connection/);
+  const login = m.addFlow(x, { title: 'Login', path: [user, api, db, api, user] });
+  await store.writeDesign(x);
+
+  const y = await store.readDesign('flows');
+  m.removeItem(y, db);
+  assert.deepEqual(y.flows[0].path, [user, api, user]);
+  m.removeItem(y, api);
+  assert.equal(y.flows.length, 0, 'one stop left is no flow');
+  m.removeItem(x, login);
+  assert.equal(x.flows.length, 0);
+});
+
+test('lint flags likely smells', async () => {
+  const { lint } = await import('./lint.ts');
+  const x = await store.createDesign({ id: 'lint', title: 'Lint' });
+  const pub = m.addBoundary(x, { kind: 'subnet', label: 'Public' });
+  const client = m.addComponent(x, { type: 'client', label: 'Web' });
+  const lb = m.addComponent(x, { type: 'load-balancer', label: 'LB' });
+  const api = m.addComponent(x, { type: 'service', label: 'API' });
+  const db = m.addComponent(x, { type: 'sql-db', label: 'DB', boundary: pub });
+  const q = m.addComponent(x, { type: 'queue', label: 'Jobs' });
+  m.addComponent(x, { type: 'cache', label: 'Lonely' });
+  m.connect(x, { from: client, to: lb });
+  m.connect(x, { from: lb, to: api });
+  m.connect(x, { from: client, to: db });
+  m.connect(x, { from: api, to: q });
+  m.addDecision(x, { title: 'Why', why: 'Because' });
+  assert.deepEqual(
+    lint(x).map((i) => `${i.id}:${i.rule}`),
+    ['lb:single-target', 'db:public-datastore', 'db:client-to-datastore', 'jobs:one-sided', 'lonely:isolated', 'decision-why:unlinked-decision'],
+  );
+});
+
 test('templates load and start unseen', async () => {
   const files = (await fs.readdir(store.TEMPLATES_DIR)).filter((f) => f.endsWith('.json'));
   const templates = await store.listTemplates();

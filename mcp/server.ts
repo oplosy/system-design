@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type Design } from '../core/schema.ts';
+import { lint } from '../core/lint.ts';
 import * as m from '../core/mutations.ts';
 import { createDesign, listDesigns, listTemplates, readDesign, updateDesign } from '../core/store.ts';
 
@@ -12,6 +13,8 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Ids are lowercase-dashed. Positions are optional: the app lays out new items automatically.
 - Component types: ${COMPONENT_TYPES.join(', ')}.
 - Group components with boundaries (${BOUNDARY_KINDS.join(', ')}): a box drawn around its members, nestable through parent (region > vpc > subnet, site > vlan). Give each component its innermost boundary; the box sizes itself.
+- Show the key request paths as flows ("User uploads a photo"): component ids in order, each hop along a connection (either way, so responses can walk back).
+- After a step, run lint and fix what it finds or say in a note why it is fine.
 - Start from list_designs; call get_design before editing an existing one.
 - The reviewer can send steps back with comments. Before continuing a design, call get_feedback; fix what it asks (in that step, or in a new step), then resolve_feedback with a short reply. Resolving hands the step back for review.`;
 
@@ -55,6 +58,11 @@ const decisionFields = {
   links: z.array(z.string()).optional().describe('Ids of the components this decision affects'),
 };
 
+const flowFields = {
+  title: z.string().min(1).describe('What happens, e.g. "User uploads a photo"'),
+  path: z.array(z.string()).min(2).describe('Component ids in the order the request visits them; each hop must follow a connection'),
+};
+
 const ok = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] });
 
 async function edit<T>(id: string, change: (d: Design) => T) {
@@ -96,6 +104,7 @@ server.registerTool(
       connections: z.array(z.object(connectionFields)).optional(),
       notes: z.array(z.object(noteFields)).optional(),
       decisions: z.array(z.object(decisionFields)).optional(),
+      flows: z.array(z.object(flowFields)).optional(),
     },
   },
   async (input) =>
@@ -109,6 +118,7 @@ server.registerTool(
       for (const c of input.connections ?? []) m.connect(d, { ...c, from: ref(c.from), to: ref(c.to), step: stepId });
       for (const n of input.notes ?? []) m.addNote(d, { text: n.text, attachTo: n.attach_to && ref(n.attach_to), step: stepId });
       for (const x of input.decisions ?? []) m.addDecision(d, { ...x, links: x.links?.map(ref), step: stepId });
+      for (const f of input.flows ?? []) m.addFlow(d, { ...f, path: f.path.map(ref), step: stepId });
       return { step: stepId, ids };
     }),
 );
@@ -148,6 +158,14 @@ server.registerTool('add_decision', { description: 'Record an architecture decis
   edit(id, (d) => m.addDecision(d, input)),
 );
 
+server.registerTool('add_flow', { description: 'Add a request path that the reviewer can play hop by hop', inputSchema: { design, ...flowFields, step } }, async ({ design: id, ...input }) =>
+  edit(id, (d) => m.addFlow(d, input)),
+);
+
+server.registerTool('lint', { description: 'Check a design for likely smells: isolated parts, single points of failure, exposed datastores, unlinked decisions', inputSchema: { id: design } }, async ({ id }) =>
+  ok(lint(await readDesign(id))),
+);
+
 server.registerTool(
   'update_component',
   {
@@ -164,7 +182,7 @@ server.registerTool(
     }),
 );
 
-server.registerTool('remove_item', { description: 'Remove a component, connection, note, decision or boundary (its contents move to its parent)', inputSchema: { design, id: z.string() } }, async ({ design: designId, id }) =>
+server.registerTool('remove_item', { description: 'Remove a component, connection, note, decision, flow or boundary (its contents move to its parent)', inputSchema: { design, id: z.string() } }, async ({ design: designId, id }) =>
   edit(designId, (d) => m.removeItem(d, id)),
 );
 

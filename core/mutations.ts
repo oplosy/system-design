@@ -14,7 +14,7 @@ export function slugify(s: string) {
 }
 
 function usedIds(d: Design) {
-  return new Set([...d.components, ...d.notes, ...d.decisions, ...d.connections, ...d.boundaries, ...d.steps, ...d.comments].map((x) => x.id));
+  return new Set([...d.components, ...d.notes, ...d.decisions, ...d.connections, ...d.boundaries, ...d.flows, ...d.steps, ...d.comments].map((x) => x.id));
 }
 
 export function uniqueId(d: Design, base: string) {
@@ -151,9 +151,26 @@ export function addDecision(
   return id;
 }
 
+/** The connection a flow hop runs along, in either direction. */
+export function hopConnection(d: Design, a: string, b: string) {
+  return d.connections.find((c) => (c.from === a && c.to === b) || (c.from === b && c.to === a));
+}
+
+/** Adds a request path through components in order; every hop must follow an existing connection. */
+export function addFlow(d: Design, input: Edit & { title: string; path: string[] }) {
+  if (input.path.length < 2) throw new Error('A flow needs at least two components.');
+  for (const p of input.path) if (!d.components.some((c) => c.id === p)) throw new Error(`unknown component "${p}"`);
+  for (let i = 1; i < input.path.length; i++) {
+    if (!hopConnection(d, input.path[i - 1], input.path[i])) throw new Error(`no connection between "${input.path[i - 1]}" and "${input.path[i]}"`);
+  }
+  const id = uniqueId(d, `flow-${input.title}`);
+  d.flows.push({ id, title: input.title, path: input.path, step: useStep(d, input.step, input.reopen ?? true) });
+  return id;
+}
+
 /** Removes any item by id, plus whatever points at it. A removed boundary hands its contents to its own parent. */
 export function removeItem(d: Design, id: string) {
-  const count = () => d.components.length + d.connections.length + d.notes.length + d.decisions.length + d.boundaries.length;
+  const count = () => d.components.length + d.connections.length + d.notes.length + d.decisions.length + d.boundaries.length + d.flows.length;
   const before = count();
   const gone = d.boundaries.find((b) => b.id === id);
   if (gone) {
@@ -165,12 +182,17 @@ export function removeItem(d: Design, id: string) {
   d.connections = d.connections.filter((c) => c.id !== id && c.from !== id && c.to !== id);
   d.notes = d.notes.filter((n) => n.id !== id).map((n) => (n.attachTo === id ? { ...n, attachTo: undefined } : n));
   d.decisions = d.decisions.filter((x) => x.id !== id).map((x) => ({ ...x, links: x.links.filter((l) => l !== id) }));
+  // A flow skips a removed stop, and goes when fewer than two stops are left.
+  d.flows = d.flows
+    .filter((f) => f.id !== id)
+    .map((f) => ({ ...f, path: f.path.filter((p) => p !== id).filter((p, i, a) => p !== a[i - 1]) }))
+    .filter((f) => f.path.length >= 2);
   if (before === count()) throw new Error(`unknown item "${id}"`);
   // Feedback about a removed item stays on its step.
   for (const c of d.comments) if (c.target === id) c.target = undefined;
 }
 
-const items = (d: Design) => [...d.components, ...d.connections, ...d.notes, ...d.decisions, ...d.boundaries];
+const items = (d: Design) => [...d.components, ...d.connections, ...d.notes, ...d.decisions, ...d.boundaries, ...d.flows];
 
 /** Removes everything a step added. The step goes too, unless it is the only one. */
 export function revertStep(d: Design, id: string) {

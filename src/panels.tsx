@@ -258,10 +258,70 @@ function InsideSelect({ design, value, exclude, onPick }: { design: Design; valu
   );
 }
 
+/** The flow being played and which hop (0-based) is lit. */
+export type FlowAt = { id: string; at: number };
+
+function Flows({ design, upTo, flow, onFlow, change }: { design: Design; upTo: number; flow: FlowAt | null; onFlow: (f: FlowAt | null) => void; change: Change }) {
+  const idx = m.stepIndex(design);
+  const flows = design.flows.filter((f) => idx.get(f.step)! <= upTo);
+  if (!flows.length) return null;
+  const labelOf = (id: string) => design.components.find((c) => c.id === id)?.label ?? id;
+  return (
+    <section className="insp-sec">
+      <h3 className="rule-head">
+        Flows
+        <span className="rule-count">{pad(flows.length)}</span>
+      </h3>
+      {flows.map((f) => {
+        const at = flow?.id === f.id ? flow.at : null;
+        const hops = f.path.length - 1;
+        return (
+          <div key={f.id} className={`flow-entry${at !== null ? ' on' : ''}`}>
+            <button className="list-row" aria-pressed={at !== null} onClick={() => onFlow(at !== null ? null : { id: f.id, at: 0 })} title={at !== null ? 'Stop' : 'Play hop by hop'}>
+              <span className="flow-play" aria-hidden="true">
+                {at !== null ? '■' : '▶'}
+              </span>
+              <span className="list-main">{f.title}</span>
+              <span className="list-meta">{hops} hops</span>
+            </button>
+            {at !== null && (
+              <div className="flow-steps">
+                <button className="btn" disabled={at === 0} onClick={() => onFlow({ id: f.id, at: at - 1 })} aria-label="Previous hop">
+                  ←
+                </button>
+                <span className="flow-hop">
+                  <span className="mono">
+                    {at + 1}/{hops}
+                  </span>{' '}
+                  {labelOf(f.path[at])} → {labelOf(f.path[at + 1])}
+                </span>
+                <button className="btn" disabled={at === hops - 1} onClick={() => onFlow({ id: f.id, at: at + 1 })} aria-label="Next hop">
+                  →
+                </button>
+                <button
+                  className="text-btn danger"
+                  onClick={() => {
+                    onFlow(null);
+                    change((d) => m.removeItem(d, f.id));
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 export function Inspector({
   design,
   selected,
   stepId,
+  flow,
+  onFlow,
   change,
   onSelect,
   onDelete,
@@ -269,6 +329,8 @@ export function Inspector({
   design: Design;
   selected: string | null;
   stepId: string;
+  flow: FlowAt | null;
+  onFlow: (f: FlowAt | null) => void;
   change: Change;
   onSelect: (id: string | null) => void;
   onDelete: (id: string) => void;
@@ -379,6 +441,8 @@ export function Inspector({
             ))}
           </section>
         )}
+
+        <Flows design={design} upTo={stepNo(stepId) - 1} flow={flow} onFlow={onFlow} change={change} />
 
         <Comments design={design} step={stepId} change={change} onSelect={onSelect} />
 

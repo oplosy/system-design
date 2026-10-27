@@ -18,6 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { toPng, toSvg } from 'html-to-image';
 import { toDecisionRecord, toMermaid } from '../core/export.ts';
+import { lint } from '../core/lint.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { ApiError, api, type Summary } from './api.ts';
@@ -25,7 +26,7 @@ import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './bou
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
 import { LAYOUTS, layout, type LayoutKind } from './layout.ts';
-import { DRAG_MIME, Dock, FindBox, Inspector, Palette, PresentBar, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
+import { DRAG_MIME, Dock, FindBox, Inspector, type FlowAt, Palette, PresentBar, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
 import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES } from './shapes.ts';
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -116,6 +117,7 @@ function Shell() {
   const [creating, setCreating] = useState(false);
   const [diff, setDiff] = useState(false);
   const [presenting, setPresenting] = useState(false);
+  const [flow, setFlow] = useState<FlowAt | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [theme, setThemeState] = useState<Theme>(loadTheme);
   const [docks, setDocks] = useState<Docks>(loadDocks);
@@ -274,6 +276,7 @@ function Shell() {
         if (cancelled) return;
         commit(d, { fresh: true });
         setSelected(null);
+        setFlow(null);
         const firstUnseen = d.steps.findIndex((s) => !s.seen);
         setViewIndex(firstUnseen >= 0 ? firstUnseen : d.steps.length - 1);
       })
@@ -317,13 +320,34 @@ function Shell() {
     const reviewing = !current.seen;
     // Reviewing, the diff view and presenting all put this step's items in front; the diff view also outlines them.
     const focus = reviewing || diff || presenting;
-    const flags = (step: string) => ({ unseen: reviewing && step === current.id, faded: focus && step !== current.id, added: diff && step === current.id });
+    // A playing flow dims everything off its path and numbers its hops.
+    const playing = flow && design.flows.find((f) => f.id === flow.id && visibleStep(f.step));
+    const onPath = new Set(playing?.path);
+    const hops = new Map<string, number[]>();
+    let hopOn: string | undefined;
+    playing?.path.slice(1).forEach((to, i) => {
+      const c = m.hopConnection(design, playing.path[i], to);
+      if (!c) return;
+      hops.set(c.id, [...(hops.get(c.id) ?? []), i + 1]);
+      if (i === flow!.at) hopOn = c.id;
+    });
+    const flags = (step: string, id: string) => ({
+      unseen: reviewing && step === current.id,
+      faded: playing ? !onPath.has(id) && !hops.has(id) : focus && step !== current.id,
+      added: diff && step === current.id,
+    });
+    const issues = new Map<string, string[]>();
+    if (!presenting) {
+      const seen = <T extends { step: string }>(xs: T[]) => xs.filter((x) => visibleStep(x.step));
+      const now = { ...design, components: seen(design.components), connections: seen(design.connections), decisions: seen(design.decisions), boundaries: seen(design.boundaries) };
+      for (const i of lint(now)) issues.set(i.id, [...(issues.get(i.id) ?? []), i.message]);
+    }
     const open = new Map<string, number>();
     for (const c of design.comments) if (c.target && c.by === 'reviewer' && !c.resolved) open.set(c.target, (open.get(c.target) ?? 0) + 1);
     const shown = new Set<string>();
     const node = (id: string, type: 'component' | 'note' | 'decision', position: { x: number; y: number } | undefined, data: object, step: string): Node => {
       shown.add(id);
-      return { id, type, position: position ?? { x: 0, y: 0 }, hidden: !position, selected: id === selected, data: { ...data, ...flags(step), comments: open.get(id) } };
+      return { id, type, position: position ?? { x: 0, y: 0 }, hidden: !position, selected: id === selected, data: { ...data, ...flags(step, id), comments: open.get(id), issues: issues.get(id) } };
     };
     const boxes = boundaryBoxes(design, visibleStep);
     const nodes = [
@@ -341,7 +365,7 @@ function Shell() {
             dragHandle: '.boundary-tab',
             connectable: false,
             selected: b.id === selected,
-            data: { kind: b.kind, label: b.label, detail: b.detail, w: box.w, h: box.h, ...flags(b.step) },
+            data: { kind: b.kind, label: b.label, detail: b.detail, w: box.w, h: box.h, ...flags(b.step, b.id) },
           };
         }),
       ...design.components.filter((c) => visibleStep(c.step)).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech }, c.step)),
@@ -356,7 +380,7 @@ function Shell() {
       type: 'rough',
       selectable: false,
       deletable: false,
-      data: { kind: 'link', ...flags(step) },
+      data: { kind: 'link', ...flags(step, id) },
     });
     const edges: FlowEdge[] = [
       ...design.connections
@@ -368,14 +392,14 @@ function Shell() {
             target: c.to,
             type: 'rough',
             selected: c.id === selected,
-            data: { kind: 'flow', label: c.label, async: c.async, relation: c.kind, route: c.route, bend: c.bend, ...flags(c.step) },
+            data: { kind: 'flow', label: c.label, async: c.async, relation: c.kind, route: c.route, bend: c.bend, hops: hops.get(c.id), hopOn: c.id === hopOn, ...flags(c.step, c.id) },
           }),
         ),
       ...design.notes.filter((n) => n.attachTo && both(n.attachTo, n.id)).map((n) => link(`link-${n.id}`, n.attachTo!, n.id, n.step)),
       ...design.decisions.flatMap((x) => x.links.filter((l) => both(l, x.id)).map((l) => link(`link-${x.id}-${l}`, l, x.id, x.step))),
     ];
     return { nodes, edges, boxes };
-  }, [design, current, view, selected, diff, presenting]);
+  }, [design, current, view, selected, diff, presenting, flow]);
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const lastSelected = useRef(selected);
@@ -665,7 +689,7 @@ function Shell() {
       backgroundColor: getComputedStyle(canvasRef.current!).getPropertyValue('--canvas').trim(),
       style: { width: `${width}px`, height: `${height}px`, transform: `translate(${pad - b.x}px, ${pad - b.y}px) scale(1)` },
       // Leave out editing aids and review markers: the image is for docs, not for review.
-      filter: (n: HTMLElement) => !['inline-edit', 'bend-handle', 'unseen-dot', 'comment-badge'].some((c) => n.classList?.contains(c)),
+      filter: (n: HTMLElement) => !['inline-edit', 'bend-handle', 'unseen-dot', 'comment-badge', 'lint-badge'].some((c) => n.classList?.contains(c)),
     };
     try {
       download(kind === 'png' ? await toPng(el, { ...options, pixelRatio: 2 }) : await toSvg(el, options), `${design.id}.${kind}`);
@@ -898,7 +922,7 @@ function Shell() {
             )}
             {docks.right.open && (
               <Dock side="right" width={docks.right.w} onResize={(w) => resizeDock('right', w)} onReset={() => resizeDock('right', DOCKS.right.w)}>
-                <Inspector design={design} selected={selected} stepId={current.id} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
+                <Inspector design={design} selected={selected} stepId={current.id} flow={flow} onFlow={setFlow} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
               </Dock>
             )}
           </div>

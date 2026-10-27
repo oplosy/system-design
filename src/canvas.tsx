@@ -31,13 +31,13 @@ function Trash() {
   );
 }
 
-/** added: drawn as new in the step diff; comments: open review comments on the item. */
-type Common = { unseen: boolean; faded: boolean; added?: boolean; comments?: number };
+/** added: drawn as new in the step diff; comments: open review comments on the item; issues: lint warnings. */
+type Common = { unseen: boolean; faded: boolean; added?: boolean; comments?: number; issues?: string[] };
 export type ComponentNode = Node<Common & { type: ComponentType; label: string; tech?: string }, 'component'>;
 export type NoteNode = Node<Common & { text: string }, 'note'>;
 export type DecisionNode = Node<Common & { title: string; why: string }, 'decision'>;
 export type BoundaryNode = Node<Common & { kind: BoundaryKind; label: string; detail?: string; w: number; h: number }, 'boundary'>;
-export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; relation?: ConnectionKind; route?: Route; bend?: number; unseen: boolean; faded: boolean; added?: boolean }, 'rough'>;
+export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; relation?: ConnectionKind; route?: Route; bend?: number; unseen: boolean; faded: boolean; added?: boolean; hops?: number[]; hopOn?: boolean }, 'rough'>;
 
 function Paths({ paths, dashed }: { paths: PathInfo[]; dashed?: boolean }) {
   return paths.map((p, i) => (
@@ -59,6 +59,11 @@ function Frame({ w, h, data, children }: { w: number; h: number; data: Common; c
       {!!data.comments && (
         <span className="comment-badge" title={`${data.comments} open comment${data.comments > 1 ? 's' : ''}`}>
           {data.comments}
+        </span>
+      )}
+      {!!data.issues && (
+        <span className="lint-badge" title={data.issues.join('\n')} aria-label={`Warning: ${data.issues.join(' ')}`}>
+          !
         </span>
       )}
       <Handle type="target" position={Position.Top} />
@@ -176,7 +181,7 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
   // The line and its ends are drawn apart so a dashed line keeps solid arrowheads and diamonds.
   const [line, ends] = useMemo(() => {
     if (!geo) return [[], []];
-    const o = options(sketch, undefined, hash(id), { strokeWidth: link ? 1.1 : selected ? 2.2 : 1.4, roughness: sketch ? 1 : 0 });
+    const o = options(sketch, undefined, hash(id), { strokeWidth: link ? 1.1 : selected || data?.hopOn ? 2.2 : 1.4, roughness: sketch ? 1 : 0 });
     const hollow = { ...o, fill: 'var(--canvas)', fillStyle: 'solid' }, solid = { ...o, fill: 'currentColor', fillStyle: 'solid' };
     const at = (p: Pt, a: number, back: number, side = 0): [number, number] => [p.x - back * Math.cos(a) - side * Math.sin(a), p.y - back * Math.sin(a) + side * Math.cos(a)];
     const parts = [geo.points ? gen.linearPath(geo.points.map((p): [number, number] => [p.x, p.y]), o) : gen.path(geo.d, o)];
@@ -187,7 +192,7 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
       heads.push(gen.polygon([[tail.x, tail.y], at(tail, tailAngle, 10, 6), at(tail, tailAngle, 20), at(tail, tailAngle, 10, -6)], rel === 'composition' ? solid : hollow));
     else if (!link) for (const side of [5.5, -5.5]) heads.push(gen.linearPath([[tip.x, tip.y], at(tip, angle, 11, side)], o));
     return [toPaths(parts), toPaths(heads)];
-  }, [geo?.d, sketch, id, link, rel, selected]);
+  }, [geo?.d, sketch, id, link, rel, selected, data?.hopOn]);
   const label = data?.label ?? (rel === 'include' || rel === 'extend' ? `«${rel}»` : undefined);
   if (!geo) return null;
   const handle = !!selected && !locked && !link && geo.bendable;
@@ -213,10 +218,17 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
   return (
     <>
       <BaseEdge id={id} path={geo.d} style={{ stroke: 'transparent' }} interactionWidth={18} />
-      <g className={`rough-edge${data?.faded ? ' faded' : ''}${selected ? ' selected' : ''}`} style={{ color: link ? NOTE_COLOR : undefined }}>
+      <g className={`rough-edge${data?.faded ? ' faded' : ''}${selected ? ' selected' : ''}${data?.hops ? ' on-path' : ''}${data?.hopOn ? ' hop-on' : ''}`} style={{ color: link ? NOTE_COLOR : undefined }}>
         <Paths paths={line} dashed={dashed} />
         <Paths paths={ends} />
       </g>
+      {data?.hops && (
+        <EdgeLabelRenderer>
+          <div className={`hop-badge${data.hopOn ? ' on' : ''}`} style={{ transform: `${at} translateY(${label ? -22 : 0}px)` }}>
+            {data.hops.join(' · ')}
+          </div>
+        </EdgeLabelRenderer>
+      )}
       {(label || handle) && (
         <EdgeLabelRenderer>
           {label ? (

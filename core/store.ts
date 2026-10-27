@@ -85,6 +85,7 @@ export async function createDesign(input: { id: string; title: string; descripti
       decisions: [],
       boundaries: [],
       comments: [],
+      flows: [],
     };
   }
   return writeDesign(
