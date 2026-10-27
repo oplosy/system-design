@@ -14,6 +14,7 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Component types: ${COMPONENT_TYPES.join(', ')}.
 - Group components with boundaries (${BOUNDARY_KINDS.join(', ')}): a box drawn around its members, nestable through parent (region > vpc > subnet, site > vlan). Give each component its innermost boundary; the box sizes itself.
 - Show the key request paths as flows ("User uploads a photo"): component ids in order, each hop along a connection (either way, so responses can walk back).
+- Put expected load (qps) and one-way latency (ms) on the lines that matter; a flow then shows its total time.
 - After a step, run lint and fix what it finds or say in a note why it is fine.
 - Start from list_designs; call get_design before editing an existing one.
 - The reviewer can send steps back with comments. Before continuing a design, call get_feedback; fix what it asks (in that step, or in a new step), then resolve_feedback with a short reply. Resolving hands the step back for review.`;
@@ -36,6 +37,8 @@ const connectionFields = {
   label: z.string().optional().describe('What flows, e.g. "HTTPS", "tweet events"'),
   async: z.boolean().optional().describe('true for queues, events and other async flows'),
   route: z.enum(['curve', 'straight', 'elbow']).optional().describe('How the line is drawn; curve by default'),
+  qps: z.number().nonnegative().optional().describe('Expected requests per second on this line'),
+  latency: z.number().nonnegative().optional().describe('One-way time of a hop along this line in ms; flows add these up, a reply hop counts it again'),
   kind: z
     .enum(CONNECTION_KINDS)
     .optional()
@@ -162,6 +165,20 @@ server.registerTool('add_flow', { description: 'Add a request path that the revi
 
 server.registerTool('lint', { description: 'Check a design for likely smells: isolated parts, single points of failure, exposed datastores, unlinked decisions', inputSchema: { id: design } }, async ({ id }) =>
   ok(lint(await readDesign(id))),
+);
+
+server.registerTool(
+  'update_connection',
+  {
+    description: 'Change a connection (label, mode, load, latency). The change is recorded on the step (latest by default) for review, with its old values',
+    inputSchema: { design, id: z.string(), label: z.string().optional(), async: z.boolean().optional(), qps: connectionFields.qps, latency: connectionFields.latency, step },
+  },
+  async ({ design: designId, id, step, ...fields }) =>
+    edit(designId, (d) => {
+      if (!d.connections.some((x) => x.id === id)) throw new Error(`unknown connection "${id}"`);
+      m.updateTracked(d, id, Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)), step);
+      return id;
+    }),
 );
 
 server.registerTool(

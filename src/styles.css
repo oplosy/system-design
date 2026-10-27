@@ -1843,6 +1843,28 @@ select.ed option {
   box-shadow: 0 0 0 2px var(--canvas);
 }
 
+/* Load under a line's label: latency and requests per second. */
+.edge-meta {
+  display: block;
+  font-size: 10px;
+  color: var(--quiet);
+  text-align: center;
+}
+
+.num {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.num .ed {
+  width: 90px;
+}
+
+.num .quiet {
+  font: 11px var(--mono);
+}
+
 /* Lint warning: hover shows what looks wrong. */
 .lint-badge {
   position: absolute;

@@ -49,9 +49,15 @@ export function flowSequence(d: Design, flow: Flow) {
   const messages = flow.path.slice(1).map((to, i) => {
     const from = flow.path[i];
     const c = d.connections.find((x) => (x.from === from && x.to === to) || (x.from === to && x.to === from));
-    return { from, to, label: c?.label, reply: !!c && c.from === to, async: !!c?.async, missing: !c };
+    return { from, to, label: c?.label, latency: c?.latency, reply: !!c && c.from === to, async: !!c?.async, missing: !c };
   });
   return { participants, messages };
+}
+
+/** Total time of a flow from its lines' latencies; `unknown` counts hops whose line has none. */
+export function flowLatency(d: Design, flow: Flow) {
+  const { messages } = flowSequence(d, flow);
+  return { total: messages.reduce((t, m) => t + (m.latency ?? 0), 0), unknown: messages.filter((m) => m.latency === undefined).length };
 }
 
 export function toMermaidSequence(d: Design, flow: Flow) {

@@ -1,4 +1,4 @@
-import { flowSequence, toMermaidSequence } from '../core/export.ts';
+import { flowLatency, flowSequence, toMermaidSequence } from '../core/export.ts';
 import type { Design, Flow } from '../core/schema.ts';
 
 const COL = 170, BOX_W = 140, BOX_H = 34, PAD = 24, ROW = 46, TOP = BOX_H + 44;
@@ -9,11 +9,18 @@ export function SequenceView({ design, flow, at, onClose }: { design: Design; fl
   const x = new Map(participants.map((p, i) => [p.id, PAD + BOX_W / 2 + i * COL]));
   const w = PAD * 2 + BOX_W + (participants.length - 1) * COL;
   const h = TOP + messages.length * ROW + 10;
+  const time = flowLatency(design, flow);
   return (
     <div className="sequence" role="dialog" aria-label={`Sequence: ${flow.title}`}>
       <header className="sequence-head">
         <strong>{flow.title}</strong>
         <span className="quiet">Sequence</span>
+        {time.unknown < messages.length && (
+          <span className="mono" title={time.unknown ? `${time.unknown} hops have no latency yet` : 'Sum of the hops’ latencies'}>
+            {time.unknown ? '≥ ' : ''}
+            {time.total} ms
+          </span>
+        )}
         <button className="text-btn" onClick={() => navigator.clipboard?.writeText(toMermaidSequence(design, flow))} title="Copy as a Mermaid sequence diagram">
           Copy Mermaid
         </button>
@@ -53,6 +60,7 @@ export function SequenceView({ design, flow, at, onClose }: { design: Design; fl
                 <line x1={x1} x2={x2 + (x2 > x1 ? -2 : 2)} y1={y} y2={y} strokeDasharray={m.reply ? '6 4' : undefined} markerEnd={`url(#seq-${m.async || m.reply ? 'open' : 'solid'}-${on ? 'signal' : 'ink-2'})`} />
                 <text x={(x1 + x2) / 2} y={y - 7} className="seq-label">
                   {i + 1}. {m.label ?? (m.reply ? 'reply' : '')}
+                  {m.latency !== undefined && ` · ${m.latency} ms`}
                 </text>
               </g>
             );

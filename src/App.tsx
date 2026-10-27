@@ -418,7 +418,7 @@ function Shell() {
             target: c.to,
             type: 'rough',
             selected: c.id === selected,
-            data: { kind: 'flow', label: c.label, async: c.async, relation: c.kind, route: c.route, bend: c.bend, hops: hops.get(c.id), hopOn: c.id === hopOn, ...flags(c.step, c.id) },
+            data: { kind: 'flow', label: c.label, async: c.async, relation: c.kind, route: c.route, bend: c.bend, qps: c.qps, latency: c.latency, hops: hops.get(c.id), hopOn: c.id === hopOn, ...flags(c.step, c.id) },
           }),
         ),
       ...design.notes.filter((n) => n.attachTo && both(n.attachTo, n.id)).map((n) => link(`link-${n.id}`, n.attachTo!, n.id, n.step)),

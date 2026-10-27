@@ -114,12 +114,26 @@ export function placeIn(d: Design, id: string, boundary: string | undefined) {
   } else throw new Error(`unknown component or boundary "${id}"`);
 }
 
-export function connect(d: Design, input: Edit & { from: string; to: string; label?: string; async?: boolean; kind?: ConnectionKind; route?: Connection['route'] }) {
+export function connect(
+  d: Design,
+  input: Edit & { from: string; to: string; label?: string; async?: boolean; kind?: ConnectionKind; route?: Connection['route']; qps?: number; latency?: number },
+) {
   for (const end of [input.from, input.to]) {
     if (!d.components.some((c) => c.id === end)) throw new Error(`unknown component "${end}"`);
   }
   const id = uniqueId(d, `${input.from}-to-${input.to}`);
-  d.connections.push({ id, from: input.from, to: input.to, label: input.label, async: input.async, kind: input.kind, route: input.route, step: useStep(d, input.step, input.reopen ?? true) });
+  d.connections.push({
+    id,
+    from: input.from,
+    to: input.to,
+    label: input.label,
+    async: input.async,
+    kind: input.kind,
+    route: input.route,
+    qps: input.qps,
+    latency: input.latency,
+    step: useStep(d, input.step, input.reopen ?? true),
+  });
   return id;
 }
 
@@ -236,21 +250,22 @@ export function removeTracked(d: Design, id: string, step?: string) {
   remember(d, s, was);
 }
 
-/** Changes fields of a component or boundary as an agent edit; each field keeps its value from before the step. */
-export function updateTracked(d: Design, id: string, fields: Record<string, string | undefined>, step?: string) {
-  const x = [...d.components, ...d.boundaries].find((i) => i.id === id) as Record<string, unknown> | undefined;
-  if (!x) throw new Error(`unknown component or boundary "${id}"`);
+/** Changes fields of a component, boundary or connection as an agent edit; each field keeps its value from before the step. */
+export function updateTracked(d: Design, id: string, fields: Record<string, string | number | boolean | undefined>, step?: string) {
+  const x = [...d.components, ...d.boundaries, ...d.connections].find((i) => i.id === id) as Record<string, unknown> | undefined;
+  if (!x) throw new Error(`unknown component, boundary or connection "${id}"`);
+  const text = (v: unknown) => (v === undefined ? undefined : String(v));
   const s = d.steps.find((t) => t.id === useStep(d, step, true))!;
   const was = snapshot(d);
   for (const [field, to] of Object.entries(fields)) {
-    const from = x[field] as string | undefined;
+    const from = x[field];
     if (from === to) continue;
-    if (field === 'boundary' || field === 'parent') placeIn(d, id, to);
+    if (field === 'boundary' || field === 'parent') placeIn(d, id, to as string | undefined);
     else x[field] = to;
     if (x.step === s.id) continue;
     const seen = s.changed?.find((c) => c.id === id && c.field === field);
-    if (seen) seen.to = to;
-    else (s.changed ??= []).push({ id, field, from, to });
+    if (seen) seen.to = text(to);
+    else (s.changed ??= []).push({ id, field, from: text(from), to: text(to) });
   }
   // A field changed back to where it started is no change.
   s.changed = s.changed?.filter((c) => c.from !== c.to);

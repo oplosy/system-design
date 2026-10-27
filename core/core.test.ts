@@ -171,6 +171,12 @@ test('flows follow connections and skip removed stops', async () => {
     ].join('\n'),
     'hops against the line are replies',
   );
+  const { flowLatency } = await import('./export.ts');
+  assert.deepEqual(flowLatency(x, x.flows[0]), { total: 0, unknown: 4 });
+  m.updateTracked(x, 'user-to-api', { latency: 20, qps: 1500 });
+  x.connections.find((c) => c.id === 'api-to-db')!.latency = 5;
+  assert.deepEqual(flowLatency(x, x.flows[0]), { total: 50, unknown: 0 }, 'a reply hop counts its line again');
+  assert.deepEqual(x.steps.at(-1)!.changed, undefined, 'edits inside the step that added the line are not changes');
 
   const y = await store.readDesign('flows');
   m.removeItem(y, db);
@@ -216,6 +222,8 @@ test('agent removals and changes are recorded on the step for its diff', async (
   const db = m.addComponent(y, { type: 'sql-db', label: 'DB', step: 'start' });
   m.connect(y, { from: cache, to: db, step: 'start' });
   const later = m.addStep(y, { title: 'Drop DB' });
+  m.updateTracked(y, 'cache-to-db', { latency: 8 });
+  assert.deepEqual(y.steps.at(-1)!.changed, [{ id: 'cache-to-db', field: 'latency', from: undefined, to: '8' }], 'numbers are recorded as text');
   m.removeTracked(y, db);
   assert.deepEqual(y.steps.at(-1)!.removed!.map((r) => r.label), ['DB', 'Cache → DB'], 'lines to a removed part are listed');
   m.revertStep(y, later);
@@ -224,6 +232,7 @@ test('agent removals and changes are recorded on the step for its diff', async (
   assert.deepEqual([cacheNow.tech, cacheNow.boundary], ['Redis', undefined], 'reverting puts changed fields back');
   assert.deepEqual(y.components.map((c) => c.id).sort(), [api, cache, db].sort(), 'and brings removed parts back');
   assert.deepEqual(y.connections.map((c) => c.id).sort(), ['api-to-cache', 'cache-to-db']);
+  assert.equal(y.connections.find((c) => c.id === 'cache-to-db')!.latency, undefined, 'a restored line is as it was before the step');
   await store.writeDesign(y);
 });
 

@@ -37,7 +37,7 @@ export type ComponentNode = Node<Common & { type: ComponentType; label: string; 
 export type NoteNode = Node<Common & { text: string }, 'note'>;
 export type DecisionNode = Node<Common & { title: string; why: string }, 'decision'>;
 export type BoundaryNode = Node<Common & { kind: BoundaryKind; label: string; detail?: string; w: number; h: number }, 'boundary'>;
-export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; relation?: ConnectionKind; route?: Route; bend?: number; unseen: boolean; faded: boolean; added?: boolean; hops?: number[]; hopOn?: boolean }, 'rough'>;
+export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; relation?: ConnectionKind; route?: Route; bend?: number; qps?: number; latency?: number; unseen: boolean; faded: boolean; added?: boolean; hops?: number[]; hopOn?: boolean }, 'rough'>;
 
 function Paths({ paths, dashed }: { paths: PathInfo[]; dashed?: boolean }) {
   return paths.map((p, i) => (
@@ -158,6 +158,12 @@ export const BoundaryNodeView = memo(function BoundaryNodeView({ id, data }: Nod
   );
 });
 
+/** 1500 → 1.5k, 2000000 → 2M: load reads at a glance on a line. */
+export function rate(n: number) {
+  for (const [v, s] of [[1e9, 'G'], [1e6, 'M'], [1e3, 'k']] as const) if (n >= v) return `${+(n / v).toFixed(1)}${s}`;
+  return String(n);
+}
+
 function box(n: InternalNode) {
   const { x, y } = n.internals.positionAbsolute;
   const w = n.measured.width ?? 0, h = n.measured.height ?? 0;
@@ -193,7 +199,14 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
     else if (!link) for (const side of [5.5, -5.5]) heads.push(gen.linearPath([[tip.x, tip.y], at(tip, angle, 11, side)], o));
     return [toPaths(parts), toPaths(heads)];
   }, [geo?.d, sketch, id, link, rel, selected, data?.hopOn]);
-  const label = data?.label ?? (rel === 'include' || rel === 'extend' ? `«${rel}»` : undefined);
+  const named = data?.label ?? (rel === 'include' || rel === 'extend' ? `«${rel}»` : undefined);
+  const load = [data?.latency !== undefined && `${data.latency} ms`, data?.qps !== undefined && `${rate(data.qps)}/s`].filter(Boolean).join(' · ');
+  const label = named || load ? (
+    <>
+      {named}
+      {load && <span className="edge-meta">{load}</span>}
+    </>
+  ) : undefined;
   if (!geo) return null;
   const handle = !!selected && !locked && !link && geo.bendable;
   const startBend = (e: React.PointerEvent<HTMLElement>) => {

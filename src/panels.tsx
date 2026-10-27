@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type BoundaryKind, type ComponentType, type ConnectionKind, type Design } from '../core/schema.ts';
+import { flowLatency } from '../core/export.ts';
 import * as m from '../core/mutations.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SketchContext } from './canvas.tsx';
@@ -212,6 +213,35 @@ function Ed(props: {
   );
 }
 
+/** A non-negative number field; empty means unknown. */
+function Num({ label, unit, value, onCommit }: { label: string; unit: string; value?: number; onCommit: (v: number | undefined) => void }) {
+  const [v, setV] = useState(value === undefined ? '' : String(value));
+  useEffect(() => setV(value === undefined ? '' : String(value)), [value]);
+  const n = Number(v);
+  const invalid = v.trim() !== '' && (!Number.isFinite(n) || n < 0);
+  return (
+    <label className="num">
+      <input
+        className="ed"
+        type="number"
+        min={0}
+        inputMode="decimal"
+        value={v}
+        placeholder="—"
+        aria-label={label}
+        aria-invalid={invalid || undefined}
+        onChange={(e) => {
+          setV(e.target.value);
+          const x = Number(e.target.value);
+          if (e.target.value.trim() === '') onCommit(undefined);
+          else if (Number.isFinite(x) && x >= 0) onCommit(x);
+        }}
+      />
+      <span className="quiet">{unit}</span>
+    </label>
+  );
+}
+
 function Prop({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="prop">
@@ -256,6 +286,12 @@ function InsideSelect({ design, value, exclude, onPick }: { design: Design; valu
         ))}
     </select>
   );
+}
+
+/** A flow's total time, " · ≥ 40 ms" when some hops have no latency yet; empty when none have. */
+function timeText(design: Design, flow: Design['flows'][number]) {
+  const { total, unknown } = flowLatency(design, flow);
+  return unknown === flow.path.length - 1 ? '' : ` · ${unknown ? '≥ ' : ''}${total} ms`;
 }
 
 /** The flow being played and which hop (0-based) is lit. */
@@ -336,7 +372,9 @@ function Flows({
                 {at !== null ? '■' : '▶'}
               </span>
               <span className="list-main">{f.title}</span>
-              <span className="list-meta">{hops} hops</span>
+              <span className="list-meta">
+                {hops} hops{timeText(design, f)}
+              </span>
             </button>
             {at !== null && (
               <div className="flow-steps">
@@ -660,6 +698,10 @@ export function Inspector({
                 ))}
               </select>
             </Prop>
+            <Prop label="Load">
+              <Num label="Requests per second" unit="req/s" value={connection.qps} onCommit={(v) => edit((d: Design) => d.connections, { qps: v })} />
+              <Num label="Latency" unit="ms" value={connection.latency} onCommit={(v) => edit((d: Design) => d.connections, { latency: v })} />
+            </Prop>
             <Prop label="Mode">
               <div className="toggle" role="radiogroup" aria-label="Mode">
                 <button role="radio" aria-checked={!connection.async} onClick={() => edit((d: Design) => d.connections, { async: undefined })}>
@@ -905,6 +947,7 @@ export function PresentBar({
             <strong>{playing.title}</strong>
             <span>
               {labelOf(playing.path[flow.at])} → {labelOf(playing.path[flow.at + 1])}
+              {timeText(design, playing)}
             </span>
           </>
         ) : (

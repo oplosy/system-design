@@ -230,6 +230,10 @@ export const ConnectionSchema = z.object({
   kind: z.enum(CONNECTION_KINDS).optional(),
   /** How the line runs; curve when omitted. */
   route: z.enum(['curve', 'straight', 'elbow']).optional(),
+  /** Expected load on this line, in requests per second. */
+  qps: z.number().nonnegative().optional(),
+  /** One-way time of a hop along this line, in milliseconds; a reply over the same line counts it again. */
+  latency: z.number().nonnegative().optional(),
   /** Hand-set offset of the line's middle, in canvas pixels. */
   bend: z.number().optional(),
   step: Id,
