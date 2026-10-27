@@ -97,6 +97,7 @@ test('reverting a step removes what it added, and paste makes fresh copies', asy
   const db = m.addComponent(x, { type: 'sql-db', label: 'DB', boundary: vpc, position: { x: 0, y: 100 } });
   m.connect(x, { from: api, to: db });
   m.addNote(x, { text: 'Primary only', attachTo: db });
+  m.addFlow(x, { title: 'Read', path: [api, db, api] });
 
   const clip = m.copyItems(x, [vpc, x.notes[0].id]);
   assert.deepEqual(clip.components.map((c) => c.id), [api, db], 'a boundary brings its contents');
@@ -106,13 +107,14 @@ test('reverting a step removes what it added, and paste makes fresh copies', asy
   assert.deepEqual([copy.boundary, copy.position], ['vpc-2', { x: 40, y: 140 }]);
   assert.equal(x.notes.find((n) => n.id === 'note-2')!.attachTo, 'db-2');
   assert.ok(x.connections.some((c) => c.from === 'api-2' && c.to === 'db-2'));
+  assert.deepEqual(x.flows.at(-1)!.path, ['api-2', 'db-2', 'api-2'], 'a flow comes along with its stops');
   await store.writeDesign(x);
 
   const y = await store.readDesign('revert');
   m.revertStep(y, step);
   assert.deepEqual(y.components.map((c) => c.id), [api]);
   assert.equal(y.components[0].boundary, undefined);
-  assert.deepEqual([y.steps.length, y.connections.length, y.notes.length, y.boundaries.length], [1, 0, 0, 0]);
+  assert.deepEqual([y.steps.length, y.connections.length, y.notes.length, y.boundaries.length, y.flows.length], [1, 0, 0, 0, 0]);
   await store.writeDesign(y);
 });
 
@@ -191,6 +193,20 @@ test('agent removals and changes are recorded on the step for its diff', async (
   ]);
   assert.equal(x.components.find((c) => c.id === cache)!.boundary, vpc);
   await store.writeDesign(x);
+
+  const y = await store.readDesign('tracked');
+  const db = m.addComponent(y, { type: 'sql-db', label: 'DB', step: 'start' });
+  m.connect(y, { from: cache, to: db, step: 'start' });
+  const later = m.addStep(y, { title: 'Drop DB' });
+  m.removeTracked(y, db);
+  assert.deepEqual(y.steps.at(-1)!.removed!.map((r) => r.label), ['DB', 'Cache → DB'], 'lines to a removed part are listed');
+  m.revertStep(y, later);
+  m.revertStep(y, step);
+  const cacheNow = y.components.find((c) => c.id === cache)!;
+  assert.deepEqual([cacheNow.tech, cacheNow.boundary], ['Redis', undefined], 'reverting puts changed fields back');
+  assert.deepEqual(y.components.map((c) => c.id).sort(), [api, cache, db].sort(), 'and brings removed parts back');
+  assert.deepEqual(y.connections.map((c) => c.id).sort(), ['api-to-cache', 'cache-to-db']);
+  await store.writeDesign(y);
 });
 
 test('lint flags likely smells', async () => {

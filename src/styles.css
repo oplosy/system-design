@@ -1829,6 +1829,29 @@ select.ed option {
   padding: 2px 8px 8px;
 }
 
+.flow-record {
+  display: grid;
+  gap: 6px;
+  padding: 2px 8px 8px;
+}
+
+.flow-record p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.present-flows {
+  height: 32px;
+  max-width: 180px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--hover);
+  border: 0;
+  border-radius: 8px;
+}
+
 .flow-hop {
   flex: 1;
   min-width: 0;

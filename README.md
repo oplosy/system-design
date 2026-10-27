@@ -8,8 +8,8 @@ A local canvas for system and architecture designs that agents build and you rev
 - Two looks for the same data: **Sketch** (hand-drawn, rough.js) and **Clean**.
 - Designs are built in **steps**. Each step carries its components, connections, notes and decisions (why, alternatives, trade-offs).
 - **Review queue:** steps added by an agent start unseen. You walk them in order and cannot jump past the first unseen step.
-- **Step diff:** outlines what a step added (orange) or changed (amber, with old and new values in the step panel), and draws what it removed as a struck-out ghost. Agent edits through `update_component`, `place_in` and `remove_item` are recorded on the step they land in (latest by default), which reopens for review.
-- **Flows:** a request path ("User logs in") through the components. Play it hop by hop from the step panel: the path lights up and each hop is numbered.
+- **Step diff:** outlines what a step added (orange) or changed (amber, with old and new values in the step panel), and draws what it removed as a struck-out ghost. Agent edits through `update_component`, `place_in` and `remove_item` are recorded on the step they land in (latest by default), which reopens for review. **Revert step** puts back what the step removed or changed.
+- **Flows:** a request path ("User logs in") through the components. Play it hop by hop from the step panel or while presenting: the path lights up and each hop is numbered. Draw one with **New flow** by clicking connected parts in order.
 - **Lint:** amber badges flag likely smells (isolated parts, a balancer with one target, a datastore in a public network or reached straight from clients, a one-sided queue, an unlinked decision). Hover a badge to read it.
 - Everything is a JSON file in `designs/`, so changes are versioned and diffable.
 

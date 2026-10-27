@@ -261,17 +261,69 @@ function InsideSelect({ design, value, exclude, onPick }: { design: Design; valu
 /** The flow being played and which hop (0-based) is lit. */
 export type FlowAt = { id: string; at: number };
 
-function Flows({ design, upTo, flow, onFlow, change }: { design: Design; upTo: number; flow: FlowAt | null; onFlow: (f: FlowAt | null) => void; change: Change }) {
+function Flows({
+  design,
+  stepId,
+  flow,
+  onFlow,
+  recording,
+  onRecording,
+  change,
+}: {
+  design: Design;
+  stepId: string;
+  flow: FlowAt | null;
+  onFlow: (f: FlowAt | null) => void;
+  recording: string[] | null;
+  onRecording: (r: string[] | null) => void;
+  change: Change;
+}) {
+  const [title, setTitle] = useState('');
   const idx = m.stepIndex(design);
-  const flows = design.flows.filter((f) => idx.get(f.step)! <= upTo);
-  if (!flows.length) return null;
+  const flows = design.flows.filter((f) => idx.get(f.step)! <= idx.get(stepId)!);
   const labelOf = (id: string) => design.components.find((c) => c.id === id)?.label ?? id;
+  const save = () => {
+    if (!recording || recording.length < 2 || !title.trim()) return;
+    change((d) => m.addFlow(d, { title: title.trim(), path: recording, step: stepId, reopen: false }));
+    setTitle('');
+    onRecording(null);
+  };
   return (
     <section className="insp-sec">
       <h3 className="rule-head">
         Flows
         <span className="rule-count">{pad(flows.length)}</span>
       </h3>
+      {recording ? (
+        <form
+          className="flow-record"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
+        >
+          <input className="ed" autoFocus value={title} placeholder="What happens, e.g. User logs in" aria-label="Flow title" onChange={(e) => setTitle(e.target.value)} />
+          <p className="quiet">{recording.length ? recording.map(labelOf).join(' → ') : 'Click the parts on the sheet in order. Each one must be connected to the last.'}</p>
+          <div className="pop-foot">
+            <button type="button" className="text-btn" onClick={() => recording.length && onRecording(recording.slice(0, -1))} disabled={!recording.length}>
+              Undo stop
+            </button>
+            <button type="button" className="text-btn" onClick={() => (setTitle(''), onRecording(null))}>
+              Cancel
+            </button>
+            <button type="submit" className="btn ink" disabled={recording.length < 2 || !title.trim()}>
+              Save flow
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button className="list-row" onClick={() => onRecording([])} title="Draw a request path by clicking parts in order">
+          <span className="flow-play" aria-hidden="true">
+            +
+          </span>
+          <span className="list-main quiet">New flow</span>
+        </button>
+      )}
       {flows.map((f) => {
         const at = flow?.id === f.id ? flow.at : null;
         const hops = f.path.length - 1;
@@ -322,6 +374,8 @@ export function Inspector({
   stepId,
   flow,
   onFlow,
+  recording,
+  onRecording,
   change,
   onSelect,
   onDelete,
@@ -331,6 +385,8 @@ export function Inspector({
   stepId: string;
   flow: FlowAt | null;
   onFlow: (f: FlowAt | null) => void;
+  recording: string[] | null;
+  onRecording: (r: string[] | null) => void;
   change: Change;
   onSelect: (id: string | null) => void;
   onDelete: (id: string) => void;
@@ -477,7 +533,7 @@ export function Inspector({
           </section>
         )}
 
-        <Flows design={design} upTo={stepNo(stepId) - 1} flow={flow} onFlow={onFlow} change={change} />
+        <Flows design={design} stepId={stepId} flow={flow} onFlow={onFlow} recording={recording} onRecording={onRecording} change={change} />
 
         <Comments design={design} step={stepId} change={change} onSelect={onSelect} />
 
@@ -806,24 +862,80 @@ export function ReviewBar({
   );
 }
 
-export function PresentBar({ design, viewIndex, maxIndex, onView, onExit }: { design: Design; viewIndex: number; maxIndex: number; onView: (i: number) => void; onExit: () => void }) {
+/** While a flow plays, the arrows walk its hops instead of the steps. */
+export function PresentBar({
+  design,
+  viewIndex,
+  maxIndex,
+  onView,
+  onExit,
+  flow,
+  onFlow,
+}: {
+  design: Design;
+  viewIndex: number;
+  maxIndex: number;
+  onView: (i: number) => void;
+  onExit: () => void;
+  flow: FlowAt | null;
+  onFlow: (f: FlowAt | null) => void;
+}) {
   const step = design.steps[viewIndex];
+  const idx = m.stepIndex(design);
+  const flows = design.flows.filter((f) => idx.get(f.step)! <= viewIndex);
+  const playing = flow && flows.find((f) => f.id === flow.id);
+  const labelOf = (id: string) => design.components.find((c) => c.id === id)?.label ?? id;
+  const hops = playing ? playing.path.length - 1 : 0;
   return (
     <div className="present-bar" role="region" aria-label="Presentation">
       <span className="present-no">
-        {pad(viewIndex + 1)}
-        <span>/{pad(design.steps.length)}</span>
+        {pad((playing ? flow.at : viewIndex) + 1)}
+        <span>/{pad(playing ? hops : design.steps.length)}</span>
       </span>
       <div className="present-text">
-        <strong>{step.title}</strong>
-        {step.summary && <span>{step.summary}</span>}
+        {playing ? (
+          <>
+            <strong>{playing.title}</strong>
+            <span>
+              {labelOf(playing.path[flow.at])} → {labelOf(playing.path[flow.at + 1])}
+            </span>
+          </>
+        ) : (
+          <>
+            <strong>{step.title}</strong>
+            {step.summary && <span>{step.summary}</span>}
+          </>
+        )}
       </div>
-      <button className="icon-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} aria-label="Previous step">
-        ‹
-      </button>
-      <button className="icon-btn" onClick={() => onView(viewIndex + 1)} disabled={viewIndex >= maxIndex} aria-label="Next step">
-        ›
-      </button>
+      {flows.length > 0 && (
+        <select className="present-flows" value={playing?.id ?? ''} onChange={(e) => (onFlow(e.target.value ? { id: e.target.value, at: 0 } : null), e.target.blur())} aria-label="Play a flow">
+          <option value="">Flows…</option>
+          {flows.map((f) => (
+            <option key={f.id} value={f.id}>
+              ▶ {f.title}
+            </option>
+          ))}
+        </select>
+      )}
+      {playing ? (
+        <>
+          <button className="icon-btn" onClick={() => onFlow({ id: playing.id, at: flow.at - 1 })} disabled={flow.at === 0} aria-label="Previous hop">
+            ‹
+          </button>
+          <button className="icon-btn" onClick={() => onFlow({ id: playing.id, at: flow.at + 1 })} disabled={flow.at >= hops - 1} aria-label="Next hop">
+            ›
+          </button>
+        </>
+      ) : (
+        <>
+          <button className="icon-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} aria-label="Previous step">
+            ‹
+          </button>
+          <button className="icon-btn" onClick={() => onView(viewIndex + 1)} disabled={viewIndex >= maxIndex} aria-label="Next step">
+            ›
+          </button>
+        </>
+      )}
       <button className="text-btn" onClick={onExit}>
         Exit <kbd>Esc</kbd>
       </button>

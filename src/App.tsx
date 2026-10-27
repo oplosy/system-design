@@ -45,6 +45,22 @@ const GAP = 12;
 
 type Editing = { id: string; at: Pt; value: string; multiline: boolean };
 
+/** Removed components drawn where they stood; one that a live part now covers moves down until it is clear. */
+function ghosts(removed: NonNullable<Design['steps'][number]['removed']>, live: Design['components']) {
+  const rect = (type: ComponentType, p: { x: number; y: number }) => ({ ...p, w: SHAPES[type].w, h: SHAPES[type].h });
+  const taken = live.filter((c) => c.position).map((c) => rect(c.type, c.position!));
+  const hits = (a: ReturnType<typeof rect>) => taken.some((b) => a.x < b.x + b.w + 20 && b.x < a.x + a.w + 20 && a.y < b.y + b.h + 20 && b.y < a.y + a.h + 20);
+  return removed.flatMap((r): Node[] => {
+    if (!r.type || !r.position) return [];
+    const at = rect(r.type, r.position);
+    for (let i = 0; i < 50 && hits(at); i++) at.y += at.h + 20;
+    taken.push(at);
+    return [
+      { id: `ghost-${r.id}`, type: 'component', position: { x: at.x, y: at.y }, selectable: false, draggable: false, connectable: false, deletable: false, data: { type: r.type, label: r.label, removed: true, unseen: false, faded: false } },
+    ];
+  });
+}
+
 function download(url: string, name: string) {
   const a = document.createElement('a');
   a.href = url;
@@ -118,6 +134,8 @@ function Shell() {
   const [diff, setDiff] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const [flow, setFlow] = useState<FlowAt | null>(null);
+  // Stops of a flow being drawn by clicking parts on the sheet.
+  const [recording, setRecording] = useState<string[] | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [theme, setThemeState] = useState<Theme>(loadTheme);
   const [docks, setDocks] = useState<Docks>(loadDocks);
@@ -321,7 +339,7 @@ function Shell() {
     // Reviewing, the diff view and presenting all put this step's items in front; the diff view also outlines them.
     const focus = reviewing || diff || presenting;
     // A playing flow dims everything off its path and numbers its hops.
-    const playing = flow && design.flows.find((f) => f.id === flow.id && visibleStep(f.step));
+    const playing = recording?.length ? { path: recording } : flow && design.flows.find((f) => f.id === flow.id && visibleStep(f.step));
     const onPath = new Set(playing?.path);
     const hops = new Map<string, number[]>();
     let hopOn: string | undefined;
@@ -329,7 +347,7 @@ function Shell() {
       const c = m.hopConnection(design, playing.path[i], to);
       if (!c) return;
       hops.set(c.id, [...(hops.get(c.id) ?? []), i + 1]);
-      if (i === flow!.at) hopOn = c.id;
+      if (i === (recording ? recording.length - 2 : flow!.at)) hopOn = c.id;
     });
     // The diff also outlines what this step changed and draws what it removed as ghosts.
     const changed = new Set(current.changed?.map((c) => c.id));
@@ -371,11 +389,7 @@ function Shell() {
             data: { kind: b.kind, label: b.label, detail: b.detail, w: box.w, h: box.h, ...flags(b.step, b.id) },
           };
         }),
-      ...(diff ? current.removed ?? [] : []).flatMap((r): Node[] =>
-        r.type && r.position
-          ? [{ id: `ghost-${r.id}`, type: 'component', position: r.position, selectable: false, draggable: false, connectable: false, deletable: false, data: { type: r.type, label: r.label, removed: true, unseen: false, faded: false } }]
-          : [],
-      ),
+      ...ghosts(diff ? current.removed ?? [] : [], design.components.filter((c) => visibleStep(c.step))),
       ...design.components.filter((c) => visibleStep(c.step)).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech }, c.step)),
       ...design.notes.filter((n) => visibleStep(n.step)).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
       ...design.decisions.filter((x) => visibleStep(x.step)).map((x) => node(x.id, 'decision', x.position, { title: x.title, why: x.why }, x.step)),
@@ -407,7 +421,7 @@ function Shell() {
       ...design.decisions.flatMap((x) => x.links.filter((l) => both(l, x.id)).map((l) => link(`link-${x.id}-${l}`, l, x.id, x.step))),
     ];
     return { nodes, edges, boxes };
-  }, [design, current, view, selected, diff, presenting, flow]);
+  }, [design, current, view, selected, diff, presenting, flow, recording]);
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const lastSelected = useRef(selected);
@@ -653,9 +667,17 @@ function Shell() {
       .catch((e) => setError(errorText(e)));
   };
 
+  // Drawing a flow clears any selection so clicks only add stops.
+  const startRecording = (r: string[] | null) => {
+    setFlow(null);
+    setSelected(null);
+    setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)));
+    setRecording(r);
+  };
   const present = (on: boolean) => {
     setPresenting(on);
     setSelected(null);
+    setRecording(null);
     setEditing(null);
     if (on) document.documentElement.requestFullscreen?.().catch(() => {});
     else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -747,7 +769,14 @@ function Shell() {
       const t = e.target as HTMLElement;
       if (creating) return;
       if (presenting) {
-        if (['ArrowRight', ' ', 'PageDown'].includes(e.key)) goTo(view + 1);
+        const playing = flow && design?.flows.find((f) => f.id === flow.id && m.stepIndex(design).get(f.step)! <= view);
+        if (playing && flow) {
+          const last = playing.path.length - 2;
+          if (['ArrowRight', ' ', 'PageDown'].includes(e.key)) setFlow({ ...flow, at: Math.min(flow.at + 1, last) });
+          else if (['ArrowLeft', 'PageUp'].includes(e.key)) setFlow({ ...flow, at: Math.max(flow.at - 1, 0) });
+          else if (e.key === 'Escape') setFlow(null);
+          else return;
+        } else if (['ArrowRight', ' ', 'PageDown'].includes(e.key)) goTo(view + 1);
         else if (['ArrowLeft', 'PageUp'].includes(e.key)) goTo(view - 1);
         else if (e.key === 'Escape') present(false);
         else return;
@@ -774,7 +803,10 @@ function Shell() {
         return;
       }
       if (e.altKey) return;
-      if (e.key === 'Escape') setSelected(null);
+      if (e.key === 'Escape') {
+        setSelected(null);
+        setRecording(null);
+      }
       if (selected) return;
       if (e.key === 'ArrowRight') {
         e.preventDefault();
@@ -867,7 +899,13 @@ function Shell() {
                   nodeTypes={nodeTypes}
                   edgeTypes={edgeTypes}
                   onNodesChange={onNodesChange}
-                  onNodeClick={(e, n) => !(e.shiftKey || e.ctrlKey || e.metaKey) && setSelected(n.id)}
+                  onNodeClick={(e, n) => {
+                    if (recording) {
+                      // Each stop must follow a connection from the last one.
+                      const last = recording.at(-1);
+                      if (n.type === 'component' && (!last || (last !== n.id && m.hopConnection(design, last, n.id)))) setRecording([...recording, n.id]);
+                    } else if (!(e.shiftKey || e.ctrlKey || e.metaKey)) setSelected(n.id);
+                  }}
                   onEdgeClick={(_, e) => e.data?.kind === 'flow' && setSelected(e.id)}
                   onNodeDoubleClick={(e, n) => startEdit(n.id, screenToFlowPosition({ x: e.clientX, y: e.clientY }))}
                   onEdgeDoubleClick={(e, ed) => ed.data?.kind === 'flow' && startEdit(ed.id, screenToFlowPosition({ x: e.clientX, y: e.clientY }))}
@@ -882,7 +920,7 @@ function Shell() {
                   multiSelectionKeyCode={['Control', 'Meta', 'Shift']}
                   nodesDraggable={!presenting}
                   nodesConnectable={!presenting}
-                  elementsSelectable={!presenting}
+                  elementsSelectable={!presenting && !recording}
                   zoomOnDoubleClick={false}
                   connectionMode={ConnectionMode.Loose}
                   colorMode={theme}
@@ -909,7 +947,7 @@ function Shell() {
                 </ReactFlow>
               </EdgeContext.Provider>
               {presenting ? (
-                <PresentBar design={design} viewIndex={view} maxIndex={maxIndex} onView={goTo} onExit={() => present(false)} />
+                <PresentBar design={design} viewIndex={view} maxIndex={maxIndex} onView={goTo} onExit={() => present(false)} flow={flow} onFlow={setFlow} />
               ) : (
                 <ReviewBar
                   design={design}
@@ -930,7 +968,7 @@ function Shell() {
             )}
             {docks.right.open && (
               <Dock side="right" width={docks.right.w} onResize={(w) => resizeDock('right', w)} onReset={() => resizeDock('right', DOCKS.right.w)}>
-                <Inspector design={design} selected={selected} stepId={current.id} flow={flow} onFlow={setFlow} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
+                <Inspector design={design} selected={selected} stepId={current.id} flow={flow} onFlow={setFlow} recording={recording} onRecording={startRecording} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
               </Dock>
             )}
           </div>

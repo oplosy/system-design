@@ -185,6 +185,8 @@ export const StepSchema = z.object({
   removed: z.array(z.object({ id: Id, label: z.string(), type: z.enum(COMPONENT_TYPES).optional(), position: Position.optional() })).optional(),
   /** Fields an agent changed in this step on items from earlier steps, with the value before the step. */
   changed: z.array(z.object({ id: Id, field: z.string(), from: z.string().optional(), to: z.string().optional() })).optional(),
+  /** Earlier items as they were before this step's agent edits touched them, so reverting the step can put them back. */
+  before: z.array(z.object({ kind: z.enum(['components', 'connections', 'notes', 'decisions', 'boundaries', 'flows']), item: z.record(z.string(), z.unknown()) })).optional(),
 });
 
 export const ComponentSchema = z.object({

@@ -197,15 +197,43 @@ const items = (d: Design) => [...d.components, ...d.connections, ...d.notes, ...
 // Agent edits to earlier items are recorded on the step they land in (latest by default), which reopens for review.
 // Items that step added itself need no record: the diff already shows them as new.
 
-/** Removes an item as an agent edit, remembering it on the step so its diff can show what went. */
+const KINDS = ['components', 'connections', 'notes', 'decisions', 'boundaries', 'flows'] as const;
+type Kind = (typeof KINDS)[number];
+type Snapshot = Pick<Design, Kind>;
+type Item = { id: string; step: string };
+
+const snapshot = (d: Design): Snapshot => structuredClone(Object.fromEntries(KINDS.map((k) => [k, d[k]])) as Snapshot);
+
+function nameOf(d: Design, x: Snapshot[Kind][number]) {
+  return 'from' in x ? `${labelOf(d, x.from)} → ${labelOf(d, x.to)}` : 'label' in x ? x.label : 'title' in x ? x.title : x.text;
+}
+
+/** Keeps the first earlier state of every item `s` touched, so reverting the step can restore it. */
+function remember(d: Design, s: Design['steps'][number], was: Snapshot) {
+  for (const kind of KINDS) {
+    for (const old of was[kind] as Item[]) {
+      if (old.step === s.id || s.before?.some((b) => b.item.id === old.id)) continue;
+      const now = (d[kind] as Item[]).find((x) => x.id === old.id);
+      if (now && JSON.stringify(now) === JSON.stringify(old)) continue;
+      (s.before ??= []).push({ kind, item: old });
+    }
+  }
+}
+
+/** Removes an item as an agent edit, remembering on the step what went with it (lines to a removed part included). */
 export function removeTracked(d: Design, id: string, step?: string) {
-  const x = items(d).find((i) => i.id === id);
-  if (!x) throw new Error(`unknown item "${id}"`);
+  if (!items(d).some((i) => i.id === id)) throw new Error(`unknown item "${id}"`);
   const s = d.steps.find((t) => t.id === useStep(d, step, true))!;
-  const label = 'from' in x ? `${labelOf(d, x.from)} → ${labelOf(d, x.to)}` : 'label' in x ? x.label : 'title' in x ? x.title : x.text;
+  const was = snapshot(d);
+  const names = new Map(KINDS.flatMap((k) => (was[k] as Snapshot[Kind]).map((x) => [x.id, nameOf(d, x)] as const)));
   removeItem(d, id);
-  if (x.step === s.id) return;
-  (s.removed ??= []).push({ id, label, type: 'type' in x ? x.type : undefined, position: 'position' in x ? x.position : undefined });
+  for (const kind of KINDS) {
+    for (const x of was[kind] as Snapshot[Kind]) {
+      if (x.step === s.id || (d[kind] as Item[]).some((i) => i.id === x.id)) continue;
+      (s.removed ??= []).push({ id: x.id, label: names.get(x.id)!, type: 'type' in x ? x.type : undefined, position: 'position' in x ? x.position : undefined });
+    }
+  }
+  remember(d, s, was);
 }
 
 /** Changes fields of a component or boundary as an agent edit; each field keeps its value from before the step. */
@@ -213,6 +241,7 @@ export function updateTracked(d: Design, id: string, fields: Record<string, stri
   const x = [...d.components, ...d.boundaries].find((i) => i.id === id) as Record<string, unknown> | undefined;
   if (!x) throw new Error(`unknown component or boundary "${id}"`);
   const s = d.steps.find((t) => t.id === useStep(d, step, true))!;
+  const was = snapshot(d);
   for (const [field, to] of Object.entries(fields)) {
     const from = x[field] as string | undefined;
     if (from === to) continue;
@@ -225,15 +254,43 @@ export function updateTracked(d: Design, id: string, fields: Record<string, stri
   }
   // A field changed back to where it started is no change.
   s.changed = s.changed?.filter((c) => c.from !== c.to);
+  remember(d, s, was);
 }
 
-/** Removes everything a step added. The step goes too, unless it is the only one. */
+/** Drops references to items that are gone, e.g. after restoring items from an older state. */
+function dropDangling(d: Design) {
+  const components = new Set(d.components.map((c) => c.id));
+  const boundaries = new Set(d.boundaries.map((b) => b.id));
+  for (const c of d.components) if (c.boundary && !boundaries.has(c.boundary)) c.boundary = undefined;
+  for (const b of d.boundaries) if (b.parent && (!boundaries.has(b.parent) || boundaryTree(d, b.id).has(b.parent))) b.parent = undefined;
+  d.connections = d.connections.filter((c) => components.has(c.from) && components.has(c.to));
+  for (const n of d.notes) if (n.attachTo && !components.has(n.attachTo)) n.attachTo = undefined;
+  for (const x of d.decisions) x.links = x.links.filter((l) => components.has(l));
+  d.flows = d.flows
+    .map((f) => ({ ...f, path: f.path.filter((p) => components.has(p)).filter((p, i, a) => p !== a[i - 1]) }))
+    .filter((f) => f.path.length >= 2);
+}
+
+/** Undoes a step: removes what it added and puts back what its agent edits removed or changed. The step goes too, unless it is the only one. */
 export function revertStep(d: Design, id: string) {
-  if (!d.steps.some((s) => s.id === id)) throw new Error(`unknown step "${id}"`);
+  const s = d.steps.find((t) => t.id === id);
+  if (!s) throw new Error(`unknown step "${id}"`);
   for (const x of items(d)) if (x.step === id && items(d).some((i) => i.id === x.id)) removeItem(d, x.id);
+  for (const { kind, item } of s.before ?? []) {
+    const list = d[kind] as unknown as Item[];
+    const at = list.findIndex((x) => x.id === item.id);
+    // An id taken again by a later step's item stays with that item.
+    if (at < 0 && items(d).some((x) => x.id === item.id)) continue;
+    if (at >= 0 && list[at].step !== item.step) continue;
+    if (at >= 0) list[at] = item as unknown as Item;
+    else list.push(item as unknown as Item);
+  }
+  dropDangling(d);
   if (d.steps.length > 1) {
-    d.steps = d.steps.filter((s) => s.id !== id);
+    d.steps = d.steps.filter((t) => t.id !== id);
     d.comments = d.comments.filter((c) => c.step !== id);
+  } else {
+    s.removed = s.changed = s.before = undefined;
   }
 }
 
@@ -298,9 +355,9 @@ export function resolveFeedback(d: Design, input: { comments?: string[]; step?: 
   return [...touched];
 }
 
-export type Clip = Pick<Design, 'components' | 'connections' | 'notes' | 'decisions' | 'boundaries'>;
+export type Clip = Pick<Design, 'components' | 'connections' | 'notes' | 'decisions' | 'boundaries'> & { flows?: Design['flows'] };
 
-/** Copies items for pasting: a boundary brings everything inside it, and connections come along when both ends do. */
+/** Copies items for pasting: a boundary brings everything inside it, and connections and flows come along when all their stops do. */
 export function copyItems(d: Design, ids: string[]): Clip {
   const boundaries = new Set<string>();
   for (const id of ids) if (d.boundaries.some((b) => b.id === id)) for (const b of boundaryTree(d, id)) boundaries.add(b);
@@ -312,6 +369,7 @@ export function copyItems(d: Design, ids: string[]): Clip {
     connections: d.connections.filter((c) => cIds.has(c.from) && cIds.has(c.to)),
     notes: d.notes.filter((n) => ids.includes(n.id)),
     decisions: d.decisions.filter((x) => ids.includes(x.id)),
+    flows: d.flows.filter((f) => f.path.every((p) => cIds.has(p))),
   });
 }
 
@@ -340,6 +398,7 @@ export function pasteItems(d: Design, clip: Clip, { step, offset }: { step: stri
   }
   const nodes = [...ids.values()];
   for (const c of clip.connections) d.connections.push({ ...c, id: fresh(c.id), from: ids.get(c.from)!, to: ids.get(c.to)!, step });
+  for (const f of clip.flows ?? []) d.flows.push({ ...f, id: fresh(f.id), path: f.path.map((p) => ids.get(p)!), step });
   for (const n of clip.notes) {
     nodes.push(fresh(n.id));
     d.notes.push({ ...n, id: nodes.at(-1)!, attachTo: isComponent(map(n.attachTo)) ? map(n.attachTo) : undefined, position: shift(n.position), step });
