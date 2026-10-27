@@ -7,12 +7,19 @@ import { edgeGeometry, type Pt, type Route } from './edges.ts';
 import { DECISION_SIZE, NOTE_COLOR, NOTE_SIZE, SHAPES, drawShape, gen, hash, options, toPaths } from './shapes.ts';
 
 export const SketchContext = createContext(true);
-/** What edges and nodes need from the app: whether editing is allowed, how to save a bend, start a label edit or delete. */
-export const EdgeContext = createContext<{ locked: boolean; onBend: (id: string, bend: number | undefined) => void; onEditLabel: (id: string, at: Pt) => void; onDelete: (id: string) => void }>({
+/** What edges and nodes need from the app: whether editing is allowed, how to save a bend, start a label edit, delete, or open a part's inner design. */
+export const EdgeContext = createContext<{
+  locked: boolean;
+  onBend: (id: string, bend: number | undefined) => void;
+  onEditLabel: (id: string, at: Pt) => void;
+  onDelete: (id: string) => void;
+  onOpen: (design: string, via: string) => void;
+}>({
   locked: true,
   onBend: () => {},
   onEditLabel: () => {},
   onDelete: () => {},
+  onOpen: () => {},
 });
 
 /** A delete button over the top-right corner, shown while this node is the only one selected. */
@@ -33,7 +40,7 @@ function Trash() {
 
 /** added / changed / removed: how the step diff draws it; comments: open review comments on the item; issues: lint warnings. */
 type Common = { unseen: boolean; faded: boolean; added?: boolean; changed?: boolean; removed?: boolean; comments?: number; issues?: string[] };
-export type ComponentNode = Node<Common & { type: ComponentType; label: string; tech?: string }, 'component'>;
+export type ComponentNode = Node<Common & { type: ComponentType; label: string; tech?: string; detail?: string }, 'component'>;
 export type NoteNode = Node<Common & { text: string }, 'note'>;
 export type DecisionNode = Node<Common & { title: string; why: string }, 'decision'>;
 export type BoundaryNode = Node<Common & { kind: BoundaryKind; label: string; detail?: string; w: number; h: number }, 'boundary'>;
@@ -75,6 +82,7 @@ function Frame({ w, h, data, children }: { w: number; h: number; data: Common; c
 
 export const ComponentNodeView = memo(function ComponentNodeView({ id, data }: NodeProps<ComponentNode>) {
   const sketch = useContext(SketchContext);
+  const { onOpen } = useContext(EdgeContext);
   const spec = SHAPES[data.type];
   const paths = useMemo(() => drawShape(data.type, sketch, hash(id)), [data.type, sketch, id]);
   return (
@@ -86,6 +94,13 @@ export const ComponentNodeView = memo(function ComponentNodeView({ id, data }: N
         <div>{data.label}</div>
         {data.tech && <div className="node-tech">{data.tech}</div>}
       </div>
+      {data.detail && (
+        <button className="node-open nodrag" onClick={() => onOpen(data.detail!, data.label)} title="Open what is inside" aria-label={`Open the inside of ${data.label}`}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 3H3v10h10v-3M9 3h4v4M13 3L7.5 8.5" />
+          </svg>
+        </button>
+      )}
     </Frame>
   );
 });

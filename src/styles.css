@@ -866,6 +866,49 @@ kbd.lead {
 
 /* Review bar: where the walkthrough is, what this step is, and what to do with it. */
 
+/* Where a drilled-into design was opened from. */
+.trail {
+  position: absolute;
+  top: 64px;
+  left: calc(var(--left) + 56px);
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - var(--left) - var(--right) - 240px);
+  font-size: 13px;
+}
+
+.trail > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Opens the design of what is inside a part. */
+.node-open {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--panel);
+  background: var(--select);
+  box-shadow: 0 0 0 2px var(--canvas);
+  cursor: pointer;
+}
+
+.node-open:focus-visible {
+  outline: 2px solid var(--select);
+  outline-offset: 2px;
+}
+
 /* A flow as a sequence diagram, floating over the sheet. */
 .sequence {
   position: absolute;

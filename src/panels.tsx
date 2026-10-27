@@ -420,6 +420,9 @@ export function Inspector({
   recording,
   onRecording,
   onSequence,
+  designs,
+  onOpenInside,
+  onCreateInside,
   change,
   onSelect,
   onDelete,
@@ -432,6 +435,9 @@ export function Inspector({
   recording: string[] | null;
   onRecording: (r: string[] | null) => void;
   onSequence: (id: string) => void;
+  designs: { id: string; title: string }[];
+  onOpenInside: (c: Design['components'][number]) => void;
+  onCreateInside: (componentId: string) => void;
   change: Change;
   onSelect: (id: string | null) => void;
   onDelete: (id: string) => void;
@@ -650,6 +656,34 @@ export function Inspector({
                 <InsideSelect design={design} value={component.boundary} onPick={placeIn} />
               </Prop>
             )}
+            <Prop label="Opens">
+              {component.detail ? (
+                <>
+                  <button className="ref" onClick={() => onOpenInside(component)} title="Open the design of what is inside">
+                    {designs.find((x) => x.id === component.detail)?.title ?? component.detail} ↗
+                  </button>
+                  <button className="text-btn" onClick={() => edit((d: Design) => d.components, { detail: undefined })}>
+                    Unlink
+                  </button>
+                </>
+              ) : (
+                <>
+                  <select className="ed" value="" onChange={(e) => e.target.value && edit((d: Design) => d.components, { detail: e.target.value })} aria-label="Design that shows the inside">
+                    <option value="">Nothing</option>
+                    {designs
+                      .filter((x) => x.id !== design.id)
+                      .map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.title}
+                        </option>
+                      ))}
+                  </select>
+                  <button className="text-btn" onClick={() => onCreateInside(component.id)} title="Start an empty design for what is inside and open it">
+                    New inside
+                  </button>
+                </>
+              )}
+            </Prop>
           </>
         )}
         {boundary && (

@@ -197,6 +197,8 @@ export const ComponentSchema = z.object({
   description: z.string().optional(),
   /** The innermost boundary this component sits in. */
   boundary: Id.optional(),
+  /** Id of another design that shows what is inside this component (C4-style drill-down). */
+  detail: Id.optional(),
   position: Position.optional(),
   step: Id,
 });
@@ -314,6 +316,7 @@ export const DesignSchema = z
       if (c.target && !itemIds.has(c.target)) issue(`comment "${c.id}" is about unknown "${c.target}"`);
     }
     const componentIds = new Set(d.components.map((c) => c.id));
+    for (const c of d.components) if (c.detail === d.id) issue(`component "${c.id}" opens its own design`);
     for (const c of d.connections) {
       if (!componentIds.has(c.from)) issue(`connection "${c.id}" has unknown from "${c.from}"`);
       if (!componentIds.has(c.to)) issue(`connection "${c.id}" has unknown to "${c.to}"`);

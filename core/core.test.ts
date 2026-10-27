@@ -42,6 +42,10 @@ test('validation rejects dangling references and unsafe ids', async () => {
   await assert.rejects(store.writeDesign(x), /unknown to "ghost"/);
   await assert.rejects(store.readDesign('../etc/passwd'), /invalid id/);
   assert.throws(() => m.connect(x, { from: 'api', to: 'ghost' }), /unknown component/);
+  assert.throws(() => m.addComponent(x, { type: 'service', label: 'Loop', detail: 'demo' }), /own design/);
+  x.connections = x.connections.filter((c) => c.id !== 'bad');
+  x.components[0].detail = 'demo';
+  await assert.rejects(store.writeDesign(x), /opens its own design/);
 });
 
 test('boundaries nest, refuse cycles and hand their contents up when removed', async () => {

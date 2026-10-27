@@ -139,6 +139,8 @@ function Shell() {
   const [recording, setRecording] = useState<string[] | null>(null);
   // The flow shown as a sequence diagram over the sheet.
   const [sequence, setSequence] = useState<string | null>(null);
+  // Designs left by opening a part's inside, outermost first, so the breadcrumb can lead back.
+  const [trail, setTrail] = useState<{ id: string; title: string; via: string }[]>([]);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [theme, setThemeState] = useState<Theme>(loadTheme);
   const [docks, setDocks] = useState<Docks>(loadDocks);
@@ -394,7 +396,7 @@ function Shell() {
           };
         }),
       ...ghosts(diff ? current.removed ?? [] : [], design.components.filter((c) => visibleStep(c.step))),
-      ...design.components.filter((c) => visibleStep(c.step)).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech }, c.step)),
+      ...design.components.filter((c) => visibleStep(c.step)).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech, detail: c.detail }, c.step)),
       ...design.notes.filter((n) => visibleStep(n.step)).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
       ...design.decisions.filter((x) => visibleStep(x.step)).map((x) => node(x.id, 'decision', x.position, { title: x.title, why: x.why }, x.step)),
     ];
@@ -624,8 +626,45 @@ function Shell() {
       if (dec) dec.title = v;
     });
   };
+  /** Saves a pending edit now, so switching designs cannot drop it. */
+  const settle = async () => {
+    clearTimeout(saveState.current.timer);
+    if (saveState.current.pending) await flush();
+  };
+  const drill = async (target: string, via: string) => {
+    if (!design) return;
+    await settle();
+    setTrail((t) => [...t, { id: design.id, title: design.title, via }]);
+    setId(target);
+  };
+  const backTo = async (i: number) => {
+    await settle();
+    setId(trail[i].id);
+    setTrail(trail.slice(0, i));
+  };
+  /** Starts an empty design for what is inside a part, links the part to it and opens it. */
+  const createInside = async (componentId: string) => {
+    const c = design?.components.find((x) => x.id === componentId);
+    if (!design || !c) return;
+    const base = m.slugify(`${design.id}-${c.id}`);
+    let target = base;
+    for (let i = 2; designs.some((x) => x.id === target); i++) target = `${base}-${i}`;
+    try {
+      await api.create({ id: target, title: c.label });
+    } catch (e) {
+      setError(errorText(e));
+      return;
+    }
+    change((d) => {
+      const x = d.components.find((i) => i.id === componentId);
+      if (x) x.detail = target;
+    });
+    refreshLists();
+    await drill(target, c.label);
+  };
   const edgeActions = {
     locked: presenting,
+    onOpen: (target: string, via: string) => void drill(target, via),
     onBend: (id: string, bend: number | undefined) =>
       change((d) => {
         const c = d.connections.find((x) => x.id === id);
@@ -723,7 +762,7 @@ function Shell() {
       backgroundColor: getComputedStyle(canvasRef.current!).getPropertyValue('--canvas').trim(),
       style: { width: `${width}px`, height: `${height}px`, transform: `translate(${pad - b.x}px, ${pad - b.y}px) scale(1)` },
       // Leave out editing aids and review markers: the image is for docs, not for review.
-      filter: (n: HTMLElement) => !['inline-edit', 'bend-handle', 'unseen-dot', 'comment-badge', 'lint-badge'].some((c) => n.classList?.contains(c)),
+      filter: (n: HTMLElement) => !['inline-edit', 'bend-handle', 'unseen-dot', 'comment-badge', 'lint-badge', 'node-open'].some((c) => n.classList?.contains(c)),
     };
     try {
       download(kind === 'png' ? await toPng(el, { ...options, pixelRatio: 2 }) : await toSvg(el, options), `${design.id}.${kind}`);
@@ -854,7 +893,7 @@ function Shell() {
             <span className="wordmark">
               system<span>/</span>design
             </span>
-            {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={setId} meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined} />}
+            {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={(x) => (setTrail([]), setId(x))} meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined} />}
           </div>
           {design && (
             <FindBox design={design} visible={nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id))} onPick={findPick} inputRef={findRef} />
@@ -951,6 +990,20 @@ function Shell() {
                   <ViewportPortal>{editing && <InlineEdit key={editing.id} {...editing} onDone={finishEdit} />}</ViewportPortal>
                 </ReactFlow>
               </EdgeContext.Provider>
+              {trail.length > 0 && !presenting && (
+                <nav className="trail" aria-label="Opened from">
+                  {trail.map((t, i) => (
+                    <span key={`${t.id}-${i}`}>
+                      <button className="text-btn" onClick={() => void backTo(i)} title={`Back to ${t.title}`}>
+                        {t.title}
+                      </button>
+                      {/* The part's name only when the design it opened is called something else. */}
+                      <span className="quiet">› {t.via !== (trail[i + 1]?.title ?? design.title) && `${t.via} ›`}</span>
+                    </span>
+                  ))}
+                  <strong>{design.title}</strong>
+                </nav>
+              )}
               {(() => {
                 const f = sequence && design.flows.find((x) => x.id === sequence);
                 return f && !presenting && <SequenceView design={design} flow={f} at={flow?.id === f.id ? flow.at : undefined} onClose={() => setSequence(null)} />;
@@ -977,7 +1030,7 @@ function Shell() {
             )}
             {docks.right.open && (
               <Dock side="right" width={docks.right.w} onResize={(w) => resizeDock('right', w)} onReset={() => resizeDock('right', DOCKS.right.w)}>
-                <Inspector design={design} selected={selected} stepId={current.id} flow={flow} onFlow={setFlow} recording={recording} onRecording={startRecording} onSequence={setSequence} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
+                <Inspector design={design} selected={selected} stepId={current.id} flow={flow} onFlow={setFlow} recording={recording} onRecording={startRecording} onSequence={setSequence} designs={designs} onOpenInside={(c) => void drill(c.detail!, c.label)} onCreateInside={(c) => void createInside(c)} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
               </Dock>
             )}
           </div>

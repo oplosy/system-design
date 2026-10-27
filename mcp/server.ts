@@ -14,6 +14,7 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Component types: ${COMPONENT_TYPES.join(', ')}.
 - Group components with boundaries (${BOUNDARY_KINDS.join(', ')}): a box drawn around its members, nestable through parent (region > vpc > subnet, site > vlan). Give each component its innermost boundary; the box sizes itself.
 - Show the key request paths as flows ("User uploads a photo"): component ids in order, each hop along a connection (either way, so responses can walk back).
+- Keep a big design readable with drill-down: create a design for a service's insides and set the service's detail to its id.
 - Put expected load (qps) and one-way latency (ms) on the lines that matter; a flow then shows its total time.
 - After a step, run lint and fix what it finds or say in a note why it is fine.
 - Start from list_designs; call get_design before editing an existing one.
@@ -30,6 +31,7 @@ const componentFields = {
   tech: z.string().optional().describe('Concrete technology, e.g. "Redis", "PostgreSQL"'),
   description: z.string().optional(),
   boundary: z.string().optional().describe('Id of the innermost boundary this component sits in'),
+  detail: z.string().optional().describe('Id of another design that shows what is inside this component; create it first with create_design'),
 };
 const connectionFields = {
   from: z.string().describe('Component id'),
@@ -185,7 +187,7 @@ server.registerTool(
   'update_component',
   {
     description: 'Change a component. The change is recorded on the step (latest by default) for review, with its old values',
-    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), step },
+    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), detail: componentFields.detail, step },
   },
   async ({ design: designId, id, step, ...fields }) =>
     edit(designId, (d) => {
