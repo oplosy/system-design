@@ -141,6 +141,8 @@ function Shell() {
   const [sequence, setSequence] = useState<string | null>(null);
   // Designs left by opening a part's inside, outermost first, so the breadcrumb can lead back.
   const [trail, setTrail] = useState<{ id: string; title: string; via: string }[]>([]);
+  // Which option of a step with options is on the sheet; its first until another is chosen.
+  const [optionView, setOptionView] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Editing | null>(null);
   const [theme, setThemeState] = useState<Theme>(loadTheme);
   const [docks, setDocks] = useState<Docks>(loadDocks);
@@ -337,15 +339,25 @@ function Shell() {
   const view = Math.min(viewIndex, maxIndex);
   const current = design?.steps[view];
 
+  const inOption = useCallback(
+    (x: { step: string; option?: string }) => !x.option || x.option === (optionView[x.step] ?? design?.steps.find((s) => s.id === x.step)?.options?.[0].id),
+    [optionView, design],
+  );
+  const pickOption = (step: string, option: string) => {
+    change((d) => m.pickOption(d, step, option));
+    setSelected(null);
+  };
+
   const derived = useMemo(() => {
     if (!design || !current) return { nodes: [] as Node[], edges: [] as FlowEdge[], boxes: new Map() as ReturnType<typeof boundaryBoxes> };
     const idx = m.stepIndex(design);
     const visibleStep = (step: string) => idx.get(step)! <= view;
+    const onSheet = (x: { step: string; option?: string }) => visibleStep(x.step) && inOption(x);
     const reviewing = !current.seen;
     // Reviewing, the diff view and presenting all put this step's items in front; the diff view also outlines them.
     const focus = reviewing || diff || presenting;
     // A playing flow dims everything off its path and numbers its hops.
-    const playing = recording?.length ? { path: recording } : flow && design.flows.find((f) => f.id === flow.id && visibleStep(f.step));
+    const playing = recording?.length ? { path: recording } : flow && design.flows.find((f) => f.id === flow.id && onSheet(f));
     const onPath = new Set(playing?.path);
     const hops = new Map<string, number[]>();
     let hopOn: string | undefined;
@@ -365,7 +377,7 @@ function Shell() {
     });
     const issues = new Map<string, string[]>();
     if (!presenting) {
-      const seen = <T extends { step: string }>(xs: T[]) => xs.filter((x) => visibleStep(x.step));
+      const seen = <T extends { step: string; option?: string }>(xs: T[]) => xs.filter(onSheet);
       const now = { ...design, components: seen(design.components), connections: seen(design.connections), decisions: seen(design.decisions), boundaries: seen(design.boundaries) };
       for (const i of lint(now)) issues.set(i.id, [...(issues.get(i.id) ?? []), i.message]);
     }
@@ -376,7 +388,7 @@ function Shell() {
       shown.add(id);
       return { id, type, position: position ?? { x: 0, y: 0 }, hidden: !position, selected: id === selected, data: { ...data, ...flags(step, id), comments: open.get(id), issues: issues.get(id) } };
     };
-    const boxes = boundaryBoxes(design, visibleStep);
+    const boxes = boundaryBoxes(design, onSheet);
     const nodes = [
       // Outer boxes first, so inner ones and every part draw on top of them.
       ...design.boundaries
@@ -395,10 +407,10 @@ function Shell() {
             data: { kind: b.kind, label: b.label, detail: b.detail, w: box.w, h: box.h, ...flags(b.step, b.id) },
           };
         }),
-      ...ghosts(diff ? current.removed ?? [] : [], design.components.filter((c) => visibleStep(c.step))),
-      ...design.components.filter((c) => visibleStep(c.step)).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech, detail: c.detail }, c.step)),
-      ...design.notes.filter((n) => visibleStep(n.step)).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
-      ...design.decisions.filter((x) => visibleStep(x.step)).map((x) => node(x.id, 'decision', x.position, { title: x.title, why: x.why }, x.step)),
+      ...ghosts(diff ? current.removed ?? [] : [], design.components.filter(onSheet)),
+      ...design.components.filter(onSheet).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech, detail: c.detail }, c.step)),
+      ...design.notes.filter(onSheet).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
+      ...design.decisions.filter(onSheet).map((x) => node(x.id, 'decision', x.position, { title: x.title, why: x.why }, x.step)),
     ];
     const both = (a: string, b: string) => shown.has(a) && shown.has(b);
     const link = (id: string, source: string, target: string, step: string): FlowEdge => ({
@@ -412,7 +424,7 @@ function Shell() {
     });
     const edges: FlowEdge[] = [
       ...design.connections
-        .filter((c) => visibleStep(c.step) && both(c.from, c.to))
+        .filter((c) => onSheet(c) && both(c.from, c.to))
         .map(
           (c): FlowEdge => ({
             id: c.id,
@@ -427,7 +439,7 @@ function Shell() {
       ...design.decisions.flatMap((x) => x.links.filter((l) => both(l, x.id)).map((l) => link(`link-${x.id}-${l}`, l, x.id, x.step))),
     ];
     return { nodes, edges, boxes };
-  }, [design, current, view, selected, diff, presenting, flow, recording]);
+  }, [design, current, view, selected, diff, presenting, flow, recording, inOption]);
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const lastSelected = useRef(selected);
@@ -799,6 +811,7 @@ function Shell() {
   const seenNext = () => {
     if (!design || !current) return;
     if (current.seen) return goTo(view + 1);
+    if (current.options) return setError('Pick one of this step’s options first (details panel).');
     change((d) => {
       d.steps[view].seen = true;
     });
@@ -1030,7 +1043,7 @@ function Shell() {
             )}
             {docks.right.open && (
               <Dock side="right" width={docks.right.w} onResize={(w) => resizeDock('right', w)} onReset={() => resizeDock('right', DOCKS.right.w)}>
-                <Inspector design={design} selected={selected} stepId={current.id} flow={flow} onFlow={setFlow} recording={recording} onRecording={startRecording} onSequence={setSequence} designs={designs} onOpenInside={(c) => void drill(c.detail!, c.label)} onCreateInside={(c) => void createInside(c)} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
+                <Inspector design={design} selected={selected} stepId={current.id} flow={flow} onFlow={setFlow} recording={recording} onRecording={startRecording} onSequence={setSequence} inOption={inOption} optionView={optionView} onOption={(s, o) => setOptionView((v) => ({ ...v, [s]: o }))} onPickOption={pickOption} designs={designs} onOpenInside={(c) => void drill(c.detail!, c.label)} onCreateInside={(c) => void createInside(c)} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
               </Dock>
             )}
           </div>

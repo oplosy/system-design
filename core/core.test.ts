@@ -240,6 +240,32 @@ test('agent removals and changes are recorded on the step for its diff', async (
   await store.writeDesign(y);
 });
 
+test('a step can offer options, and picking one keeps it and records the rest as alternatives', async () => {
+  const x = await store.createDesign({ id: 'options', title: 'Options' });
+  const api = m.addComponent(x, { type: 'service', label: 'API' });
+  const step = m.addStep(x, { title: 'Speed up reads', options: [{ title: 'Redis', summary: 'Cache per user' }, { title: 'CDN' }] });
+  assert.throws(() => m.addStep(x, { title: 'Lonely', options: [{ title: 'Only one' }] }), /at least two/);
+  assert.throws(() => m.addComponent(x, { type: 'cache', label: 'Nope', option: 'memcached' }), /no option/);
+  const cache = m.addComponent(x, { type: 'cache', label: 'Cache', option: 'redis' });
+  m.connect(x, { from: api, to: cache, option: 'redis' });
+  const cdn = m.addComponent(x, { type: 'cdn', label: 'Edge', option: 'cdn' });
+  m.connect(x, { from: cdn, to: api, option: 'cdn' });
+  await store.writeDesign(x);
+
+  const bad = structuredClone(await store.readDesign('options'));
+  bad.connections.push({ id: 'mixed', from: cdn, to: cache, option: 'cdn', step });
+  await assert.rejects(store.writeDesign(bad), /from another option/);
+
+  const y = await store.readDesign('options');
+  const decision = m.pickOption(y, step, 'redis');
+  assert.deepEqual(y.components.map((c) => [c.id, c.option]), [[api, undefined], [cache, undefined]]);
+  assert.deepEqual(y.connections.map((c) => c.id), ['api-to-cache']);
+  assert.equal(y.steps.find((s) => s.id === step)!.options, undefined);
+  const d = y.decisions.find((i) => i.id === decision)!;
+  assert.deepEqual([d.title, d.why, d.alternatives, d.links], ['Speed up reads: Redis', 'Cache per user', ['CDN'], [cache]]);
+  await store.writeDesign(y);
+});
+
 test('lint flags likely smells', async () => {
   const { lint } = await import('./lint.ts');
   const x = await store.createDesign({ id: 'lint', title: 'Lint' });

@@ -32,12 +32,52 @@ function useStep(d: Design, step: string | undefined, reopen: boolean) {
   return s.id;
 }
 
-type Edit = { step?: string; reopen?: boolean };
+/** `option`: the step option an added item belongs to (see addStep). */
+type Edit = { step?: string; reopen?: boolean; option?: string };
 
-export function addStep(d: Design, input: { title: string; summary?: string; seen?: boolean }) {
+/** The step an edit goes to, plus the option of that step it belongs to. */
+function placed(d: Design, input: Edit) {
+  const step = useStep(d, input.step, input.reopen ?? true);
+  if (input.option && !d.steps.find((s) => s.id === step)!.options?.some((o) => o.id === input.option)) throw new Error(`step "${step}" has no option "${input.option}"`);
+  return { step, option: input.option };
+}
+
+/** Adds a step. With `options` the step offers alternatives (two or more) whose items the reviewer compares before picking one. */
+export function addStep(d: Design, input: { title: string; summary?: string; seen?: boolean; options?: { id?: string; title: string; summary?: string }[] }) {
+  if (input.options && input.options.length < 2) throw new Error('A step with options needs at least two.');
   const id = uniqueId(d, input.title);
-  d.steps.push({ id, title: input.title, summary: input.summary, seen: input.seen ?? false });
+  const taken = new Set<string>();
+  const options = input.options?.map((o) => {
+    let oid = slugify(o.id ?? o.title);
+    for (let i = 2; taken.has(oid); i++) oid = `${slugify(o.id ?? o.title)}-${i}`;
+    taken.add(oid);
+    return { id: oid, title: o.title, summary: o.summary };
+  });
+  d.steps.push({ id, title: input.title, summary: input.summary, seen: input.seen ?? false, options });
   return id;
+}
+
+/**
+ * The reviewer picks one of a step's options: the others' items go, the picked ones become plain items,
+ * and a decision records the pick with the others as alternatives.
+ */
+export function pickOption(d: Design, stepId: string, optionId: string) {
+  const s = d.steps.find((x) => x.id === stepId);
+  const chosen = s?.options?.find((o) => o.id === optionId);
+  if (!s || !chosen) throw new Error(`step "${stepId}" has no option "${optionId}"`);
+  for (const x of items(d)) if (x.step === stepId && x.option && x.option !== optionId && items(d).some((i) => i.id === x.id)) removeItem(d, x.id);
+  const links = d.components.filter((c) => c.option === optionId).map((c) => c.id);
+  for (const x of items(d)) if (x.option === optionId) x.option = undefined;
+  const others = s.options!.filter((o) => o.id !== optionId);
+  s.options = undefined;
+  return addDecision(d, {
+    title: `${s.title}: ${chosen.title}`,
+    why: chosen.summary ?? `Picked in review over ${others.map((o) => o.title).join(', ')}.`,
+    alternatives: others.map((o) => (o.summary ? `${o.title}: ${o.summary}` : o.title)),
+    links,
+    step: stepId,
+    reopen: false,
+  });
 }
 
 function checkBoundary(d: Design, id: string | undefined) {
@@ -60,7 +100,7 @@ export function addComponent(
     boundary: input.boundary,
     detail: input.detail,
     position: input.position,
-    step: useStep(d, input.step, input.reopen ?? true),
+    ...placed(d, input),
   });
   return id;
 }
@@ -83,7 +123,7 @@ export function addBoundary(
     description: input.description,
     parent: input.parent,
     position: input.position,
-    step: useStep(d, input.step, input.reopen ?? true),
+    ...placed(d, input),
   });
   for (const c of d.components) if (input.members?.includes(c.id)) c.boundary = id;
   return id;
@@ -134,7 +174,7 @@ export function connect(
     route: input.route,
     qps: input.qps,
     latency: input.latency,
-    step: useStep(d, input.step, input.reopen ?? true),
+    ...placed(d, input),
   });
   return id;
 }
@@ -142,7 +182,7 @@ export function connect(
 export function addNote(d: Design, input: Edit & { text: string; attachTo?: string; position?: { x: number; y: number } }) {
   if (input.attachTo && !d.components.some((c) => c.id === input.attachTo)) throw new Error(`unknown component "${input.attachTo}"`);
   const id = uniqueId(d, 'note');
-  d.notes.push({ id, text: input.text, attachTo: input.attachTo, position: input.position, step: useStep(d, input.step, input.reopen ?? true) });
+  d.notes.push({ id, text: input.text, attachTo: input.attachTo, position: input.position, ...placed(d, input) });
   return id;
 }
 
@@ -162,7 +202,7 @@ export function addDecision(
     tradeoffs: input.tradeoffs,
     links: input.links ?? [],
     position: input.position,
-    step: useStep(d, input.step, input.reopen ?? true),
+    ...placed(d, input),
   });
   return id;
 }
@@ -180,7 +220,7 @@ export function addFlow(d: Design, input: Edit & { title: string; path: string[]
     if (!hopConnection(d, input.path[i - 1], input.path[i])) throw new Error(`no connection between "${input.path[i - 1]}" and "${input.path[i]}"`);
   }
   const id = uniqueId(d, `flow-${input.title}`);
-  d.flows.push({ id, title: input.title, path: input.path, step: useStep(d, input.step, input.reopen ?? true) });
+  d.flows.push({ id, title: input.title, path: input.path, ...placed(d, input) });
   return id;
 }
 
@@ -405,24 +445,24 @@ export function pasteItems(d: Design, clip: Clip, { step, offset }: { step: stri
   const isBoundary = (id?: string) => !!id && d.boundaries.some((b) => b.id === id);
   const isComponent = (id?: string) => !!id && d.components.some((c) => c.id === id);
   const pasted = clip.boundaries.map((b) => {
-    const nb = { ...b, id: fresh(b.id), position: shift(b.position), step };
+    const nb = { ...b, id: fresh(b.id), position: shift(b.position), step, option: undefined };
     d.boundaries.push(nb);
     return nb;
   });
   for (const nb of pasted) nb.parent = isBoundary(map(nb.parent)) ? map(nb.parent) : undefined;
   for (const c of clip.components) {
-    d.components.push({ ...c, id: fresh(c.id), boundary: isBoundary(map(c.boundary)) ? map(c.boundary) : undefined, position: shift(c.position), step });
+    d.components.push({ ...c, id: fresh(c.id), boundary: isBoundary(map(c.boundary)) ? map(c.boundary) : undefined, position: shift(c.position), step, option: undefined });
   }
   const nodes = [...ids.values()];
-  for (const c of clip.connections) d.connections.push({ ...c, id: fresh(c.id), from: ids.get(c.from)!, to: ids.get(c.to)!, step });
-  for (const f of clip.flows ?? []) d.flows.push({ ...f, id: fresh(f.id), path: f.path.map((p) => ids.get(p)!), step });
+  for (const c of clip.connections) d.connections.push({ ...c, id: fresh(c.id), from: ids.get(c.from)!, to: ids.get(c.to)!, step, option: undefined });
+  for (const f of clip.flows ?? []) d.flows.push({ ...f, id: fresh(f.id), path: f.path.map((p) => ids.get(p)!), step, option: undefined });
   for (const n of clip.notes) {
     nodes.push(fresh(n.id));
-    d.notes.push({ ...n, id: nodes.at(-1)!, attachTo: isComponent(map(n.attachTo)) ? map(n.attachTo) : undefined, position: shift(n.position), step });
+    d.notes.push({ ...n, id: nodes.at(-1)!, attachTo: isComponent(map(n.attachTo)) ? map(n.attachTo) : undefined, position: shift(n.position), step, option: undefined });
   }
   for (const x of clip.decisions) {
     nodes.push(fresh(x.id));
-    d.decisions.push({ ...x, id: nodes.at(-1)!, links: x.links.map((l) => map(l)!).filter(isComponent), position: shift(x.position), step });
+    d.decisions.push({ ...x, id: nodes.at(-1)!, links: x.links.map((l) => map(l)!).filter(isComponent), position: shift(x.position), step, option: undefined });
   }
   return nodes;
 }

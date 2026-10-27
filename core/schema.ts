@@ -173,6 +173,8 @@ export type BoundaryKind = (typeof BOUNDARY_KINDS)[number];
 
 const Id = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'lowercase letters, digits and dashes');
 const Position = z.object({ x: z.number(), y: z.number() });
+/** The step option an item belongs to; it shows only while that option is viewed, until the reviewer picks one. */
+const Option = Id.optional();
 
 export const StepSchema = z.object({
   id: Id,
@@ -181,6 +183,8 @@ export const StepSchema = z.object({
   seen: z.boolean(),
   /** The reviewer sent this step back; cleared when the agent resolves the feedback. */
   changesRequested: z.boolean().optional(),
+  /** Alternatives the agent proposes for this step ("Redis" vs "CDN"); the reviewer picks one. */
+  options: z.array(z.object({ id: Id, title: z.string().min(1), summary: z.string().optional() })).min(2).optional(),
   /** What an agent removed in this step, kept so the diff can show it; components keep their shape and place. */
   removed: z.array(z.object({ id: Id, label: z.string(), type: z.enum(COMPONENT_TYPES).optional(), position: Position.optional() })).optional(),
   /** Fields an agent changed in this step on items from earlier steps, with the value before the step. */
@@ -200,6 +204,7 @@ export const ComponentSchema = z.object({
   /** Id of another design that shows what is inside this component (C4-style drill-down). */
   detail: Id.optional(),
   position: Position.optional(),
+  option: Option,
   step: Id,
 });
 
@@ -215,6 +220,7 @@ export const BoundarySchema = z.object({
   /** Only used while the boundary is empty; otherwise it wraps its members. */
   position: Position.optional(),
   size: z.object({ w: z.number().positive(), h: z.number().positive() }).optional(),
+  option: Option,
   step: Id,
 });
 
@@ -238,6 +244,7 @@ export const ConnectionSchema = z.object({
   latency: z.number().nonnegative().optional(),
   /** Hand-set offset of the line's middle, in canvas pixels. */
   bend: z.number().optional(),
+  option: Option,
   step: Id,
 });
 
@@ -246,6 +253,7 @@ export const NoteSchema = z.object({
   text: z.string().min(1),
   attachTo: Id.optional(),
   position: Position.optional(),
+  option: Option,
   step: Id,
 });
 
@@ -257,6 +265,7 @@ export const DecisionSchema = z.object({
   tradeoffs: z.string().optional(),
   links: z.array(Id),
   position: Position.optional(),
+  option: Option,
   step: Id,
 });
 
@@ -265,6 +274,7 @@ export const FlowSchema = z.object({
   id: Id,
   title: z.string().min(1),
   path: z.array(Id).min(2),
+  option: Option,
   step: Id,
 });
 
@@ -316,6 +326,20 @@ export const DesignSchema = z
       if (c.target && !itemIds.has(c.target)) issue(`comment "${c.id}" is about unknown "${c.target}"`);
     }
     const componentIds = new Set(d.components.map((c) => c.id));
+    // Options: an item's option must be one of its step's, and nothing may lean on another option's item.
+    const optionOf = new Map([...d.components, ...d.boundaries].map((x) => [x.id, x.option]));
+    for (const x of [...d.components, ...d.notes, ...d.decisions, ...d.connections, ...d.boundaries, ...d.flows]) {
+      if (x.option && !d.steps.find((s) => s.id === x.step)?.options?.some((o) => o.id === x.option)) issue(`"${x.id}" belongs to unknown option "${x.option}"`);
+    }
+    const lean = (x: { id: string; option?: string }, on: (string | undefined)[]) => {
+      for (const id of on) if (id && optionOf.get(id) && optionOf.get(id) !== x.option) issue(`"${x.id}" uses "${id}" from another option`);
+    };
+    for (const c of d.components) lean(c, [c.boundary]);
+    for (const b of d.boundaries) lean(b, [b.parent]);
+    for (const c of d.connections) lean(c, [c.from, c.to]);
+    for (const n of d.notes) lean(n, [n.attachTo]);
+    for (const x of d.decisions) lean(x, x.links);
+    for (const f of d.flows) lean(f, f.path);
     for (const c of d.components) if (c.detail === d.id) issue(`component "${c.id}" opens its own design`);
     for (const c of d.connections) {
       if (!componentIds.has(c.from)) issue(`connection "${c.id}" has unknown from "${c.from}"`);

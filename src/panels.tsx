@@ -299,6 +299,7 @@ export type FlowAt = { id: string; at: number };
 
 function Flows({
   design,
+  inOption,
   stepId,
   flow,
   onFlow,
@@ -308,6 +309,7 @@ function Flows({
   change,
 }: {
   design: Design;
+  inOption: (x: { step: string; option?: string }) => boolean;
   stepId: string;
   flow: FlowAt | null;
   onFlow: (f: FlowAt | null) => void;
@@ -318,7 +320,7 @@ function Flows({
 }) {
   const [title, setTitle] = useState('');
   const idx = m.stepIndex(design);
-  const flows = design.flows.filter((f) => idx.get(f.step)! <= idx.get(stepId)!);
+  const flows = design.flows.filter((f) => idx.get(f.step)! <= idx.get(stepId)! && inOption(f));
   const labelOf = (id: string) => design.components.find((c) => c.id === id)?.label ?? id;
   const save = () => {
     if (!recording || recording.length < 2 || !title.trim()) return;
@@ -420,6 +422,10 @@ export function Inspector({
   recording,
   onRecording,
   onSequence,
+  inOption,
+  optionView,
+  onOption,
+  onPickOption,
   designs,
   onOpenInside,
   onCreateInside,
@@ -435,6 +441,11 @@ export function Inspector({
   recording: string[] | null;
   onRecording: (r: string[] | null) => void;
   onSequence: (id: string) => void;
+  /** Whether an item belongs to the option on the sheet (always true without options). */
+  inOption: (x: { step: string; option?: string }) => boolean;
+  optionView: Record<string, string>;
+  onOption: (step: string, option: string) => void;
+  onPickOption: (step: string, option: string) => void;
   designs: { id: string; title: string }[];
   onOpenInside: (c: Design['components'][number]) => void;
   onCreateInside: (componentId: string) => void;
@@ -466,10 +477,11 @@ export function Inspector({
 
   if (!item) {
     const step = design.steps.find((s) => s.id === stepId)!;
-    const decisions = design.decisions.filter((x) => x.step === stepId);
-    const notes = design.notes.filter((n) => n.step === stepId);
-    const components = design.components.filter((c) => c.step === stepId);
-    const boundaries = design.boundaries.filter((b) => b.step === stepId);
+    const decisions = design.decisions.filter((x) => x.step === stepId && inOption(x));
+    const notes = design.notes.filter((n) => n.step === stepId && inOption(n));
+    const components = design.components.filter((c) => c.step === stepId && inOption(c));
+    const boundaries = design.boundaries.filter((b) => b.step === stepId && inOption(b));
+    const viewed = optionView[stepId] ?? step.options?.[0].id;
     return (
       <aside className="inspector">
         <header className="insp-head">
@@ -484,6 +496,38 @@ export function Inspector({
           <h2 className="insp-title">{step.title}</h2>
           {step.summary && <p className="insp-lead">{step.summary}</p>}
         </header>
+
+        {step.options && (
+          <section className="insp-sec">
+            <h3 className="rule-head">
+              Options
+              <span className="rule-count">{pad(step.options.length)}</span>
+            </h3>
+            <p className="quiet pad">Compare them on the sheet, then pick one. The others go, and a decision records the choice.</p>
+            {step.options.map((o) => {
+              const on = o.id === viewed;
+              return (
+                <div key={o.id} className={`option-entry${on ? ' on' : ''}`}>
+                  <button className="list-row" aria-pressed={on} onClick={() => onOption(stepId, o.id)} title="Show this option on the sheet">
+                    <span className="flow-play" aria-hidden="true">
+                      {on ? '●' : '○'}
+                    </span>
+                    <span className="list-main">{o.title}</span>
+                    <span className="list-meta">{design.components.filter((c) => c.option === o.id && c.step === stepId).length} parts</span>
+                  </button>
+                  {o.summary && <p className="option-why">{o.summary}</p>}
+                  {on && (
+                    <div className="flow-steps">
+                      <button className="btn ink" onClick={() => onPickOption(stepId, o.id)}>
+                        Pick {o.title}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </section>
+        )}
 
         {components.length + boundaries.length > 0 && (
           <section className="insp-sec">
@@ -584,7 +628,7 @@ export function Inspector({
           </section>
         )}
 
-        <Flows design={design} stepId={stepId} flow={flow} onFlow={onFlow} recording={recording} onRecording={onRecording} onSequence={onSequence} change={change} />
+        <Flows design={design} inOption={inOption} stepId={stepId} flow={flow} onFlow={onFlow} recording={recording} onRecording={onRecording} onSequence={onSequence} change={change} />
 
         <Comments design={design} step={stepId} change={change} onSelect={onSelect} />
 
@@ -930,7 +974,7 @@ export function ReviewBar({
           <kbd className="lead">←</kbd> Back
         </button>
         {!step.seen ? (
-          <button className="btn ink" onClick={onSeenNext} title="Mark as seen and go to the next step (→)">
+          <button className="btn ink" onClick={onSeenNext} disabled={!!step.options} title={step.options ? 'Pick one of the options first (details panel)' : 'Mark as seen and go to the next step (→)'}>
             Mark seen <kbd>→</kbd>
           </button>
         ) : viewIndex < maxIndex ? (

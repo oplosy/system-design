@@ -26,9 +26,10 @@ export const BOUNDARY_SPECS: Record<BoundaryKind, { name: string; color: string;
  * Where every boundary is drawn: around its visible members and child boundaries, or at its own
  * position when it has none. `show` decides which components and boundaries count as visible.
  */
-export function boundaryBoxes(d: Design, show: (step: string) => boolean = () => true) {
+/** `show` picks the items on the sheet (by step, and by option when a step offers some). */
+export function boundaryBoxes(d: Design, show: (x: { step: string; option?: string }) => boolean = () => true) {
   const boxes = new Map<string, Box & { depth: number }>();
-  const visible = d.boundaries.filter((b) => show(b.step));
+  const visible = d.boundaries.filter(show);
   const byId = new Map(visible.map((b) => [b.id, b]));
   const depthOf = (b: Boundary) => {
     let depth = 0;
@@ -39,7 +40,7 @@ export function boundaryBoxes(d: Design, show: (step: string) => boolean = () =>
   for (const b of [...visible].sort((a, c) => depthOf(c) - depthOf(a))) {
     const rects: Box[] = [];
     for (const c of d.components) {
-      if (c.boundary === b.id && c.position && show(c.step)) rects.push({ ...c.position, w: SHAPES[c.type].w, h: SHAPES[c.type].h });
+      if (c.boundary === b.id && c.position && show(c)) rects.push({ ...c.position, w: SHAPES[c.type].w, h: SHAPES[c.type].h });
     }
     for (const child of visible) if (child.parent === b.id && boxes.has(child.id)) rects.push(boxes.get(child.id)!);
     let box: Box;

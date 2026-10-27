@@ -15,6 +15,7 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Group components with boundaries (${BOUNDARY_KINDS.join(', ')}): a box drawn around its members, nestable through parent (region > vpc > subnet, site > vlan). Give each component its innermost boundary; the box sizes itself.
 - Show the key request paths as flows ("User uploads a photo"): component ids in order, each hop along a connection (either way, so responses can walk back).
 - Keep a big design readable with drill-down: create a design for a service's insides and set the service's detail to its id.
+- When there is a real choice to make (Redis vs CDN), offer it as options in add_step; the reviewer compares them on the canvas and picks one.
 - Put expected load (qps) and one-way latency (ms) on the lines that matter; a flow then shows its total time.
 - After a step, run lint and fix what it finds or say in a note why it is fine.
 - Start from list_designs; call get_design before editing an existing one.
@@ -96,36 +97,68 @@ server.registerTool(
   },
 );
 
+const bundleFields = {
+  boundaries: z.array(z.object({ id: z.string().describe('Id to reference from components and other boundaries in this call'), ...boundaryFields })).optional().describe('Parents before children'),
+  components: z.array(z.object({ id: z.string().describe('Id to reference from connections in this call'), ...componentFields })).optional(),
+  connections: z.array(z.object(connectionFields)).optional(),
+  notes: z.array(z.object(noteFields)).optional(),
+  decisions: z.array(z.object(decisionFields)).optional(),
+  flows: z.array(z.object(flowFields)).optional(),
+};
+type Bundle = { [K in keyof typeof bundleFields]?: z.infer<(typeof bundleFields)[K]> };
+
+/** Adds everything in a bundle to a step (and option); `ids` maps the call's ids to the stored ones. */
+function addBundle(d: Design, input: Bundle, step: string, option: string | undefined, ids: Record<string, string>) {
+  const ref = (id: string) => ids[id] ?? id;
+  const at = { step, option };
+  for (const { members: _, ...b } of input.boundaries ?? []) ids[b.id] = m.addBoundary(d, { ...b, parent: b.parent && ref(b.parent), ...at });
+  for (const c of input.components ?? []) ids[c.id] = m.addComponent(d, { ...c, boundary: c.boundary && ref(c.boundary), ...at });
+  for (const b of input.boundaries ?? []) for (const member of b.members ?? []) m.placeIn(d, ref(member), ids[b.id]);
+  for (const c of input.connections ?? []) m.connect(d, { ...c, from: ref(c.from), to: ref(c.to), ...at });
+  for (const n of input.notes ?? []) m.addNote(d, { text: n.text, attachTo: n.attach_to && ref(n.attach_to), ...at });
+  for (const x of input.decisions ?? []) m.addDecision(d, { ...x, links: x.links?.map(ref), ...at });
+  for (const f of input.flows ?? []) m.addFlow(d, { ...f, path: f.path.map(ref), ...at });
+}
+
 server.registerTool(
   'add_step',
   {
-    description: 'Add one reviewable step, with everything it introduces, in a single atomic write',
+    description: 'Add one reviewable step, with everything it introduces, in a single atomic write. To let the reviewer choose between alternatives, put each in options',
     inputSchema: {
       design,
       title: z.string().min(1),
       summary: z.string().optional().describe('What changes in this step and why'),
-      boundaries: z.array(z.object({ id: z.string().describe('Id to reference from components and other boundaries in this call'), ...boundaryFields })).optional().describe('Parents before children'),
-      components: z.array(z.object({ id: z.string().describe('Id to reference from connections in this call'), ...componentFields })).optional(),
-      connections: z.array(z.object(connectionFields)).optional(),
-      notes: z.array(z.object(noteFields)).optional(),
-      decisions: z.array(z.object(decisionFields)).optional(),
-      flows: z.array(z.object(flowFields)).optional(),
+      ...bundleFields,
+      options: z
+        .array(z.object({ id: z.string().optional(), title: z.string().min(1).describe('e.g. "Redis"'), summary: z.string().optional().describe('Why this option; becomes the decision when picked'), ...bundleFields }))
+        .min(2)
+        .optional()
+        .describe('Alternatives the reviewer picks between. Items at the top level are shared by every option; each option may use them but not another option’s items'),
     },
   },
-  async (input) =>
-    edit(input.design, (d) => {
-      const stepId = m.addStep(d, { title: input.title, summary: input.summary });
+  async ({ design: id, title, summary, options, ...shared }) =>
+    edit(id, (d) => {
+      const stepId = m.addStep(d, { title, summary, options });
       const ids: Record<string, string> = {};
-      const ref = (id: string) => ids[id] ?? id;
-      for (const { members: _, ...b } of input.boundaries ?? []) ids[b.id] = m.addBoundary(d, { ...b, parent: b.parent && ref(b.parent), step: stepId });
-      for (const c of input.components ?? []) ids[c.id] = m.addComponent(d, { ...c, boundary: c.boundary && ref(c.boundary), step: stepId });
-      for (const b of input.boundaries ?? []) for (const member of b.members ?? []) m.placeIn(d, ref(member), ids[b.id]);
-      for (const c of input.connections ?? []) m.connect(d, { ...c, from: ref(c.from), to: ref(c.to), step: stepId });
-      for (const n of input.notes ?? []) m.addNote(d, { text: n.text, attachTo: n.attach_to && ref(n.attach_to), step: stepId });
-      for (const x of input.decisions ?? []) m.addDecision(d, { ...x, links: x.links?.map(ref), step: stepId });
-      for (const f of input.flows ?? []) m.addFlow(d, { ...f, path: f.path.map(ref), step: stepId });
-      return { step: stepId, ids };
+      addBundle(d, shared, stepId, undefined, ids);
+      const stored = d.steps.find((s) => s.id === stepId)!.options ?? [];
+      // Each option sees the shared ids plus its own, never another option's.
+      const optionIds = (options ?? []).map((o, i) => {
+        const own = { ...ids };
+        addBundle(d, o, stepId, stored[i].id, own);
+        return { option: stored[i].id, ids: own };
+      });
+      return { step: stepId, ids, options: optionIds };
     }),
+);
+
+server.registerTool(
+  'pick_option',
+  {
+    description: 'Pick one option of a step for the reviewer when they told you which: the others are removed and a decision records the pick',
+    inputSchema: { design, step: z.string(), option: z.string() },
+  },
+  async ({ design: id, step: stepId, option }) => edit(id, (d) => m.pickOption(d, stepId, option)),
 );
 
 server.registerTool('add_component', { description: 'Add a component to a step', inputSchema: { design, ...componentFields, step } }, async ({ design: id, ...input }) =>

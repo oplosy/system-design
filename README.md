@@ -9,6 +9,7 @@ A local canvas for system and architecture designs that agents build and you rev
 - Designs are built in **steps**. Each step carries its components, connections, notes and decisions (why, alternatives, trade-offs).
 - **Review queue:** steps added by an agent start unseen. You walk them in order and cannot jump past the first unseen step.
 - **Step diff:** outlines what a step added (orange) or changed (amber, with old and new values in the step panel), and draws what it removed as a struck-out ghost. Agent edits through `update_component`, `place_in` and `remove_item` are recorded on the step they land in (latest by default), which reopens for review. **Revert step** puts back what the step removed or changed.
+- **Options:** an agent can offer alternatives in one step (Redis vs CDN). Switch between them in the step panel to compare them on the sheet, then pick one: the others go, and a decision records the pick with the rest as alternatives. A step with options can't be marked seen until one is picked.
 - **Flows:** a request path ("User logs in") through the components. Play it hop by hop from the step panel or while presenting: the path lights up and each hop is numbered. Draw one with **New flow** by clicking connected parts in order. **Sequence** shows a flow as a sequence diagram (replies dashed) and copies it as Mermaid.
 - **Drill-down:** a part can open another design that shows its insides (C4-style). Link one under **Opens**, or start an empty one with **New inside**; the badge on the part opens it and a breadcrumb leads back.
 - **Capacity notes:** a line can carry its load (requests per second) and one-way latency (ms). Both show under the line, and a flow adds up its hops' latency (a reply counts its line again).
@@ -36,7 +37,7 @@ Inside this repo, Claude Code picks it up from `.mcp.json`. To use it from any p
 claude mcp add system-design -s user -- node C:/Users/mesut/Desktop/workspace/A-projects/system-design/mcp/server.ts
 ```
 
-Main tool: `add_step` adds one reviewable change (components, connections, notes, decisions) in a single write, and can carry flows. Smaller tools: `create_design`, `add_component`, `connect`, `add_note`, `add_decision`, `update_component`, `remove_item`, `add_flow`, `update_connection`, `lint`, `get_design`, `list_designs`, `list_templates`.
+Main tool: `add_step` adds one reviewable change (components, connections, notes, decisions) in a single write, and can carry flows. Smaller tools: `create_design`, `add_component`, `connect`, `add_note`, `add_decision`, `update_component`, `remove_item`, `add_flow`, `update_connection`, `pick_option`, `lint`, `get_design`, `list_designs`, `list_templates`.
 
 ## Layout
 
