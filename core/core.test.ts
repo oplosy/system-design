@@ -266,6 +266,53 @@ test('a step can offer options, and picking one keeps it and records the rest as
   await store.writeDesign(y);
 });
 
+test('Mermaid flowcharts import, including our own export', async () => {
+  const { importMermaid, parseMermaid } = await import('./mermaid.ts');
+  const { toMermaid } = await import('./export.ts');
+  const src = await store.createDesign({ id: 'mermaid-src', title: 'Src' });
+  const vpc = m.addBoundary(src, { kind: 'vpc', label: 'VPC', detail: '10.0.0.0/16' });
+  const api = m.addComponent(src, { type: 'service', label: 'API', boundary: vpc });
+  const db = m.addComponent(src, { id: 'end', type: 'sql-db', label: 'Say "hi"', tech: 'PostgreSQL' });
+  const q = m.addComponent(src, { type: 'queue', label: 'Jobs' });
+  m.connect(src, { from: api, to: db, label: 'SQL', async: true });
+  m.connect(src, { from: api, to: q });
+  const back = await store.createDesign({ id: 'mermaid-back', title: 'Back' });
+  importMermaid(back, toMermaid(src));
+  assert.deepEqual(
+    back.components.map((c) => [c.id, c.type, c.label, c.tech ?? null, c.boundary ?? null]),
+    src.components.map((c) => [c.id, c.type === 'interface' ? 'service' : c.type, c.label, c.tech ?? null, c.boundary ?? null]),
+    'ids, labels, tech, boundaries and data shapes survive the round trip',
+  );
+  assert.deepEqual(back.connections.map((c) => [c.from, c.to, c.label ?? null, !!c.async]), src.connections.map((c) => [c.from, c.to, c.label ?? null, !!c.async || c.kind === 'implementation']));
+  await store.writeDesign(back);
+
+  const hand = [
+    'graph TD',
+    '  %% a comment',
+    '  A[Web app] -->|HTTPS| B{{Gateway}}',
+    '  B --> C(Orders) & D(Users)',
+    '  C -- SQL --> E[(Postgres)]',
+    '  C -.-> Q([Events])',
+    '  classDef hot fill:#f00',
+    '  C ==> ???',
+    '  subgraph data["Data tier"]',
+    '    E',
+    '  end',
+  ].join('\n');
+  const p = parseMermaid(hand);
+  assert.deepEqual(p.skipped, [8], 'a line that cannot be read is reported');
+  assert.deepEqual(p.edges.map((e) => `${e.from}>${e.to}:${e.label ?? ''}:${e.async}`), ['A>B:HTTPS:false', 'B>C::false', 'B>D::false', 'C>E:SQL:false', 'C>Q::true']);
+  const x = await store.createDesign({ id: 'mermaid-hand', title: 'Hand' });
+  const guess = (w: string) => (/postgres/i.test(w) ? ('sql-db' as const) : /web/i.test(w) ? ('client' as const) : undefined);
+  importMermaid(x, hand, { guess });
+  assert.deepEqual(
+    x.components.map((c) => `${c.id}:${c.type}:${c.boundary ?? ''}`),
+    ['a:client:', 'b:api-gateway:', 'c:service:', 'd:service:', 'e:sql-db:data', 'q:queue:'],
+  );
+  await store.writeDesign(x);
+  assert.throws(() => parseMermaid('sequenceDiagram\n  A->>B: hi'), /only Mermaid flowcharts/);
+});
+
 test('lint flags likely smells', async () => {
   const { lint } = await import('./lint.ts');
   const x = await store.createDesign({ id: 'lint', title: 'Lint' });

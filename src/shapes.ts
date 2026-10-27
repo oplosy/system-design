@@ -1808,3 +1808,16 @@ export function drawShape(type: ComponentType, sketch: boolean, seed: number) {
 }
 
 export { gen };
+
+// Words too common across parts to say anything about the type.
+const GENERIC = new Set('api app apps server servers web data service services system the and for with main core new'.split(' '));
+const WORDS = Object.entries(SHAPES).map(([type, s]) => [type, new Set(`${s.name} ${s.keywords}`.toLowerCase().split(/\s+/))] as const);
+
+/** Picks a part type from free text such as "Orders DB PostgreSQL", trying words in order; undefined when nothing specific matches. */
+export function guessType(text: string): ComponentType | undefined {
+  for (const word of text.toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
+    if (word.length < 3 || GENERIC.has(word)) continue;
+    const hit = WORDS.find(([, words]) => words.has(word));
+    if (hit) return hit[0] as ComponentType;
+  }
+}

@@ -23,7 +23,7 @@ npm install
 npm run dev
 ```
 
-Open http://127.0.0.1:5180. Create a design from the **Twitter from scratch** or **Three-tier web app** template, or start blank.
+Open http://127.0.0.1:5180. Create a design from the **Twitter from scratch** or **Three-tier web app** template, start blank, or paste a Mermaid flowchart: its nodes, arrows and subgraphs become parts, lines and boundaries, with part types taken from node shapes and names ("PostgreSQL" → SQL DB). Lines it can’t read are listed and left out.
 
 Edit by hand: drag shapes from the palette, drag between nodes to connect them (drag from a note or decision to a component to attach it), select an item to edit it on the right, and press Delete to remove it.
 

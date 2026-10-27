@@ -19,6 +19,7 @@ import '@xyflow/react/dist/style.css';
 import { toPng, toSvg } from 'html-to-image';
 import { toDecisionRecord, toMermaid } from '../core/export.ts';
 import { lint } from '../core/lint.ts';
+import { importMermaid, parseMermaid } from '../core/mermaid.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { ApiError, api, type Summary } from './api.ts';
@@ -28,7 +29,7 @@ import type { Pt } from './edges.ts';
 import { LAYOUTS, layout, type LayoutKind } from './layout.ts';
 import { SequenceView } from './sequence.tsx';
 import { DRAG_MIME, Dock, FindBox, Inspector, type FlowAt, Palette, PresentBar, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
-import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES } from './shapes.ts';
+import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES, guessType } from './shapes.ts';
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const boundaryKind = (k: string) => (k.startsWith('boundary:') && (BOUNDARY_KINDS as readonly string[]).includes(k.slice(9)) ? (k.slice(9) as BoundaryKind) : null);
@@ -1315,9 +1316,15 @@ function DesignSwitcher({ designs, current, meta, onPick }: { designs: Summary[]
   );
 }
 
+// Not a valid design id, so no template can take it.
+const MERMAID = ':mermaid';
+
 function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; onCancel: () => void; onCreated: (d: Design) => void }) {
   const [title, setTitle] = useState('');
   const [template, setTemplate] = useState('');
+  const [mermaid, setMermaid] = useState('');
+  // The text whose unreadable lines the user was already told about; submitting it again goes ahead.
+  const [warned, setWarned] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   useDismiss(true, onCancel);
@@ -1325,16 +1332,36 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
     e.preventDefault();
     if (!title.trim()) return setErr('Give the design a title.');
     if (!/[a-z0-9]/i.test(title)) return setErr('Use at least one letter or digit.');
+    const fromMermaid = template === MERMAID;
+    if (fromMermaid) {
+      let parsed;
+      try {
+        parsed = parseMermaid(mermaid);
+      } catch (e) {
+        return setErr(errorText(e));
+      }
+      if (!parsed.nodes.length) return setErr('No nodes found in this flowchart.');
+      if (parsed.skipped.length && warned !== mermaid) {
+        setWarned(mermaid);
+        return setErr(`${parsed.skipped.length > 1 ? 'Lines' : 'Line'} ${parsed.skipped.join(', ')} can’t be read and will be left out. Create again to go ahead.`);
+      }
+    }
     setBusy(true);
     try {
-      onCreated(await api.create({ id: m.slugify(title), title: title.trim(), template: template || undefined }));
+      const created = await api.create({ id: m.slugify(title), title: title.trim(), template: fromMermaid ? undefined : template || undefined });
+      if (fromMermaid) importMermaid(created, mermaid, { guess: guessType });
+      onCreated(fromMermaid ? await api.save(created) : created);
     } catch (e) {
       setErr(e instanceof ApiError && e.status === 409 ? 'A design with this name already exists. Try another.' : errorText(e));
     } finally {
       setBusy(false);
     }
   };
-  const options = [{ id: '', title: 'Blank sheet', description: 'Nothing on it yet. Build it yourself or let an agent fill it in.', steps: 1, unseen: 0 }, ...templates];
+  const options = [
+    { id: '', title: 'Blank sheet', description: 'Nothing on it yet. Build it yourself or let an agent fill it in.', steps: 1, unseen: 0 },
+    { id: MERMAID, title: 'Mermaid flowchart', description: 'Paste a flowchart; its boxes, arrows and subgraphs become parts, lines and boundaries.', steps: 1, unseen: 0 },
+    ...templates,
+  ];
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
       <form className="dialog" role="dialog" aria-modal="true" aria-labelledby="new-design-title" onSubmit={submit}>
@@ -1368,10 +1395,24 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
                 <strong>{t.title}</strong>
                 {t.description && <span>{t.description}</span>}
               </span>
-              <span className="menu-meta">{t.id ? `${pad(t.steps)} steps` : '—'}</span>
+              <span className="menu-meta">{t.id && t.id !== MERMAID ? `${pad(t.steps)} steps` : '—'}</span>
             </button>
           ))}
         </div>
+        {template === MERMAID && (
+          <textarea
+            className="ed mermaid-input"
+            rows={8}
+            value={mermaid}
+            placeholder={'flowchart LR\n  user((User)) --> api[Orders API]\n  api --> db[(Orders DB)]'}
+            aria-label="Mermaid flowchart"
+            spellCheck={false}
+            onChange={(e) => {
+              setMermaid(e.target.value);
+              setErr(null);
+            }}
+          />
+        )}
         <footer className="dialog-foot">
           <button type="button" className="text-btn" onClick={onCancel}>
             Cancel
