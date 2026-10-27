@@ -5,7 +5,7 @@ import * as m from './mutations.ts';
 // Reads a docker-compose file or Kubernetes manifests into parts, lines and boundaries.
 // Lines come from depends_on/links, Ingress backends and environment values that name another part's host.
 
-type Part = { key: string; label: string; image?: string; type: ComponentType; tech?: string; group?: string };
+type Part = { key: string; label: string; image?: string; type: ComponentType; tech?: string; group?: string; code?: string };
 type Link = { from: string; to: string; label?: string };
 type Group = { key: string; label: string; kind: BoundaryKind };
 type Doc = Record<string, any>;
@@ -46,7 +46,10 @@ function compose(file: Doc) {
     for (const to of [...deps, ...list(s.links).map((l) => String(l).split(':')[0])]) links.push({ from: key, to });
     for (const to of envValues(s.environment).flatMap(hosts)) if (names.includes(to)) links.push({ from: key, to });
     const image = typeof s.image === 'string' ? s.image : undefined;
-    return { key, label: key, image, type: 'service', group: used.size > 1 ? nets(s)[0] : undefined };
+    // build is a context path, or { context } in the long form.
+    const build = typeof s.build === 'string' ? s.build : obj(s.build).context;
+    const code = typeof build === 'string' ? build : undefined;
+    return { key, label: key, image, type: 'service', group: used.size > 1 ? nets(s)[0] : undefined, code };
   });
   const groups: Group[] = used.size > 1 ? [...used].map((n) => ({ key: n, label: n, kind: 'subnet' })) : [];
   return { parts, links, groups };
@@ -132,7 +135,7 @@ export function importInfra(d: Design, text: string, { step, guess }: { step?: s
     // "registry.io/team/postgres:16@sha256:…" → "postgres:16"
     const tech = p.tech ?? p.image?.split('@')[0].split('/').pop();
     const type = (p.type === 'service' && guess?.(`${tech?.split(':')[0] ?? ''} ${p.label}`)) || p.type;
-    ids.set(p.key, m.addComponent(d, { id: p.label, type, label: p.label, tech, boundary: p.group && boundaryIds.get(p.group), ...at }));
+    ids.set(p.key, m.addComponent(d, { id: p.label, type, label: p.label, tech, code: p.code, boundary: p.group && boundaryIds.get(p.group), ...at }));
   }
   const seen = new Set<string>();
   for (const l of links) {

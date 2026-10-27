@@ -340,6 +340,7 @@ test('imports docker-compose and Kubernetes manifests', async () => {
     x.components.map((c) => `${c.id}:${c.type}:${c.tech ?? ''}:${c.boundary ?? ''}`),
     ['web:service:web:1.2:front', 'api:service::front', 'db:sql-db:postgres:16:back'],
   );
+  assert.deepEqual(x.components.map((c) => c.code ?? null), [null, '.', null], 'a build context is where the code lives');
   assert.deepEqual(x.connections.map((c) => `${c.from}>${c.to}`), ['web>api', 'api>db'], 'the password and port are not hosts');
   await store.writeDesign(x);
 

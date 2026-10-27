@@ -695,6 +695,15 @@ export function Inspector({
             <Prop label="Technology">
               <Ed label="Technology" placeholder="e.g. Redis" value={component.tech} onCommit={(v) => edit((d: Design) => d.components, { tech: v })} />
             </Prop>
+            <Prop label="Code">
+              <Ed label="Code" placeholder="Repo URL or path" value={component.code} onCommit={(v) => edit((d: Design) => d.components, { code: v })} />
+              {/* Only web links open; anything else (a path, javascript:) stays text. */}
+              {/^https?:\/\//i.test(component.code ?? '') && (
+                <a className="ref" href={component.code} target="_blank" rel="noreferrer noopener" title="Open the code in a new tab">
+                  Open ↗
+                </a>
+              )}
+            </Prop>
             {design.boundaries.length > 0 && (
               <Prop label="Inside">
                 <InsideSelect design={design} value={component.boundary} onPick={placeIn} />

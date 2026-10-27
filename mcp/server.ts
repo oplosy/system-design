@@ -33,6 +33,7 @@ const componentFields = {
   description: z.string().optional(),
   boundary: z.string().optional().describe('Id of the innermost boundary this component sits in'),
   detail: z.string().optional().describe('Id of another design that shows what is inside this component; create it first with create_design'),
+  code: z.string().optional().describe('Where its code lives: a repository URL, or a path in the repo such as "services/orders"'),
 };
 const connectionFields = {
   from: z.string().describe('Component id'),
@@ -220,7 +221,7 @@ server.registerTool(
   'update_component',
   {
     description: 'Change a component. The change is recorded on the step (latest by default) for review, with its old values',
-    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), detail: componentFields.detail, step },
+    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), detail: componentFields.detail, code: componentFields.code, step },
   },
   async ({ design: designId, id, step, ...fields }) =>
     edit(designId, (d) => {

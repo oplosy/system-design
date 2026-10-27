@@ -203,6 +203,8 @@ export const ComponentSchema = z.object({
   boundary: Id.optional(),
   /** Id of another design that shows what is inside this component (C4-style drill-down). */
   detail: Id.optional(),
+  /** Where its code lives: a repository URL or a path in the repo. */
+  code: z.string().optional(),
   position: Position.optional(),
   option: Option,
   step: Id,
