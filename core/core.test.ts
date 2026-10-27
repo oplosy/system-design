@@ -313,6 +313,95 @@ test('Mermaid flowcharts import, including our own export', async () => {
   assert.throws(() => parseMermaid('sequenceDiagram\n  A->>B: hi'), /only Mermaid flowcharts/);
 });
 
+test('imports docker-compose and Kubernetes manifests', async () => {
+  const { importInfra } = await import('./infra.ts');
+  const guess = (w: string) => (/postgres/i.test(w) ? ('sql-db' as const) : /redis/i.test(w) ? ('cache' as const) : undefined);
+  const compose = [
+    'services:',
+    '  web:',
+    '    image: ghcr.io/acme/web:1.2',
+    '    depends_on: [api]',
+    '    networks: [front]',
+    '  api:',
+    '    build: .',
+    '    environment:',
+    '      DATABASE_URL: postgres://app:secret@db:5432/app',
+    '      - ignored',
+    '    networks: [front, back]',
+    '  db:',
+    '    image: postgres:16',
+    '    networks: { back: {} }',
+  ].join('\n');
+  const x = await store.createDesign({ id: 'compose', title: 'Compose' });
+  assert.throws(() => importInfra(x, compose), /YAML/, 'a broken file fails before anything is added');
+  assert.equal(x.components.length, 0);
+  importInfra(x, compose.replace('      - ignored\n', '').replace('    environment:\n', '    environment:\n      - CACHE=redis\n').replace('      DATABASE_URL: ', '      - DATABASE_URL='), { guess });
+  assert.deepEqual(
+    x.components.map((c) => `${c.id}:${c.type}:${c.tech ?? ''}:${c.boundary ?? ''}`),
+    ['web:service:web:1.2:front', 'api:service::front', 'db:sql-db:postgres:16:back'],
+  );
+  assert.deepEqual(x.connections.map((c) => `${c.from}>${c.to}`), ['web>api', 'api>db'], 'the password and port are not hosts');
+  await store.writeDesign(x);
+
+  const kube = [
+    'apiVersion: apps/v1',
+    'kind: Deployment',
+    'metadata: { name: orders, namespace: shop }',
+    'spec:',
+    '  template:',
+    '    metadata: { labels: { app: orders } }',
+    '    spec:',
+    '      containers:',
+    '        - image: acme/orders:3',
+    '          env:',
+    '            - { name: DB_HOST, value: orders-db }',
+    '            - { name: CACHE, value: cache.infra.svc.cluster.local:6379 }',
+    '---',
+    'kind: StatefulSet',
+    'metadata: { name: pg, namespace: shop }',
+    'spec: { template: { metadata: { labels: { app: pg } }, spec: { containers: [{ image: postgres:16 }] } } }',
+    '---',
+    'kind: Deployment',
+    'metadata: { name: redis, namespace: infra }',
+    'spec: { template: { metadata: { labels: { app: redis } }, spec: { containers: [{ image: redis:7 }] } } }',
+    '---',
+    'kind: CronJob',
+    'metadata: { name: backup, namespace: shop }',
+    'spec: { jobTemplate: { spec: { template: { spec: { containers: [{ image: postgres:16, env: [{ name: H, value: orders-db }] }] } } } } }',
+    '---',
+    'kind: Service',
+    'metadata: { name: orders-db, namespace: shop }',
+    'spec: { selector: { app: pg } }',
+    '---',
+    'kind: Service',
+    'metadata: { name: orders, namespace: shop }',
+    'spec: { selector: { app: orders } }',
+    '---',
+    'kind: Service',
+    'metadata: { name: cache, namespace: infra }',
+    'spec: { selector: { app: redis } }',
+    '---',
+    'kind: Ingress',
+    'metadata: { name: public, namespace: shop }',
+    'spec: { rules: [{ host: shop.io, http: { paths: [{ path: /api, backend: { service: { name: orders } } }] } }] }',
+    '---',
+    'kind: ConfigMap',
+    'metadata: { name: settings }',
+  ].join('\n');
+  const k = await store.createDesign({ id: 'kube', title: 'Kube' });
+  importInfra(k, kube, { guess });
+  assert.deepEqual(
+    k.components.map((c) => `${c.id}:${c.type}:${c.tech ?? ''}:${c.boundary ?? ''}`),
+    ['orders:service:orders:3:shop', 'pg:sql-db:postgres:16:shop', 'redis:cache:redis:7:infra', 'backup:cron:postgres:16:shop', 'public:load-balancer:Ingress:shop'],
+  );
+  assert.deepEqual(
+    k.connections.map((c) => `${c.from}>${c.to}:${c.label ?? ''}`),
+    ['orders>pg:', 'orders>redis:', 'backup>pg:', 'public>orders:shop.io/api'],
+  );
+  await store.writeDesign(k);
+  assert.throws(() => importInfra(k, 'just: text'), /docker-compose file/);
+});
+
 test('lint flags likely smells', async () => {
   const { lint } = await import('./lint.ts');
   const x = await store.createDesign({ id: 'lint', title: 'Lint' });

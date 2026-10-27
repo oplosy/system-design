@@ -1318,11 +1318,12 @@ function DesignSwitcher({ designs, current, meta, onPick }: { designs: Summary[]
 
 // Not a valid design id, so no template can take it.
 const MERMAID = ':mermaid';
+const INFRA = ':infra';
 
 function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; onCancel: () => void; onCreated: (d: Design) => void }) {
   const [title, setTitle] = useState('');
   const [template, setTemplate] = useState('');
-  const [mermaid, setMermaid] = useState('');
+  const [source, setSource] = useState('');
   // The text whose unreadable lines the user was already told about; submitting it again goes ahead.
   const [warned, setWarned] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -1333,24 +1334,36 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
     if (!title.trim()) return setErr('Give the design a title.');
     if (!/[a-z0-9]/i.test(title)) return setErr('Use at least one letter or digit.');
     const fromMermaid = template === MERMAID;
+    const fromInfra = template === INFRA;
+    // Loaded only here, so the YAML parser stays out of the main bundle.
+    const infra = fromInfra ? await import('../core/infra.ts') : null;
+    if (infra) {
+      try {
+        if (!infra.readInfra(source).parts.length) return setErr('No services or workloads found.');
+      } catch (e) {
+        return setErr(errorText(e));
+      }
+    }
     if (fromMermaid) {
       let parsed;
       try {
-        parsed = parseMermaid(mermaid);
+        parsed = parseMermaid(source);
       } catch (e) {
         return setErr(errorText(e));
       }
       if (!parsed.nodes.length) return setErr('No nodes found in this flowchart.');
-      if (parsed.skipped.length && warned !== mermaid) {
-        setWarned(mermaid);
+      if (parsed.skipped.length && warned !== source) {
+        setWarned(source);
         return setErr(`${parsed.skipped.length > 1 ? 'Lines' : 'Line'} ${parsed.skipped.join(', ')} can’t be read and will be left out. Create again to go ahead.`);
       }
     }
     setBusy(true);
     try {
-      const created = await api.create({ id: m.slugify(title), title: title.trim(), template: fromMermaid ? undefined : template || undefined });
-      if (fromMermaid) importMermaid(created, mermaid, { guess: guessType });
-      onCreated(fromMermaid ? await api.save(created) : created);
+      const pasted = fromMermaid || fromInfra;
+      const created = await api.create({ id: m.slugify(title), title: title.trim(), template: pasted ? undefined : template || undefined });
+      if (fromMermaid) importMermaid(created, source, { guess: guessType });
+      if (infra) infra.importInfra(created, source, { guess: guessType });
+      onCreated(pasted ? await api.save(created) : created);
     } catch (e) {
       setErr(e instanceof ApiError && e.status === 409 ? 'A design with this name already exists. Try another.' : errorText(e));
     } finally {
@@ -1360,6 +1373,7 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
   const options = [
     { id: '', title: 'Blank sheet', description: 'Nothing on it yet. Build it yourself or let an agent fill it in.', steps: 1, unseen: 0 },
     { id: MERMAID, title: 'Mermaid flowchart', description: 'Paste a flowchart; its boxes, arrows and subgraphs become parts, lines and boundaries.', steps: 1, unseen: 0 },
+    { id: INFRA, title: 'docker-compose or Kubernetes', description: 'Paste a compose file or manifests; services and workloads become parts, dependencies and env hosts become lines.', steps: 1, unseen: 0 },
     ...templates,
   ];
   return (
@@ -1395,20 +1409,24 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
                 <strong>{t.title}</strong>
                 {t.description && <span>{t.description}</span>}
               </span>
-              <span className="menu-meta">{t.id && t.id !== MERMAID ? `${pad(t.steps)} steps` : '—'}</span>
+              <span className="menu-meta">{t.id && t.id !== MERMAID && t.id !== INFRA ? `${pad(t.steps)} steps` : '—'}</span>
             </button>
           ))}
         </div>
-        {template === MERMAID && (
+        {(template === MERMAID || template === INFRA) && (
           <textarea
             className="ed mermaid-input"
             rows={8}
-            value={mermaid}
-            placeholder={'flowchart LR\n  user((User)) --> api[Orders API]\n  api --> db[(Orders DB)]'}
-            aria-label="Mermaid flowchart"
+            value={source}
+            placeholder={
+              template === MERMAID
+                ? 'flowchart LR\n  user((User)) --> api[Orders API]\n  api --> db[(Orders DB)]'
+                : 'services:\n  api:\n    build: .\n    depends_on: [db]\n  db:\n    image: postgres:16'
+            }
+            aria-label={template === MERMAID ? 'Mermaid flowchart' : 'docker-compose or Kubernetes YAML'}
             spellCheck={false}
             onChange={(e) => {
-              setMermaid(e.target.value);
+              setSource(e.target.value);
               setErr(null);
             }}
           />
