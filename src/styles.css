@@ -17,6 +17,7 @@
   --rule-strong: rgb(20 20 25 / 0.13);
   --dots: #d8d8d3;
   --signal: #dd4f17;
+  --danger: #e5484d;
   --select: #3466f0;
   --note: #fac775;
   --note-edge: #ef9f27;
@@ -50,6 +51,7 @@
     --rule-strong: rgb(255 255 255 / 0.13);
     --dots: #26262a;
     --signal: #ff7a45;
+    --danger: #ff6369;
     --select: #7c9cff;
     --decision: #efa94a;
     --lift: 0 2px 6px rgb(0 0 0 / 0.3), 0 18px 44px rgb(0 0 0 / 0.55);
@@ -75,6 +77,7 @@
   --rule-strong: rgb(255 255 255 / 0.13);
   --dots: #26262a;
   --signal: #ff7a45;
+  --danger: #ff6369;
   --select: #7c9cff;
   --decision: #efa94a;
   --lift: 0 2px 6px rgb(0 0 0 / 0.3), 0 18px 44px rgb(0 0 0 / 0.55);
@@ -1730,6 +1733,29 @@ select.ed option {
 }
 
 /* Bending a selected connection */
+/* Delete button over a selected item; it keeps its size at any zoom. */
+.node-trash {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--danger);
+  box-shadow: var(--glass-shadow);
+  cursor: pointer;
+}
+
+.node-trash:hover {
+  filter: brightness(1.08);
+}
+
+.node-trash:focus-visible {
+  outline: 2px solid var(--select);
+  outline-offset: 2px;
+}
+
 .bend-handle {
   position: absolute;
   width: 12px;

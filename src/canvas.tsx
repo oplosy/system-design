@@ -1,5 +1,5 @@
 import { createContext, memo, useContext, useMemo, useState } from 'react';
-import { BaseEdge, EdgeLabelRenderer, Handle, Position, useInternalNode, useReactFlow, type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps } from '@xyflow/react';
+import { BaseEdge, EdgeLabelRenderer, Handle, NodeToolbar, Position, useInternalNode, useNodeId, useReactFlow, type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps } from '@xyflow/react';
 import type { PathInfo } from 'roughjs/bin/core';
 import type { BoundaryKind, ComponentType, ConnectionKind } from '../core/schema.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
@@ -7,12 +7,29 @@ import { edgeGeometry, type Pt, type Route } from './edges.ts';
 import { DECISION_SIZE, NOTE_COLOR, NOTE_SIZE, SHAPES, drawShape, gen, hash, options, toPaths } from './shapes.ts';
 
 export const SketchContext = createContext(true);
-/** What edges need from the app: whether editing is allowed, and how to save a bend or start a label edit. */
-export const EdgeContext = createContext<{ locked: boolean; onBend: (id: string, bend: number | undefined) => void; onEditLabel: (id: string, at: Pt) => void }>({
+/** What edges and nodes need from the app: whether editing is allowed, how to save a bend, start a label edit or delete. */
+export const EdgeContext = createContext<{ locked: boolean; onBend: (id: string, bend: number | undefined) => void; onEditLabel: (id: string, at: Pt) => void; onDelete: (id: string) => void }>({
   locked: true,
   onBend: () => {},
   onEditLabel: () => {},
+  onDelete: () => {},
 });
+
+/** A delete button over the top-right corner, shown while this node is the only one selected. */
+function Trash() {
+  const { locked, onDelete } = useContext(EdgeContext);
+  const id = useNodeId();
+  if (locked || !id) return null;
+  return (
+    <NodeToolbar position={Position.Top} align="end" offset={6}>
+      <button className="node-trash" onClick={() => onDelete(id)} title="Delete (Del)" aria-label="Delete">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M2.5 4h11M6.5 4V2.5h3V4M4 4l.7 9.5h6.6L12 4M6.8 6.5v4.5M9.2 6.5v4.5" />
+        </svg>
+      </button>
+    </NodeToolbar>
+  );
+}
 
 /** added: drawn as new in the step diff; comments: open review comments on the item. */
 type Common = { unseen: boolean; faded: boolean; added?: boolean; comments?: number };
@@ -46,6 +63,7 @@ function Frame({ w, h, data, children }: { w: number; h: number; data: Common; c
       )}
       <Handle type="target" position={Position.Top} />
       <Handle type="source" position={Position.Bottom} />
+      <Trash />
     </div>
   );
 }
@@ -130,6 +148,7 @@ export const BoundaryNodeView = memo(function BoundaryNodeView({ id, data }: Nod
         {data.detail && <span className="boundary-detail">{data.detail}</span>}
         {data.unseen && <span className="unseen-dot inline" title="Not reviewed yet" />}
       </div>
+      <Trash />
     </div>
   );
 });

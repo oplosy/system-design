@@ -582,6 +582,10 @@ function Shell() {
         if (c) c.bend = bend;
       }),
     onEditLabel: startEdit,
+    onDelete: (id: string) => {
+      remove([id]);
+      setSelected(null);
+    },
   };
 
   /** Re-arranges the whole sheet, or only the selected items (a selected boundary brings what it holds). */
@@ -730,7 +734,10 @@ function Shell() {
         else if (key === 'y') undo(false);
         else if (key === 'd') duplicate();
         else if (key === 'v' && clip.current) pasteClip(clip.current);
-        else if (!(key === 'c' && copy())) return;
+        else if (key === 'x' && copy()) {
+          remove(selectedIds());
+          setSelected(null);
+        } else if (!(key === 'c' && copy())) return;
         e.preventDefault();
         return;
       }
