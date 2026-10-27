@@ -17,6 +17,7 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Keep a big design readable with drill-down: create a design for a service's insides and set the service's detail to its id.
 - When there is a real choice to make (Redis vs CDN), offer it as options in add_step; the reviewer compares them on the canvas and picks one.
 - Put expected load (qps) and one-way latency (ms) on the lines that matter; a flow then shows its total time.
+- Put a monthly cost (USD) on parts that cost real money; each step then shows what it adds.
 - After a step, run lint and fix what it finds or say in a note why it is fine.
 - Start from list_designs; call get_design before editing an existing one.
 - The reviewer can send steps back with comments. Before continuing a design, call get_feedback; fix what it asks (in that step, or in a new step), then resolve_feedback with a short reply. Resolving hands the step back for review.`;
@@ -34,6 +35,7 @@ const componentFields = {
   boundary: z.string().optional().describe('Id of the innermost boundary this component sits in'),
   detail: z.string().optional().describe('Id of another design that shows what is inside this component; create it first with create_design'),
   code: z.string().optional().describe('Where its code lives: a repository URL, or a path in the repo such as "services/orders"'),
+  cost: z.number().nonnegative().optional().describe('Expected running cost in US dollars per month'),
 };
 const connectionFields = {
   from: z.string().describe('Component id'),
@@ -221,7 +223,7 @@ server.registerTool(
   'update_component',
   {
     description: 'Change a component. The change is recorded on the step (latest by default) for review, with its old values',
-    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), detail: componentFields.detail, code: componentFields.code, step },
+    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), detail: componentFields.detail, code: componentFields.code, cost: componentFields.cost, step },
   },
   async ({ design: designId, id, step, ...fields }) =>
     edit(designId, (d) => {

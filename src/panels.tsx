@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type BoundaryKind, type ComponentType, type ConnectionKind, type Design } from '../core/schema.ts';
-import { flowLatency } from '../core/export.ts';
+import { flowLatency, monthlyCost } from '../core/export.ts';
 import * as m from '../core/mutations.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SketchContext } from './canvas.tsx';
@@ -289,6 +289,8 @@ function InsideSelect({ design, value, exclude, onPick }: { design: Design; valu
 }
 
 /** A flow's total time, " · ≥ 40 ms" when some hops have no latency yet; empty when none have. */
+const dollars = (n: number) => `$${n.toLocaleString('en-US', Number.isInteger(n) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 function timeText(design: Design, flow: Design['flows'][number]) {
   const { total, unknown } = flowLatency(design, flow);
   return unknown === flow.path.length - 1 ? '' : ` · ${unknown ? '≥ ' : ''}${total} ms`;
@@ -482,6 +484,9 @@ export function Inspector({
     const components = design.components.filter((c) => c.step === stepId && inOption(c));
     const boundaries = design.boundaries.filter((b) => b.step === stepId && inOption(b));
     const viewed = optionView[stepId] ?? step.options?.[0].id;
+    const at = stepNo(stepId);
+    const sofar = monthlyCost(design.components.filter((c) => stepNo(c.step) <= at && inOption(c)));
+    const added = monthlyCost(components);
     return (
       <aside className="inspector">
         <header className="insp-head">
@@ -495,6 +500,11 @@ export function Inspector({
           </div>
           <h2 className="insp-title">{step.title}</h2>
           {step.summary && <p className="insp-lead">{step.summary}</p>}
+          {sofar.priced > 0 && (
+            <p className="insp-cost" title={`${sofar.priced} parts have a cost`}>
+              {dollars(sofar.total)}/mo so far{added.priced > 0 && <> · +{dollars(added.total)} in this step</>}
+            </p>
+          )}
         </header>
 
         {step.options && (
@@ -694,6 +704,9 @@ export function Inspector({
             </Prop>
             <Prop label="Technology">
               <Ed label="Technology" placeholder="e.g. Redis" value={component.tech} onCommit={(v) => edit((d: Design) => d.components, { tech: v })} />
+            </Prop>
+            <Prop label="Cost">
+              <Num label="Cost per month" unit="$/mo" value={component.cost} onCommit={(v) => edit((d: Design) => d.components, { cost: v })} />
             </Prop>
             <Prop label="Code">
               <Ed label="Code" placeholder="Repo URL or path" value={component.code} onCommit={(v) => edit((d: Design) => d.components, { code: v })} />

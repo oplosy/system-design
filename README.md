@@ -13,6 +13,7 @@ A local canvas for system and architecture designs that agents build and you rev
 - **Flows:** a request path ("User logs in") through the components. Play it hop by hop from the step panel or while presenting: the path lights up and each hop is numbered. Draw one with **New flow** by clicking connected parts in order. **Sequence** shows a flow as a sequence diagram (replies dashed) and copies it as Mermaid.
 - **Drill-down:** a part can open another design that shows its insides (C4-style). Link one under **Opens**, or start an empty one with **New inside**; the badge on the part opens it and a breadcrumb leads back.
 - **Code links:** a part can say where its code lives under **Code**: a repository URL (opens in a new tab) or a path in the repo. Agents set it with `code`; a compose import fills it from each service's `build` path.
+- **Cost:** a part can carry its monthly cost in US dollars (**Cost** in the inspector, `cost` for agents). The step panel shows the total so far and what the step adds.
 - **Capacity notes:** a line can carry its load (requests per second) and one-way latency (ms). Both show under the line, and a flow adds up its hops' latency (a reply counts its line again).
 - **Lint:** amber badges flag likely smells (isolated parts, a balancer with one target, a datastore in a public network or reached straight from clients, a one-sided queue, an unlinked decision). Hover a badge to read it.
 - Everything is a JSON file in `designs/`, so changes are versioned and diffable.

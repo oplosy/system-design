@@ -1178,6 +1178,12 @@ kbd.lead {
   color: var(--muted);
 }
 
+.insp-cost {
+  margin-top: 8px;
+  font: 500 11.5px/1.4 var(--mono);
+  color: var(--ink-2);
+}
+
 .insp-sec {
   padding: 16px 20px;
   border-top: 1px solid var(--rule);

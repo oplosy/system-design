@@ -60,6 +60,12 @@ export function flowLatency(d: Design, flow: Flow) {
   return { total: messages.reduce((t, m) => t + (m.latency ?? 0), 0), unknown: messages.filter((m) => m.latency === undefined).length };
 }
 
+/** Monthly cost of some parts; `priced` says how many have a cost, so a total over few of them reads as partial. */
+export function monthlyCost(parts: { cost?: number }[]) {
+  const priced = parts.filter((c) => c.cost !== undefined);
+  return { total: priced.reduce((t, c) => t + c.cost!, 0), priced: priced.length };
+}
+
 export function toMermaidSequence(d: Design, flow: Flow) {
   const { participants, messages } = flowSequence(d, flow);
   const out = ['sequenceDiagram', `  title ${flow.title.replace(/\n/g, ' ')}`, '  autonumber'];

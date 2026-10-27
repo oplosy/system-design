@@ -177,6 +177,11 @@ test('flows follow connections and skip removed stops', async () => {
   );
   const { flowLatency } = await import('./export.ts');
   assert.deepEqual(flowLatency(x, x.flows[0]), { total: 0, unknown: 4 });
+  const { monthlyCost } = await import('./export.ts');
+  m.updateTracked(x, api, { cost: 120 });
+  m.updateTracked(x, db, { cost: 0.5 });
+  assert.deepEqual(monthlyCost(x.components), { total: 120.5, priced: 2 }, 'parts without a cost are not counted as priced');
+  assert.equal(parseDesign(structuredClone(x)).components.find((c) => c.id === db)!.cost, 0.5);
   m.updateTracked(x, 'user-to-api', { latency: 20, qps: 1500 });
   x.connections.find((c) => c.id === 'api-to-db')!.latency = 5;
   assert.deepEqual(flowLatency(x, x.flows[0]), { total: 50, unknown: 0 }, 'a reply hop counts its line again');

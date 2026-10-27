@@ -205,6 +205,8 @@ export const ComponentSchema = z.object({
   detail: Id.optional(),
   /** Where its code lives: a repository URL or a path in the repo. */
   code: z.string().optional(),
+  /** Expected running cost in US dollars per month. */
+  cost: z.number().nonnegative().optional(),
   position: Position.optional(),
   option: Option,
   step: Id,
