@@ -270,6 +270,21 @@ function Shell() {
     api.templates().then(setTemplates).catch((e) => setError(errorText(e)));
   }, []);
 
+  // The open design is gone (deleted on disk, or a stale link): open another one instead of leaving a dead sheet.
+  const leave = useCallback(
+    async (missing: string, note: string) => {
+      commit(null, { fresh: true });
+      setSelected(null);
+      setError(note);
+      const list = await api.designs().catch(() => [] as Summary[]);
+      setDesigns(list);
+      const next = list.find((x) => x.id !== missing)?.id ?? null;
+      if (!next) history.replaceState(null, '', location.pathname);
+      setId(next);
+    },
+    [commit],
+  );
+
   useEffect(() => {
     refreshLists();
     const es = new EventSource('/api/events');
@@ -282,11 +297,12 @@ function Shell() {
         const fresh = await api.get(changed);
         if (fresh.rev !== designRef.current?.rev) commit(fresh, { fresh: true });
       } catch (e) {
-        setError(errorText(e));
+        if (e instanceof ApiError && e.status === 404) leave(changed, `“${cur.title}” was deleted, so another design was opened.`);
+        else setError(errorText(e));
       }
     };
     return () => es.close();
-  }, [refreshLists, commit]);
+  }, [refreshLists, commit, leave]);
 
   useEffect(() => {
     if (!id && designs.length) setId(designs[0].id);
@@ -307,11 +323,15 @@ function Shell() {
         const firstUnseen = d.steps.findIndex((s) => !s.seen);
         setViewIndex(firstUnseen >= 0 ? firstUnseen : d.steps.length - 1);
       })
-      .catch((e) => setError(errorText(e)));
+      .catch((e) => {
+        if (cancelled) return;
+        if (e instanceof ApiError && e.status === 404) leave(id, `There is no design “${id}”, so another one was opened.`);
+        else setError(errorText(e));
+      });
     return () => {
       cancelled = true;
     };
-  }, [id, commit]);
+  }, [id, commit, leave]);
 
   // New items (from agents or templates) arrive without positions: lay them out once.
   useEffect(() => {
