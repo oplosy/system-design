@@ -1,6 +1,7 @@
 import { createContext, memo, useContext, useMemo, useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, Handle, NodeToolbar, Position, useInternalNode, useNodeId, useReactFlow, type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps } from '@xyflow/react';
 import type { PathInfo } from 'roughjs/bin/core';
+import { dollars } from '../core/export.ts';
 import type { BoundaryKind, ComponentType, ConnectionKind } from '../core/schema.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { edgeGeometry, type Pt, type Route } from './edges.ts';
@@ -40,7 +41,7 @@ function Trash() {
 
 /** added / changed / removed: how the step diff draws it; comments: open review comments on the item; issues: lint warnings. */
 type Common = { unseen: boolean; faded: boolean; added?: boolean; changed?: boolean; removed?: boolean; comments?: number; issues?: string[] };
-export type ComponentNode = Node<Common & { type: ComponentType; label: string; tech?: string; detail?: string }, 'component'>;
+export type ComponentNode = Node<Common & { type: ComponentType; label: string; tech?: string; detail?: string; cost?: number }, 'component'>;
 export type NoteNode = Node<Common & { text: string }, 'note'>;
 export type DecisionNode = Node<Common & { title: string; why: string }, 'decision'>;
 export type BoundaryNode = Node<Common & { kind: BoundaryKind; label: string; detail?: string; w: number; h: number }, 'boundary'>;
@@ -93,6 +94,7 @@ export const ComponentNodeView = memo(function ComponentNodeView({ id, data }: N
       <div className="node-label" style={{ left: spec.labelX ?? spec.w / 2, top: spec.labelY, maxWidth: spec.w + 30 }}>
         <div>{data.label}</div>
         {data.tech && <div className="node-tech">{data.tech}</div>}
+        {data.cost !== undefined && <div className="node-tech">{dollars(data.cost)}/mo</div>}
       </div>
       {data.detail && (
         <button className="node-open nodrag" onClick={() => onOpen(data.detail!, data.label)} title="Open what is inside" aria-label={`Open the inside of ${data.label}`}>

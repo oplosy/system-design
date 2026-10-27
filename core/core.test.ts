@@ -177,10 +177,7 @@ test('flows follow connections and skip removed stops', async () => {
   );
   const { flowLatency } = await import('./export.ts');
   assert.deepEqual(flowLatency(x, x.flows[0]), { total: 0, unknown: 4 });
-  const { monthlyCost } = await import('./export.ts');
-  m.updateTracked(x, api, { cost: 120 });
   m.updateTracked(x, db, { cost: 0.5 });
-  assert.deepEqual(monthlyCost(x.components), { total: 120.5, priced: 2 }, 'parts without a cost are not counted as priced');
   assert.equal(parseDesign(structuredClone(x)).components.find((c) => c.id === db)!.cost, 0.5);
   m.updateTracked(x, 'user-to-api', { latency: 20, qps: 1500 });
   x.connections.find((c) => c.id === 'api-to-db')!.latency = 5;
@@ -406,6 +403,24 @@ test('imports docker-compose and Kubernetes manifests', async () => {
   );
   await store.writeDesign(k);
   assert.throws(() => importInfra(k, 'just: text'), /docker-compose file/);
+});
+
+test('a step moves the cost by what it adds, edits and removes', async () => {
+  const { stepCostChange } = await import('./export.ts');
+  const x = await store.createDesign({ id: 'cost', title: 'Cost' });
+  const api = m.addComponent(x, { type: 'service', label: 'API', cost: 120 });
+  const db = m.addComponent(x, { type: 'sql-db', label: 'DB', cost: 0.5 });
+  const tune = m.addStep(x, { title: 'Tune' });
+  m.addComponent(x, { type: 'cache', label: 'Cache', cost: 30 });
+  m.updateTracked(x, api, { cost: 100 });
+  m.removeTracked(x, db);
+  assert.equal(stepCostChange(x, tune), 30 - 20 - 0.5);
+  assert.equal(stepCostChange(x, x.steps[0].id), 120.5, 'a step counts its parts at the cost it left them');
+  m.addStep(x, { title: 'Trim' });
+  m.updateTracked(x, 'cache', { cost: 10 });
+  m.removeTracked(x, 'cache');
+  assert.equal(stepCostChange(x, x.steps[2].id), -30, 'an edit before a removal in the same step is not counted twice');
+  assert.equal(x.steps.reduce((t, s) => t + stepCostChange(x, s.id), 0), 100, 'the steps add up to the current total');
 });
 
 test('lint flags likely smells', async () => {

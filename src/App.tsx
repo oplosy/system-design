@@ -409,7 +409,7 @@ function Shell() {
           };
         }),
       ...ghosts(diff ? current.removed ?? [] : [], design.components.filter(onSheet)),
-      ...design.components.filter(onSheet).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech, detail: c.detail }, c.step)),
+      ...design.components.filter(onSheet).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech, detail: c.detail, cost: c.cost }, c.step)),
       ...design.notes.filter(onSheet).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
       ...design.decisions.filter(onSheet).map((x) => node(x.id, 'decision', x.position, { title: x.title, why: x.why }, x.step)),
     ];

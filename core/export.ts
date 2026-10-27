@@ -60,11 +60,31 @@ export function flowLatency(d: Design, flow: Flow) {
   return { total: messages.reduce((t, m) => t + (m.latency ?? 0), 0), unknown: messages.filter((m) => m.latency === undefined).length };
 }
 
-/** Monthly cost of some parts; `priced` says how many have a cost, so a total over few of them reads as partial. */
-export function monthlyCost(parts: { cost?: number }[]) {
-  const priced = parts.filter((c) => c.cost !== undefined);
-  return { total: priced.reduce((t, c) => t + c.cost!, 0), priced: priced.length };
+/**
+ * How much a step moves the monthly cost: the parts it adds (those `show` keeps) at the cost they had when it ended,
+ * the cost edits it records and the parts it removes. The changes of all steps add up to the design's current total.
+ */
+export function stepCostChange(d: Design, stepId: string, show: (x: { step: string; option?: string }) => boolean = () => true) {
+  const k = d.steps.findIndex((x) => x.id === stepId);
+  const s = d.steps[k];
+  if (!s) return 0;
+  const later = d.steps.slice(k + 1);
+  const removedIn = (t: Design['steps'][number]) => new Set(t.removed?.map((r) => r.id));
+  const snapshots = (t: Design['steps'][number]) => (t.before ?? []).filter((b) => b.kind === 'components' && removedIn(t).has(String(b.item.id))).map((b) => b.item as { id: string; step: string; option?: string; cost?: number });
+  // What the step added: parts still here, and parts a later step removed, as that step's snapshot keeps them.
+  const added = [...d.components.filter((c) => c.step === stepId), ...later.flatMap(snapshots).filter((c) => c.step === stepId)].filter(show);
+  // A later cost edit remembers the value this step left.
+  const costOf = (c: { id: string; cost?: number }) => {
+    const edit = later.map((t) => t.changed?.find((x) => x.id === c.id && x.field === 'cost')).find(Boolean);
+    return edit ? Number(edit.from ?? 0) : (c.cost ?? 0);
+  };
+  const gone = removedIn(s);
+  const edited = (s.changed ?? []).filter((c) => c.field === 'cost' && !gone.has(c.id)).reduce((t, c) => t + Number(c.to ?? 0) - Number(c.from ?? 0), 0);
+  const removed = snapshots(s).reduce((t, c) => t + (c.cost ?? 0), 0);
+  return added.reduce((t, c) => t + costOf(c), 0) + edited - removed;
 }
+
+export const dollars = (n: number) => `$${n.toLocaleString('en-US', Number.isInteger(n) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function toMermaidSequence(d: Design, flow: Flow) {
   const { participants, messages } = flowSequence(d, flow);
