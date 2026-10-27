@@ -17,10 +17,10 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { toPng, toSvg } from 'html-to-image';
-import { toDecisionRecord, toMermaid } from '../core/export.ts';
+import { codeUrl, costAt, toDecisionRecord, toMermaid } from '../core/export.ts';
 import { lint } from '../core/lint.ts';
 import { importMermaid, parseMermaid } from '../core/mermaid.ts';
-import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { ApiError, api, type Summary } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
@@ -409,7 +409,7 @@ function Shell() {
           };
         }),
       ...ghosts(diff ? current.removed ?? [] : [], design.components.filter(onSheet)),
-      ...design.components.filter(onSheet).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech, detail: c.detail, cost: c.cost }, c.step)),
+      ...design.components.filter(onSheet).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech, detail: c.detail, cost: costAt(design, c, current.id), currency: design.currency, code: codeUrl(design, c.code) }, c.step)),
       ...design.notes.filter(onSheet).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
       ...design.decisions.filter(onSheet).map((x) => node(x.id, 'decision', x.position, { title: x.title, why: x.why }, x.step)),
     ];
@@ -775,7 +775,7 @@ function Shell() {
       backgroundColor: getComputedStyle(canvasRef.current!).getPropertyValue('--canvas').trim(),
       style: { width: `${width}px`, height: `${height}px`, transform: `translate(${pad - b.x}px, ${pad - b.y}px) scale(1)` },
       // Leave out editing aids and review markers: the image is for docs, not for review.
-      filter: (n: HTMLElement) => !['inline-edit', 'bend-handle', 'unseen-dot', 'comment-badge', 'lint-badge', 'node-open'].some((c) => n.classList?.contains(c)),
+      filter: (n: HTMLElement) => !['inline-edit', 'bend-handle', 'unseen-dot', 'comment-badge', 'lint-badge', 'node-open', 'node-code'].some((c) => n.classList?.contains(c)),
     };
     try {
       download(kind === 'png' ? await toPng(el, { ...options, pixelRatio: 2 }) : await toSvg(el, options), `${design.id}.${kind}`);
@@ -1337,33 +1337,38 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
     const fromInfra = template === INFRA;
     // Loaded only here, so the YAML parser stays out of the main bundle.
     const infra = fromInfra ? await import('../core/infra.ts') : null;
-    if (infra) {
+    const id = m.slugify(title);
+    const fill = fromMermaid
+      ? (d: Design) => importMermaid(d, source, { guess: guessType })
+      : infra
+        ? (d: Design) => infra.importInfra(d, source, { guess: guessType })
+        : null;
+    if (fill) {
+      // Import into a draft first, so a paste that can't become a valid design never leaves an empty one behind.
+      let left: string | undefined;
       try {
-        if (!infra.readInfra(source).parts.length) return setErr('No services or workloads found.');
+        const draft = m.blankDesign(id, title.trim());
+        fill(draft);
+        parseDesign(draft);
+        const skipped = fromMermaid ? parseMermaid(source).skipped : infra!.readInfra(source).skipped;
+        if (skipped.length) {
+          left = fromMermaid
+            ? `${skipped.length > 1 ? 'Lines' : 'Line'} ${skipped.join(', ')} can’t be read and will be left out.`
+            : `Left out, since they draw nothing: ${skipped.join(', ')}.`;
+        }
       } catch (e) {
         return setErr(errorText(e));
       }
-    }
-    if (fromMermaid) {
-      let parsed;
-      try {
-        parsed = parseMermaid(source);
-      } catch (e) {
-        return setErr(errorText(e));
-      }
-      if (!parsed.nodes.length) return setErr('No nodes found in this flowchart.');
-      if (parsed.skipped.length && warned !== source) {
+      if (left && warned !== source) {
         setWarned(source);
-        return setErr(`${parsed.skipped.length > 1 ? 'Lines' : 'Line'} ${parsed.skipped.join(', ')} can’t be read and will be left out. Create again to go ahead.`);
+        return setErr(`${left} Create again to go ahead.`);
       }
     }
     setBusy(true);
     try {
-      const pasted = fromMermaid || fromInfra;
-      const created = await api.create({ id: m.slugify(title), title: title.trim(), template: pasted ? undefined : template || undefined });
-      if (fromMermaid) importMermaid(created, source, { guess: guessType });
-      if (infra) infra.importInfra(created, source, { guess: guessType });
-      onCreated(pasted ? await api.save(created) : created);
+      const created = await api.create({ id, title: title.trim(), template: fill ? undefined : template || undefined });
+      if (fill) fill(created);
+      onCreated(fill ? await api.save(created) : created);
     } catch (e) {
       setErr(e instanceof ApiError && e.status === 409 ? 'A design with this name already exists. Try another.' : errorText(e));
     } finally {

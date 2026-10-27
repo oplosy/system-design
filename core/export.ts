@@ -60,6 +60,14 @@ export function flowLatency(d: Design, flow: Flow) {
   return { total: messages.reduce((t, m) => t + (m.latency ?? 0), 0), unknown: messages.filter((m) => m.latency === undefined).length };
 }
 
+/** A part's cost as it stood when `stepId` ended: a later step's cost edit remembers the value from before it. */
+export function costAt(d: Design, c: { id: string; cost?: number }, stepId: string) {
+  const later = d.steps.slice(d.steps.findIndex((s) => s.id === stepId) + 1);
+  const edit = later.map((t) => t.changed?.find((x) => x.id === c.id && x.field === 'cost')).find(Boolean);
+  if (!edit) return c.cost;
+  return edit.from === undefined ? undefined : Number(edit.from);
+}
+
 /**
  * How much a step moves the monthly cost: the parts it adds (those `show` keeps) at the cost they had when it ended,
  * the cost edits it records and the parts it removes. The changes of all steps add up to the design's current total.
@@ -70,21 +78,30 @@ export function stepCostChange(d: Design, stepId: string, show: (x: { step: stri
   if (!s) return 0;
   const later = d.steps.slice(k + 1);
   const removedIn = (t: Design['steps'][number]) => new Set(t.removed?.map((r) => r.id));
-  const snapshots = (t: Design['steps'][number]) => (t.before ?? []).filter((b) => b.kind === 'components' && removedIn(t).has(String(b.item.id))).map((b) => b.item as { id: string; step: string; option?: string; cost?: number });
+  const snapshots = (t: Design['steps'][number]) =>
+    (t.before ?? []).filter((b) => b.kind === 'components' && removedIn(t).has(String(b.item.id))).map((b) => b.item as { id: string; step: string; option?: string; cost?: number });
   // What the step added: parts still here, and parts a later step removed, as that step's snapshot keeps them.
   const added = [...d.components.filter((c) => c.step === stepId), ...later.flatMap(snapshots).filter((c) => c.step === stepId)].filter(show);
-  // A later cost edit remembers the value this step left.
-  const costOf = (c: { id: string; cost?: number }) => {
-    const edit = later.map((t) => t.changed?.find((x) => x.id === c.id && x.field === 'cost')).find(Boolean);
-    return edit ? Number(edit.from ?? 0) : (c.cost ?? 0);
-  };
   const gone = removedIn(s);
   const edited = (s.changed ?? []).filter((c) => c.field === 'cost' && !gone.has(c.id)).reduce((t, c) => t + Number(c.to ?? 0) - Number(c.from ?? 0), 0);
   const removed = snapshots(s).reduce((t, c) => t + (c.cost ?? 0), 0);
-  return added.reduce((t, c) => t + costOf(c), 0) + edited - removed;
+  return added.reduce((t, c) => t + (costAt(d, c, stepId) ?? 0), 0) + edited - removed;
 }
 
-export const dollars = (n: number) => `$${n.toLocaleString('en-US', Number.isInteger(n) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** A monthly amount in the design's currency, cents only when there are some. */
+export function money(n: number, currency = 'USD') {
+  const cents = Number.isInteger(n) ? 0 : 2;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: cents, maximumFractionDigits: cents }).format(n);
+}
+
+/** Where a component's code opens: its own web address, or its path under the design's repository. */
+export function codeUrl(d: Design, code: string | undefined) {
+  if (!code) return undefined;
+  if (/^https?:\/\//i.test(code)) return code;
+  if (!d.repo) return undefined;
+  const path = code.replace(/^\.?\/+/, '').replace(/^\.$/, '');
+  return path ? `${d.repo.replace(/\/+$/, '')}/${path}` : d.repo;
+}
 
 export function toMermaidSequence(d: Design, flow: Flow) {
   const { participants, messages } = flowSequence(d, flow);

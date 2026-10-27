@@ -13,19 +13,32 @@ type Doc = Record<string, any>;
 const obj = (x: unknown): Doc => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Doc) : {});
 const list = (x: unknown): unknown[] => (Array.isArray(x) ? x : []);
 
-/** Hostnames an environment value may name: "postgres://u:p@db:5432/x, redis" → db, 5432, x, redis. */
-function hosts(value: unknown) {
+// Variable names whose value is an address, e.g. DB_HOST, API_URL, KAFKA_BOOTSTRAP_SERVERS.
+const ADDRESS_KEY = /(host|hosts|url|urls|uri|addr|address|endpoint|server|servers|dsn|broker|brokers|upstream)$/i;
+
+/**
+ * Hosts an environment variable names. A value counts when it reads as an address (a URL, host:port, a cluster
+ * DNS name) or the variable's name says it is one, so MODE=api does not link to a service called api.
+ */
+function hosts([key, value]: [string, unknown]) {
   return String(value ?? '')
     .split(/[\s,;]+/)
-    .flatMap((v) => v.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^[^@/]*@/, '').match(/[a-z0-9][a-z0-9.-]*/gi) ?? []);
+    .flatMap((v) => {
+      const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(v);
+      const authority = v.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^[^@/]*@/, '').split(/[/?#]/)[0];
+      const host = authority.replace(/:\d+$/, '');
+      const address = url || host !== authority || /\.svc(\.|$)/.test(host) || ADDRESS_KEY.test(key);
+      return address && /^[a-z0-9][a-z0-9.-]*$/i.test(host) ? [host] : [];
+    });
 }
 
-function envValues(env: unknown) {
-  if (Array.isArray(env)) return env.map((e) => (typeof e === 'string' ? e.split('=').slice(1).join('=') : obj(e).value));
-  return Object.values(obj(env));
+function envEntries(env: unknown): [string, unknown][] {
+  if (Array.isArray(env)) return env.map((e) => (typeof e === 'string' ? [e.split('=')[0], e.split('=').slice(1).join('=')] : [String(obj(e).name ?? ''), obj(e).value]));
+  return Object.entries(obj(env));
 }
 
 export function readInfra(text: string) {
+  if (/\{\{.*\}\}/.test(text)) throw new Error('This looks like a Helm template. Render it with "helm template <chart>" and paste the output.');
   const docs = Array.from(parseAllDocuments(text));
   for (const doc of docs) if (doc.errors.length) throw new Error(`YAML: ${doc.errors[0].message}`);
   const values = docs.map((doc) => obj(doc.toJS())).flatMap((v) => (v.kind === 'List' ? list(v.items).map(obj) : [v]));
@@ -44,7 +57,7 @@ function compose(file: Doc) {
     const s = obj(services[key]);
     const deps = Array.isArray(s.depends_on) ? s.depends_on.map(String) : Object.keys(obj(s.depends_on));
     for (const to of [...deps, ...list(s.links).map((l) => String(l).split(':')[0])]) links.push({ from: key, to });
-    for (const to of envValues(s.environment).flatMap(hosts)) if (names.includes(to)) links.push({ from: key, to });
+    for (const to of envEntries(s.environment).flatMap(hosts)) if (names.includes(to)) links.push({ from: key, to });
     const image = typeof s.image === 'string' ? s.image : undefined;
     // build is a context path, or { context } in the long form.
     const build = typeof s.build === 'string' ? s.build : obj(s.build).context;
@@ -52,7 +65,7 @@ function compose(file: Doc) {
     return { key, label: key, image, type: 'service', group: used.size > 1 ? nets(s)[0] : undefined, code };
   });
   const groups: Group[] = used.size > 1 ? [...used].map((n) => ({ key: n, label: n, kind: 'subnet' })) : [];
-  return { parts, links, groups };
+  return { parts, links, groups, skipped: [] as string[] };
 }
 
 /** Where each workload kind keeps its pod template ({ metadata, spec }), and the part type it gets when its image says nothing. */
@@ -98,7 +111,7 @@ function kube(docs: Doc[]) {
   };
   const links: Link[] = [];
   for (const p of pods) {
-    for (const host of p.containers.flatMap((c) => envValues(c.env)).flatMap(hosts)) {
+    for (const host of p.containers.flatMap((c) => envEntries(c.env)).flatMap(hosts)) {
       for (const to of resolve(host, p.ns)) if (to !== p.key) links.push({ from: p.key, to });
     }
   }
@@ -118,7 +131,9 @@ function kube(docs: Doc[]) {
   const many = new Set(parts.map((p) => p.group)).size > 1;
   for (const p of parts) if (!many) p.group = undefined;
   const groups: Group[] = many ? [...new Set(parts.map((p) => p.group!))].map((n) => ({ key: n, label: n, kind: 'group' })) : [];
-  return { parts, links, groups };
+  // Everything that drew nothing, so the reader knows what was left out. Services show through their workloads.
+  const skipped = docs.filter((d) => !WORKLOADS[d.kind] && !['Service', 'Ingress', 'Namespace'].includes(d.kind)).map((d) => `${d.kind ?? 'unknown kind'} ${name(d)}`.trim());
+  return { parts, links, groups, skipped };
 }
 
 /**

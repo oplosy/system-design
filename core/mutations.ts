@@ -17,6 +17,11 @@ function usedIds(d: Design) {
   return new Set([...d.components, ...d.notes, ...d.decisions, ...d.connections, ...d.boundaries, ...d.flows, ...d.steps, ...d.comments].map((x) => x.id));
 }
 
+/** A design with nothing on it but its first step. */
+export function blankDesign(id: string, title: string): Design {
+  return { id, title, rev: 0, steps: [{ id: 'start', title: 'Start', seen: true }], components: [], connections: [], notes: [], decisions: [], boundaries: [], comments: [], flows: [] };
+}
+
 export function uniqueId(d: Design, base: string) {
   const used = usedIds(d);
   const slug = slugify(base);
@@ -294,12 +299,15 @@ export function removeTracked(d: Design, id: string, step?: string) {
   remember(d, s, was);
 }
 
-/** Changes fields of a component, boundary or connection as an agent edit; each field keeps its value from before the step. */
-export function updateTracked(d: Design, id: string, fields: Record<string, string | number | boolean | undefined>, step?: string) {
+/**
+ * Changes fields of a component, boundary or connection as a recorded edit; each field keeps its value from before the step.
+ * Agent edits reopen the step for review; the reviewer's own edits pass `reopen: false`.
+ */
+export function updateTracked(d: Design, id: string, fields: Record<string, string | number | boolean | undefined>, step?: string, reopen = true) {
   const x = [...d.components, ...d.boundaries, ...d.connections].find((i) => i.id === id) as Record<string, unknown> | undefined;
   if (!x) throw new Error(`unknown component, boundary or connection "${id}"`);
   const text = (v: unknown) => (v === undefined ? undefined : String(v));
-  const s = d.steps.find((t) => t.id === useStep(d, step, true))!;
+  const s = d.steps.find((t) => t.id === useStep(d, step, reopen))!;
   const was = snapshot(d);
   for (const [field, to] of Object.entries(fields)) {
     const from = x[field];

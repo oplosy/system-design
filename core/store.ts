@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { blankDesign } from './mutations.ts';
 import { isId, parseDesign, type Design } from './schema.ts';
 
 // import.meta.url (not dirname) survives Vite bundling this file into its config.
@@ -68,28 +69,24 @@ export async function writeDesign(design: Design, { create = false } = {}): Prom
   return next;
 }
 
-export async function createDesign(input: { id: string; title: string; description?: string; template?: string }) {
+export async function createDesign(input: { id: string; title: string; description?: string; template?: string; repo?: string; currency?: string }) {
   let base: Design;
   if (input.template) {
     base = await readFrom(TEMPLATES_DIR, input.template);
     base.steps = base.steps.map((s) => ({ ...s, seen: false }));
   } else {
-    base = {
-      id: input.id,
-      title: input.title,
-      rev: 0,
-      steps: [{ id: 'start', title: 'Start', seen: true }],
-      components: [],
-      connections: [],
-      notes: [],
-      decisions: [],
-      boundaries: [],
-      comments: [],
-      flows: [],
-    };
+    base = blankDesign(input.id, input.title);
   }
   return writeDesign(
-    { ...base, id: input.id, title: input.title, description: input.description ?? base.description, template: input.template },
+    {
+      ...base,
+      id: input.id,
+      title: input.title,
+      description: input.description ?? base.description,
+      template: input.template,
+      repo: input.repo ?? base.repo,
+      currency: input.currency ?? base.currency,
+    },
     { create: true },
   );
 }

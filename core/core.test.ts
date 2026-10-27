@@ -313,6 +313,14 @@ test('Mermaid flowcharts import, including our own export', async () => {
   );
   await store.writeDesign(x);
   assert.throws(() => parseMermaid('sequenceDiagram\n  A->>B: hi'), /only Mermaid flowcharts/);
+  const { guessType } = await import('../src/shapes.ts');
+  const real = m.blankDesign('mermaid-real', 'Real');
+  importMermaid(real, 'flowchart LR\n  m[Mailer (Kafka consumer)] --> r[Sessions (Redis)]\n  r --> o[Orders API]\n  o --> p[Orders DB (PostgreSQL)]', { guess: guessType });
+  assert.deepEqual(
+    real.components.map((c) => c.type),
+    ['worker', 'cache', 'service', 'sql-db'],
+    'the head word decides: a Kafka consumer is a worker; generic names stay services',
+  );
 });
 
 test('imports docker-compose and Kubernetes manifests', async () => {
@@ -337,13 +345,13 @@ test('imports docker-compose and Kubernetes manifests', async () => {
   const x = await store.createDesign({ id: 'compose', title: 'Compose' });
   assert.throws(() => importInfra(x, compose), /YAML/, 'a broken file fails before anything is added');
   assert.equal(x.components.length, 0);
-  importInfra(x, compose.replace('      - ignored\n', '').replace('    environment:\n', '    environment:\n      - CACHE=redis\n').replace('      DATABASE_URL: ', '      - DATABASE_URL='), { guess });
+  importInfra(x, compose.replace('      - ignored\n', '').replace('    environment:\n', '    environment:\n      - CACHE=redis\n      - MODE=web\n').replace('      DATABASE_URL: ', '      - DATABASE_URL='), { guess });
   assert.deepEqual(
     x.components.map((c) => `${c.id}:${c.type}:${c.tech ?? ''}:${c.boundary ?? ''}`),
     ['web:service:web:1.2:front', 'api:service::front', 'db:sql-db:postgres:16:back'],
   );
   assert.deepEqual(x.components.map((c) => c.code ?? null), [null, '.', null], 'a build context is where the code lives');
-  assert.deepEqual(x.connections.map((c) => `${c.from}>${c.to}`), ['web>api', 'api>db'], 'the password and port are not hosts');
+  assert.deepEqual(x.connections.map((c) => `${c.from}>${c.to}`), ['web>api', 'api>db'], 'the password and port are not hosts, and MODE=web names no host');
   await store.writeDesign(x);
 
   const kube = [
@@ -370,7 +378,7 @@ test('imports docker-compose and Kubernetes manifests', async () => {
     '---',
     'kind: CronJob',
     'metadata: { name: backup, namespace: shop }',
-    'spec: { jobTemplate: { spec: { template: { spec: { containers: [{ image: postgres:16, env: [{ name: H, value: orders-db }] }] } } } } }',
+    'spec: { jobTemplate: { spec: { template: { spec: { containers: [{ image: postgres:16, env: [{ name: PGHOST, value: orders-db }, { name: TARGET, value: orders }] }] } } } } }',
     '---',
     'kind: Service',
     'metadata: { name: orders-db, namespace: shop }',
@@ -392,6 +400,9 @@ test('imports docker-compose and Kubernetes manifests', async () => {
     'metadata: { name: settings }',
   ].join('\n');
   const k = await store.createDesign({ id: 'kube', title: 'Kube' });
+  const { readInfra } = await import('./infra.ts');
+  assert.deepEqual(readInfra(kube).skipped, ['ConfigMap settings'], 'what draws nothing is reported');
+  assert.throws(() => readInfra('kind: Deployment\nmetadata: { name: {{ .Release.Name }} }'), /helm template/);
   importInfra(k, kube, { guess });
   assert.deepEqual(
     k.components.map((c) => `${c.id}:${c.type}:${c.tech ?? ''}:${c.boundary ?? ''}`),
@@ -416,11 +427,27 @@ test('a step moves the cost by what it adds, edits and removes', async () => {
   m.removeTracked(x, db);
   assert.equal(stepCostChange(x, tune), 30 - 20 - 0.5);
   assert.equal(stepCostChange(x, x.steps[0].id), 120.5, 'a step counts its parts at the cost it left them');
+  const { costAt, money, codeUrl } = await import('./export.ts');
+  const apiPart = x.components.find((c) => c.id === api)!;
+  assert.deepEqual([costAt(x, apiPart, x.steps[0].id), costAt(x, apiPart, tune)], [120, 100], 'the cost as each step left it');
+  x.steps[1].seen = true;
+  m.updateTracked(x, api, { cost: 90 }, tune, false);
+  assert.equal(x.steps[1].seen, true, "the reviewer's own edit keeps the step reviewed");
+  assert.equal(stepCostChange(x, tune), 30 - 30 - 0.5, 'and still counts in its cost change');
+  assert.deepEqual([money(1500), money(340.5, 'EUR')], ['$1,500', '€340.50']);
+  assert.equal(codeUrl(x, 'services/orders'), undefined, 'a path opens only against a repo');
+  x.repo = 'https://github.com/acme/shop/tree/main/';
+  assert.deepEqual(
+    [codeUrl(x, './services/orders'), codeUrl(x, '.'), codeUrl(x, 'https://gitlab.com/x'), codeUrl(x, 'javascript:alert(1)')],
+    ['https://github.com/acme/shop/tree/main/services/orders', 'https://github.com/acme/shop/tree/main/', 'https://gitlab.com/x', 'https://github.com/acme/shop/tree/main/javascript:alert(1)'],
+  );
+  assert.throws(() => parseDesign({ ...structuredClone(x), repo: 'javascript:alert(1)' }), /http/);
+  assert.throws(() => parseDesign({ ...structuredClone(x), currency: 'euro' }), /three-letter/);
   m.addStep(x, { title: 'Trim' });
   m.updateTracked(x, 'cache', { cost: 10 });
   m.removeTracked(x, 'cache');
   assert.equal(stepCostChange(x, x.steps[2].id), -30, 'an edit before a removal in the same step is not counted twice');
-  assert.equal(x.steps.reduce((t, s) => t + stepCostChange(x, s.id), 0), 100, 'the steps add up to the current total');
+  assert.equal(x.steps.reduce((t, s) => t + stepCostChange(x, s.id), 0), 90, 'the steps add up to the current total');
 });
 
 test('lint flags likely smells', async () => {

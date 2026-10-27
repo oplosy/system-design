@@ -904,6 +904,24 @@ kbd.lead {
   cursor: pointer;
 }
 
+/* Opens the code of a part, at the corner opposite the drill-down badge. */
+.node-code {
+  position: absolute;
+  left: -10px;
+  bottom: -10px;
+  height: 20px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  font: 600 10px/1 var(--mono);
+  color: var(--panel);
+  background: var(--ink-2);
+  box-shadow: 0 0 0 2px var(--canvas);
+  text-decoration: none;
+}
+
+.node-code:focus-visible,
 .node-open:focus-visible {
   outline: 2px solid var(--select);
   outline-offset: 2px;

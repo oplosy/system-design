@@ -205,7 +205,7 @@ export const ComponentSchema = z.object({
   detail: Id.optional(),
   /** Where its code lives: a repository URL or a path in the repo. */
   code: z.string().optional(),
-  /** Expected running cost in US dollars per month. */
+  /** Expected running cost per month, in the design's currency. */
   cost: z.number().nonnegative().optional(),
   position: Position.optional(),
   option: Option,
@@ -299,6 +299,10 @@ export const DesignSchema = z
     title: z.string().min(1),
     description: z.string().optional(),
     template: z.string().optional(),
+    /** Web address of the repository; a component's code path opens against it. */
+    repo: z.string().regex(/^https?:\/\/\S+$/i, 'an http(s) address').optional(),
+    /** ISO 4217 code that component costs are in; USD when unset. */
+    currency: z.string().regex(/^[A-Z]{3}$/, 'a three-letter code such as EUR').optional(),
     rev: z.number().int().nonnegative(),
     steps: z.array(StepSchema).min(1),
     components: z.array(ComponentSchema),

@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type BoundaryKind, type ComponentType, type ConnectionKind, type Design } from '../core/schema.ts';
-import { dollars, flowLatency, stepCostChange } from '../core/export.ts';
+import { codeUrl, costAt, flowLatency, money, stepCostChange } from '../core/export.ts';
 import * as m from '../core/mutations.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SketchContext } from './canvas.tsx';
@@ -195,23 +195,29 @@ function Ed(props: {
   placeholder?: string;
   className?: string;
   label: string;
+  /** Says what is wrong with a non-empty value, if anything. */
+  check?: (v: string) => string | undefined;
 }) {
   const [v, setV] = useState(props.value ?? '');
   useEffect(() => setV(props.value ?? ''), [props.value]);
-  const invalid = props.required && !v.trim();
+  const problem = (x: string) => (props.required && !x.trim() ? `${props.label} can’t be empty` : x.trim() ? props.check?.(x.trim()) : undefined);
+  const error = problem(v);
   const onChange = (next: string) => {
     setV(next);
-    // Required values keep their last valid version until the text is valid again.
-    if (!(props.required && !next.trim())) props.onCommit(next.trim() ? next : undefined);
+    // An invalid value keeps the last valid one until the text is valid again.
+    if (!problem(next)) props.onCommit(next.trim() ? next : undefined);
   };
-  const common = { value: v, placeholder: props.placeholder ?? 'Empty', 'aria-label': props.label, 'aria-invalid': invalid || undefined, className: `ed ${props.className ?? ''}` };
+  const common = { value: v, placeholder: props.placeholder ?? 'Empty', 'aria-label': props.label, 'aria-invalid': !!error || undefined, className: `ed ${props.className ?? ''}` };
   return (
     <>
       {props.multiline ? <textarea {...common} rows={1} onChange={(e) => onChange(e.target.value)} /> : <input {...common} onChange={(e) => onChange(e.target.value)} />}
-      {invalid && <em className="ed-error">{props.label} can’t be empty</em>}
+      {error && <em className="ed-error">{error}</em>}
     </>
   );
 }
+
+// Every currency the browser knows, for the design's currency picker.
+const CURRENCIES = Intl.supportedValuesOf('currency');
 
 /** A non-negative number field; empty means unknown. */
 function Num({ label, unit, value, onCommit }: { label: string; unit: string; value?: number; onCommit: (v: number | undefined) => void }) {
@@ -501,7 +507,7 @@ export function Inspector({
           {step.summary && <p className="insp-lead">{step.summary}</p>}
           {changes.some((c) => c !== 0) && (
             <p className="insp-cost">
-              {dollars(sofar)}/mo so far{delta !== 0 && <> · {delta > 0 ? '+' : '−'}{dollars(Math.abs(delta))} in this step</>}
+              {money(sofar, design.currency)}/mo so far{delta !== 0 && <> · {delta > 0 ? '+' : '−'}{money(Math.abs(delta), design.currency)} in this step</>}
             </p>
           )}
         </header>
@@ -641,6 +647,28 @@ export function Inspector({
 
         <Comments design={design} step={stepId} change={change} onSelect={onSelect} />
 
+        <section className="insp-sec">
+          <h3 className="rule-head">Design</h3>
+          <Prop label="Repo">
+            <Ed
+              label="Repo"
+              placeholder="https://github.com/org/repo/tree/main"
+              value={design.repo}
+              check={(v) => (/^https?:\/\/\S+$/i.test(v) ? undefined : 'Use an http(s) address')}
+              onCommit={(v) => change((d) => void (d.repo = v?.trim()))}
+            />
+          </Prop>
+          <Prop label="Currency">
+            <select className="ed" value={design.currency ?? 'USD'} onChange={(e) => change((d) => void (d.currency = e.target.value === 'USD' ? undefined : e.target.value))} aria-label="Currency of costs">
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </Prop>
+        </section>
+
         <p className="quiet pad">
           {!components.length && !boundaries.length && !decisions.length && !notes.length ? 'Nothing was added in this step. ' : ''}
           Select anything on the sheet to read or edit it. Double-click to rename.
@@ -661,6 +689,7 @@ export function Inspector({
     );
   }
 
+  const costEditedAfter = component && design.steps.slice(stepNo(stepId)).find((t) => t.changed?.some((x) => x.id === component.id && x.field === 'cost'))?.id;
   const kind = component ? SHAPES[component.type].name : boundary ? BOUNDARY_SPECS[boundary.kind].name : connection ? 'Connection' : note ? 'Note' : 'Decision';
   return (
     <aside className="inspector" key={item.id}>
@@ -705,13 +734,30 @@ export function Inspector({
               <Ed label="Technology" placeholder="e.g. Redis" value={component.tech} onCommit={(v) => edit((d: Design) => d.components, { tech: v })} />
             </Prop>
             <Prop label="Cost">
-              <Num label="Cost per month" unit="$/mo" value={component.cost} onCommit={(v) => edit((d: Design) => d.components, { cost: v })} />
+              {costEditedAfter ? (
+                // A later step changed it; editing here would overwrite that change.
+                <span className="quiet">
+                  {(() => {
+                    const at = costAt(design, component, stepId);
+                    return at === undefined ? '—' : `${money(at, design.currency)}/mo`;
+                  })()}{' '}
+                  · changed in step {pad(stepNo(costEditedAfter))}
+                </span>
+              ) : (
+                // Recorded on the step on the sheet, so its cost change counts it; the step stays reviewed.
+                <Num
+                  label="Cost per month"
+                  unit={`${design.currency ?? 'USD'}/mo`}
+                  value={component.cost}
+                  onCommit={(v) => change((d) => m.updateTracked(d, component.id, { cost: v }, stepId, false))}
+                />
+              )}
             </Prop>
             <Prop label="Code">
-              <Ed label="Code" placeholder="Repo URL or path" value={component.code} onCommit={(v) => edit((d: Design) => d.components, { code: v })} />
-              {/* Only web links open; anything else (a path, javascript:) stays text. */}
-              {/^https?:\/\//i.test(component.code ?? '') && (
-                <a className="ref" href={component.code} target="_blank" rel="noreferrer noopener" title="Open the code in a new tab">
+              <Ed label="Code" placeholder={design.repo ? 'Path in the repo or URL' : 'URL, or a path once the design has a repo'} value={component.code} onCommit={(v) => edit((d: Design) => d.components, { code: v })} />
+              {/* Only web links open; anything else (javascript:, a path with no repo) stays text. */}
+              {codeUrl(design, component.code) && (
+                <a className="ref" href={codeUrl(design, component.code)} target="_blank" rel="noreferrer noopener" title="Open the code in a new tab">
                   Open ↗
                 </a>
               )}
