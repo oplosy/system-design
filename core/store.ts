@@ -1,29 +1,17 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { blankDesign } from './mutations.ts';
-import { notifyNewSteps } from './notify.ts';
+import { emitDesignEvents, type Actor } from './hooks.ts';
+import { userAppDir } from './paths.ts';
 import { isId, parseDesign, type Design } from './schema.ts';
 
 // import.meta.url (not dirname) survives Vite bundling this file into its config.
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
-/** The per-user data folder, which survives updates and reinstalls of the app (unlike a folder next to its code). */
-function userDataDir() {
-  const home = os.homedir();
-  const base =
-    process.platform === 'win32'
-      ? (process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming'))
-      : process.platform === 'darwin'
-        ? path.join(home, 'Library', 'Application Support')
-        : (process.env.XDG_DATA_HOME ?? path.join(home, '.local', 'share'));
-  return path.join(base, 'system-design', 'designs');
-}
-
 // One folder for the app, the MCP server and the CLI alike, so what an agent writes is what the reviewer sees.
-export const DESIGNS_DIR = process.env.SYSTEM_DESIGN_DIR ?? userDataDir();
+export const DESIGNS_DIR = process.env.SYSTEM_DESIGN_DIR ?? path.join(userAppDir(), 'designs');
 export const TEMPLATES_DIR = path.join(ROOT, 'templates');
 export const TRASH_DIR = path.join(DESIGNS_DIR, '.trash');
 /** Where designs lived before they moved to the user data folder. */
@@ -86,15 +74,19 @@ export const listDesigns = () => listFrom(DESIGNS_DIR);
 export const listTemplates = () => listFrom(TEMPLATES_DIR);
 export const readDesign = (id: string) => readFrom(DESIGNS_DIR, id);
 
-/** Writes `design` if `design.rev` still matches the file on disk, and returns it with rev + 1. */
-export async function writeDesign(design: Design, { create = false } = {}): Promise<Design> {
+/**
+ * Writes `design` if `design.rev` still matches the file on disk, and returns it with rev + 1. What changed goes to
+ * the webhooks, marked as the reviewer's (`app`) or an agent's.
+ */
+export async function writeDesign(design: Design, { create = false, actor = 'agent' as Actor } = {}): Promise<Design> {
   const file = fileFor(DESIGNS_DIR, design.id);
-  let currentRev: number | undefined;
+  let current: Design | undefined;
   try {
-    currentRev = (await readDesign(design.id)).rev;
+    current = await readDesign(design.id);
   } catch (e) {
     if (!(e instanceof NotFoundError)) throw e;
   }
+  const currentRev = current?.rev;
   if (create && currentRev !== undefined) throw new ConflictError(`"${design.id}" already exists`);
   if (!create && currentRev === undefined) throw new NotFoundError(`"${design.id}" not found`);
   if (!create && currentRev !== design.rev) throw new ConflictError(`"${design.id}" changed on disk (rev ${currentRev})`);
@@ -104,6 +96,7 @@ export async function writeDesign(design: Design, { create = false } = {}): Prom
   const tmp = `${file}.${process.pid}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(next, null, 2) + '\n');
   await fs.rename(tmp, file);
+  emitDesignEvents(current, next, actor);
   return next;
 }
 
@@ -116,17 +109,18 @@ async function freeId(id: string) {
 }
 
 /** Adds a design from a file (an export, or a copy from another machine) under a free id. */
-export async function importDesign(raw: unknown) {
+export async function importDesign(raw: unknown, actor: Actor = 'agent') {
   const d = parseDesign(raw);
-  return writeDesign({ ...d, id: await freeId(d.id) }, { create: true });
+  return writeDesign({ ...d, id: await freeId(d.id) }, { create: true, actor });
 }
 
 /** Moves a design to the trash folder, from where it can be restored; nothing is deleted. */
-export async function trashDesign(id: string) {
+export async function trashDesign(id: string, actor: Actor = 'agent') {
   const file = fileFor(DESIGNS_DIR, id);
-  await readDesign(id);
+  const d = await readDesign(id);
   await fs.mkdir(TRASH_DIR, { recursive: true });
   await fs.rename(file, path.join(TRASH_DIR, `${id}.${Date.now()}.json`));
+  emitDesignEvents(d, d, actor, [{ type: 'design.deleted', subject: id, data: { title: d.title } }]);
 }
 
 /** A trash entry is "<id>.<time deleted>"; anything else is refused, which keeps paths inside the trash folder. */
@@ -157,10 +151,11 @@ export async function restoreDesign(entry: string) {
   const d = parseDesign(JSON.parse(await fs.readFile(t.file, 'utf8').catch(() => Promise.reject(new NotFoundError(`"${entry}" is not in the trash`)))));
   if (await readDesign(t.id).then(() => true, () => false)) throw new ConflictError(`A design called "${t.id}" exists; rename or delete it first.`);
   await fs.rename(t.file, fileFor(DESIGNS_DIR, t.id));
+  emitDesignEvents(d, d, 'app', [{ type: 'design.restored', subject: d.id, data: { title: d.title } }]);
   return d;
 }
 
-export async function createDesign(input: { id: string; title: string; description?: string; template?: string; from?: string; repo?: string; currency?: string }) {
+export async function createDesign(input: { id: string; title: string; description?: string; template?: string; from?: string; repo?: string; currency?: string }, actor: Actor = 'agent') {
   let base: Design;
   if (input.from) {
     // A copy keeps everything, its review state included.
@@ -181,23 +176,18 @@ export async function createDesign(input: { id: string; title: string; descripti
       repo: input.repo ?? base.repo,
       currency: input.currency ?? base.currency,
     },
-    { create: true },
+    { create: true, actor },
   );
 }
 
-/**
- * Read, change and write a design, retrying if someone else wrote in between. This is how agents and syncs write
- * (the app saves with writeDesign), so new steps they add are announced to the webhook, if one is set.
- */
+/** Read, change and write a design, retrying if someone else wrote in between. This is how agents and syncs write. */
 export async function updateDesign(id: string, change: (d: Design) => void): Promise<Design> {
   for (let attempt = 0; ; attempt++) {
     const before = await readDesign(id);
     const d = structuredClone(before);
     change(d);
     try {
-      const written = await writeDesign(d);
-      await notifyNewSteps(before, written);
-      return written;
+      return await writeDesign(d);
     } catch (e) {
       if (!(e instanceof ConflictError) || attempt >= 3) throw e;
     }

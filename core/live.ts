@@ -32,12 +32,17 @@ export async function queryPrometheus(base: string): Promise<Record<keyof typeof
 const round = (x: number) => (x >= 10 ? Math.round(x) : Math.round(x * 10) / 10);
 
 /**
- * Puts the samples on the design's lines. A service matches the part imported from its traces (source otel:<name>),
- * else the part with its name; a line matches its two ends either way round. Returns per line id, and the service
- * pairs that matched no line.
+ * Puts the samples on the design's lines. A service matches the part that names it as its OpenTelemetry service
+ * (an otel ref), else the part imported from its traces (source otel:<name>), else the part with its name; a line
+ * matches its two ends either way round. Returns per line id, and the service pairs that matched no line.
  */
 export function liveLines(d: Design, s: Record<'qps' | 'failed' | 'latency', Sample[]>) {
-  const part = (name: string) => (d.components.find((c) => c.source === `otel:${name}`) ?? d.components.find((c) => c.id === slugify(name) || slugify(c.label) === slugify(name)))?.id;
+  const part = (name: string) =>
+    (
+      d.components.find((c) => c.refs?.some((r) => r.kind === 'otel' && r.value === name)) ??
+      d.components.find((c) => c.source === `otel:${name}`) ??
+      d.components.find((c) => c.id === slugify(name) || slugify(c.label) === slugify(name))
+    )?.id;
   const line = (x: Sample) => {
     const [a, b] = [part(x.client), part(x.server)];
     return a && b ? d.connections.find((c) => (c.from === a && c.to === b) || (c.from === b && c.to === a))?.id : undefined;

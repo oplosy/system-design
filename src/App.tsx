@@ -23,7 +23,7 @@ import { lint } from '../core/lint.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import { mergeDesigns } from '../core/merge.ts';
 import * as m from '../core/mutations.ts';
-import { ApiError, api, shared, type LiveLoad, type Summary, type Trashed } from './api.ts';
+import { ApiError, api, shared, type Hook, type LiveLoad, type Summary, type Trashed } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
@@ -128,10 +128,18 @@ export function App() {
   );
 }
 
+/** A link into the app: #<design>, or #<design>/<item> for a step, part, line or any other item in it. */
+function readHash() {
+  const [design, item] = location.hash.slice(1).split('/').map((x) => decodeURIComponent(x));
+  return { design: design || null, item: item || null };
+}
+
 function Shell() {
   const [designs, setDesigns] = useState<Summary[]>([]);
   const [templates, setTemplates] = useState<Summary[]>([]);
-  const [id, setId] = useState<string | null>(() => decodeURIComponent(location.hash.slice(1)) || null);
+  const [id, setId] = useState<string | null>(() => readHash().design);
+  // An item the address points at, shown once its design has loaded.
+  const linkTo = useRef<string | null>(readHash().item);
   const [design, setDesign] = useState<Design | null>(null);
   const [viewIndex, setViewIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -139,6 +147,7 @@ function Shell() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [browsing, setBrowsing] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const offeredList = useRef(false);
   // Show only parts with this tag (a view of the same model); null shows everything.
   const [tag, setTag] = useState<string | null>(null);
@@ -348,9 +357,33 @@ function Shell() {
     }
   }, [id, designs]);
 
+  /** Shows an item of the open design: a step opens it, anything else opens its step and selects it. */
+  const showItem = useCallback((d: Design, item: string) => {
+    const step = d.steps.findIndex((s) => s.id === item);
+    if (step >= 0) return setViewIndex(step), setSelected(null);
+    const x = [...d.components, ...d.connections, ...d.boundaries, ...d.notes, ...d.decisions, ...d.flows].find((i) => i.id === item);
+    if (!x) return;
+    setViewIndex(d.steps.findIndex((s) => s.id === x.step));
+    setSelected(x.id);
+  }, []);
+
+  // Following a link while the app is open: another design, or another item in this one.
+  useEffect(() => {
+    const onHash = () => {
+      const { design: next, item } = readHash();
+      if (!next) return;
+      if (next !== designRef.current?.id) {
+        linkTo.current = item;
+        setTrail([]);
+        setId(next);
+      } else if (item) showItem(designRef.current, item);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [showItem]);
+
   useEffect(() => {
     if (!id) return;
-    history.replaceState(null, '', `#${encodeURIComponent(id)}`);
     if (!shared) localStorage.setItem('sd-last', id);
     let cancelled = false;
     api
@@ -363,6 +396,8 @@ function Shell() {
         setSequence(null);
         const firstUnseen = d.steps.findIndex((s) => !s.seen);
         setViewIndex(firstUnseen >= 0 ? firstUnseen : d.steps.length - 1);
+        if (linkTo.current) showItem(d, linkTo.current);
+        linkTo.current = null;
       })
       .catch((e) => {
         if (cancelled) return;
@@ -372,7 +407,13 @@ function Shell() {
     return () => {
       cancelled = true;
     };
-  }, [id, commit, leave]);
+  }, [id, commit, leave, showItem]);
+
+  // The address follows the open design and the selection, so it can be copied as a link to either.
+  useEffect(() => {
+    if (!id || linkTo.current) return;
+    history.replaceState(null, '', `#${[id, ...(selected ? [selected] : [])].map(encodeURIComponent).join('/')}`);
+  }, [id, selected]);
 
   // New items (from agents, templates or a paste) arrive without positions: lay them out once, clear of what is placed.
   useEffect(() => {
@@ -1092,7 +1133,7 @@ function Shell() {
             <span className="wordmark">
               system<span>/</span>design
             </span>
-            {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={(x) => (setTrail([]), setId(x))} onAll={shared ? undefined : () => setBrowsing(true)} meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined} />}
+            {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={(x) => (setTrail([]), setId(x))} onAll={shared ? undefined : () => setBrowsing(true)} onConnections={shared ? undefined : () => setConnecting(true)} meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined} />}
           </div>
           {design && (
             <FindBox design={design} visible={nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id))} onPick={findPick} inputRef={findRef} />
@@ -1282,6 +1323,7 @@ function Shell() {
           )
         )}
 
+        {connecting && <Connections design={design} selected={selected} onClose={() => setConnecting(false)} />}
         {browsing && (
           <Designs
             designs={designs}
@@ -1555,7 +1597,7 @@ function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (kind: (t
   );
 }
 
-function DesignSwitcher({ designs, current, meta, onPick, onAll }: { designs: Summary[]; current: string | null; meta?: string; onPick: (id: string) => void; onAll?: () => void }) {
+function DesignSwitcher({ designs, current, meta, onPick, onAll, onConnections }: { designs: Summary[]; current: string | null; meta?: string; onPick: (id: string) => void; onAll?: () => void; onConnections?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -1598,6 +1640,17 @@ function DesignSwitcher({ designs, current, meta, onPick, onAll }: { designs: Su
               }}
             >
               All designs, trash and files…
+            </button>
+          )}
+          {onConnections && (
+            <button
+              className="menu-item menu-all"
+              onClick={() => {
+                setOpen(false);
+                onConnections();
+              }}
+            >
+              Connections: webhooks, API, links…
             </button>
           )}
         </div>
@@ -1761,6 +1814,163 @@ function Designs({ designs, current, onOpen, onClose, onChanged }: { designs: Su
           <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => (e.target.files?.[0] && upload(e.target.files[0]), (e.target.value = ''))} />
           <button className="btn" onClick={() => fileRef.current?.click()}>Add from file</button>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+const EVENT_CHOICES = [
+  { label: 'Everything', events: undefined },
+  { label: 'Steps (added, approved, sent back)', events: ['step.*'] },
+  { label: 'Steps and comments', events: ['step.*', 'comment.*'] },
+  { label: 'Parts and lines', events: ['part.*', 'line.*', 'boundary.*'] },
+  { label: 'Decisions', events: ['decision.*'] },
+] as const;
+
+/**
+ * Where the app meets the rest of the world: webhooks that get every change, and the addresses other tools and
+ * agents use (a link to what is open, the versioned API, its OpenAPI document, the design schema, change events, MCP).
+ */
+function Connections({ design, selected, onClose }: { design: Design | null; selected: string | null; onClose: () => void }) {
+  const [hooks, setHooks] = useState<Hook[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, string>>({});
+  const [url, setUrl] = useState('');
+  const [format, setFormat] = useState<'cloudevents' | 'chat'>('cloudevents');
+  const [choice, setChoice] = useState(0);
+  const [onlyThis, setOnlyThis] = useState(false);
+  const [secret, setSecret] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
+  useDismiss(true, onClose);
+  const load = useCallback(() => api.hooks().then(setHooks).catch((e) => setErr(errorText(e))), []);
+  useEffect(() => void load(), [load]);
+  const run = async (f: () => Promise<unknown>) => {
+    setErr(null);
+    try {
+      await f();
+      await load();
+    } catch (e) {
+      setErr(errorText(e));
+    }
+  };
+  const add = (e: React.FormEvent) => {
+    e.preventDefault();
+    void run(async () => {
+      const events = EVENT_CHOICES[choice].events;
+      await api.addHook({ url: url.trim(), format, events: events && [...events], designs: onlyThis && design ? [design.id] : undefined, secret: secret || undefined });
+      setUrl('');
+      setSecret('');
+    });
+  };
+  const test = (h: Hook) =>
+    run(async () => {
+      setResults((r) => ({ ...r, [h.id]: 'Sending…' }));
+      const r = await api.testHook(h.id);
+      setResults((x) => ({ ...x, [h.id]: r.ok ? `Answered ${r.status}` : `Failed: ${r.error ?? `answered ${r.status}`}` }));
+    });
+  const origin = location.origin;
+  const link = design ? `${origin}/#${[design.id, ...(selected ? [selected] : [])].map(encodeURIComponent).join('/')}` : null;
+  const copy = (what: string, text: string) => navigator.clipboard?.writeText(text).then(() => setCopied(what));
+  const addresses: [string, string, string][] = [
+    ['API', `${origin}/api/v1`, 'Designs, templates, trash and webhooks over JSON'],
+    ['OpenAPI', `${origin}/api/v1/openapi.json`, 'Generate a client, or import it into Postman, n8n or Zapier'],
+    ['Design schema', `${origin}/api/v1/schema/design.json`, 'JSON Schema of a design file'],
+    ['Change stream', `${origin}/api/v1/events`, 'Server-sent events whenever a design changes'],
+    ['MCP', 'npx -y github:oplosy/system-design mcp', 'Command that starts the MCP server for an agent'],
+  ];
+  const what = (h: Hook) => EVENT_CHOICES.find((c) => JSON.stringify(c.events ?? null) === JSON.stringify(h.events ?? null))?.label ?? h.events?.join(', ') ?? 'Everything';
+  return (
+    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="dialog wide" role="dialog" aria-modal="true" aria-labelledby="connections-title">
+        <header className="dialog-head">
+          <span className="tag" id="connections-title">
+            Connections
+          </span>
+          <button type="button" className="text-btn" onClick={onClose}>
+            Close <kbd>Esc</kbd>
+          </button>
+        </header>
+        {err && <em className="ed-error">{err}</em>}
+        <h3 className="conn-head">Webhooks</h3>
+        <p className="quiet conn-note">Every change, made here, by an agent or by a command, is posted to these addresses as CloudEvents, or as a chat line when an agent adds steps.</p>
+        <ul className="designs-list">
+          {hooks.map((h) => (
+            <li key={h.id} className="designs-row">
+              <span className="choice-main">
+                <code className="conn-url" title={h.url}>
+                  {h.url}
+                </code>
+                <span>
+                  {h.format === 'chat' ? 'Chat message' : 'CloudEvents'} · {what(h)} · {h.designs?.length ? h.designs.join(', ') : 'all designs'}
+                  {h.signed ? ' · signed' : ''}
+                  {results[h.id] ? ` · ${results[h.id]}` : ''}
+                </span>
+              </span>
+              <span className="designs-actions">
+                <button className="text-btn" onClick={() => test(h)}>
+                  Test
+                </button>
+                <button className="text-btn danger" onClick={() => run(() => api.removeHook(h.id))}>
+                  Remove
+                </button>
+              </span>
+            </li>
+          ))}
+          {!hooks.length && <li className="designs-empty">No webhooks yet.</li>}
+        </ul>
+        <form className="conn-form" onSubmit={add}>
+          <input className="find-input" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.slack.com/… or your endpoint" aria-label="Webhook address" required />
+          <select className="find-input" value={format} onChange={(e) => setFormat(e.target.value as 'cloudevents' | 'chat')} aria-label="Format">
+            <option value="cloudevents">CloudEvents (JSON)</option>
+            <option value="chat">Chat message (Slack, Teams, Discord)</option>
+          </select>
+          <select className="find-input" value={choice} onChange={(e) => setChoice(Number(e.target.value))} aria-label="Events">
+            {EVENT_CHOICES.map((c, i) => (
+              <option key={c.label} value={i}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          <input className="find-input" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Signing secret (optional, 8+ characters)" aria-label="Signing secret" autoComplete="new-password" />
+          {design && (
+            <label className="conn-check">
+              <input type="checkbox" checked={onlyThis} onChange={(e) => setOnlyThis(e.target.checked)} /> Only “{design.title}”
+            </label>
+          )}
+          <button className="btn" type="submit" disabled={!url.trim() || (secret.length > 0 && secret.length < 8)}>
+            Add webhook
+          </button>
+        </form>
+        <h3 className="conn-head">For other tools and agents</h3>
+        <ul className="designs-list">
+          {link && (
+            <li className="designs-row">
+              <span className="choice-main">
+                <strong>Link to {selected ? 'the selection' : 'this design'}</strong>
+                <code className="conn-url">{link}</code>
+              </span>
+              <span className="designs-actions">
+                <button className="text-btn" onClick={() => copy('link', link)}>
+                  {copied === 'link' ? 'Copied' : 'Copy'}
+                </button>
+              </span>
+            </li>
+          )}
+          {addresses.map(([name, value, note]) => (
+            <li key={name} className="designs-row">
+              <span className="choice-main">
+                <strong>{name}</strong>
+                <span>{note}</span>
+                <code className="conn-url">{value}</code>
+              </span>
+              <span className="designs-actions">
+                <button className="text-btn" onClick={() => copy(name, value)}>
+                  {copied === name ? 'Copied' : 'Copy'}
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );

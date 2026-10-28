@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { infraDrift, syncInfra } from '../core/infra.ts';
 import { parseDesign } from '../core/schema.ts';
+import { deliveriesSettled } from '../core/hooks.ts';
 import { readDesign, updateDesign } from '../core/store.ts';
 import { guessType } from '../src/shapes.ts';
 
@@ -52,6 +53,8 @@ try {
     });
     console.log(`Added step "${step}" for review.`);
   }
+  // A --write posts its step to the webhooks; let that finish before exiting.
+  await deliveriesSettled();
   process.exit(drift.drifted ? 1 : 0);
 } catch (e) {
   console.error(e instanceof Error ? e.message : e);

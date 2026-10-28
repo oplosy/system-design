@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
+import { z } from 'zod';
+import pkg from '../package.json' with { type: 'json' };
+import { addHook, listHooks, publicHook, removeHook, testHook } from '../core/hooks.ts';
 import { liveLines, queryPrometheus } from '../core/live.ts';
 import { ValidationError } from '../core/schema.ts';
 import {
@@ -17,6 +20,7 @@ import {
   trashDesign,
   writeDesign,
 } from '../core/store.ts';
+import { designJsonSchema, openApi } from './openapi.ts';
 import { shareHtml } from './share.ts';
 
 const MAX_BODY = 5 * 1024 * 1024;
@@ -52,7 +56,7 @@ function send(res: ServerResponse, status: number, body: unknown) {
 function statusOf(e: unknown) {
   if (e instanceof NotFoundError) return 404;
   if (e instanceof ConflictError) return 409;
-  if (e instanceof ValidationError || (e instanceof Error && e.message.startsWith('invalid id'))) return 400;
+  if (e instanceof ValidationError || e instanceof z.ZodError || (e instanceof Error && e.message.startsWith('invalid id'))) return 400;
   return 500;
 }
 
@@ -95,7 +99,9 @@ export function createApi() {
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://local');
-    const [, resource, id, sub] = url.pathname.split('/');
+    // /api/v1/… is the published, versioned path; /api/… stays the same API for the app and older scripts.
+    const pathname = /^\/v1(\/|$)/.test(url.pathname) ? url.pathname.slice(3) || '/' : url.pathname;
+    const [, resource, id, sub] = pathname.split('/');
     const trust = trusted(req);
     if (trust !== true) return send(res, 403, { error: trust });
     try {
@@ -107,6 +113,17 @@ export function createApi() {
         return;
       }
       if (resource === 'templates' && req.method === 'GET') return send(res, 200, await listTemplates());
+      if (resource === 'openapi.json' && req.method === 'GET') return send(res, 200, openApi(pkg.version));
+      if (resource === 'schema' && id === 'design.json' && req.method === 'GET') return send(res, 200, designJsonSchema());
+      if (resource === 'hooks') {
+        if (!id && req.method === 'GET') return send(res, 200, (await listHooks()).map(publicHook));
+        if (!id && req.method === 'POST') return send(res, 201, publicHook(await addHook(await readBody(req))));
+        if (id && !sub && req.method === 'DELETE') return (await removeHook(id)) ? send(res, 200, { removed: id }) : send(res, 404, { error: 'no such webhook' });
+        if (id && sub === 'test' && req.method === 'POST') {
+          const result = await testHook(id);
+          return result ? send(res, 200, result) : send(res, 404, { error: 'no such webhook' });
+        }
+      }
       if (resource === 'info' && req.method === 'GET') return send(res, 200, { dir: DESIGNS_DIR });
       if (resource === 'trash') {
         if (!id && req.method === 'GET') return send(res, 200, await listTrash());
@@ -117,16 +134,16 @@ export function createApi() {
         if (!id && req.method === 'POST') {
           const body = (await readBody(req)) as { id?: unknown; title?: unknown; template?: unknown; from?: unknown; design?: unknown };
           // A whole design (an exported file) comes in under a free id.
-          if (body.design !== undefined) return send(res, 201, await importDesign(body.design));
+          if (body.design !== undefined) return send(res, 201, await importDesign(body.design, 'app'));
           const optional = (x: unknown) => x === undefined || typeof x === 'string';
           if (typeof body.id !== 'string' || typeof body.title !== 'string' || !optional(body.template) || !optional(body.from)) {
             throw new ValidationError('id and title must be strings');
           }
-          return send(res, 201, await createDesign({ id: body.id, title: body.title, template: body.template as string | undefined, from: body.from as string | undefined }));
+          return send(res, 201, await createDesign({ id: body.id, title: body.title, template: body.template as string | undefined, from: body.from as string | undefined }, 'app'));
         }
         // DELETE needs a CORS preflight, so another site open in the browser can't trash designs.
         if (id && !sub && req.method === 'DELETE') {
-          await trashDesign(id);
+          await trashDesign(id, 'app');
           return send(res, 200, { trashed: id });
         }
         if (id && sub === 'share' && req.method === 'GET') {
@@ -146,14 +163,14 @@ export function createApi() {
         if (id && req.method === 'PUT') {
           const body = (await readBody(req)) as { id?: unknown };
           if (body.id !== id) throw new ValidationError('id in body must match the URL');
-          return send(res, 200, await writeDesign(body as never));
+          return send(res, 200, await writeDesign(body as never, { actor: 'app' }));
         }
       }
       send(res, 404, { error: 'not found' });
     } catch (e) {
       const status = statusOf(e);
       if (status === 500) console.error(e);
-      send(res, status, { error: e instanceof Error ? e.message : String(e) });
+      send(res, status, { error: e instanceof z.ZodError ? z.prettifyError(e) : e instanceof Error ? e.message : String(e) });
     }
   }
 

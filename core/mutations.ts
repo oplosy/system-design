@@ -1,4 +1,4 @@
-import { SCHEMA_VERSION, type BoundaryKind, type Comment, type ComponentType, type Connection, type ConnectionKind, type Design } from './schema.ts';
+import { SCHEMA_VERSION, type BoundaryKind, type Comment, type ComponentType, type Connection, type ConnectionKind, type Design, type Ref } from './schema.ts';
 
 // Pure, browser-safe edits shared by the UI and the MCP server. Each one mutates `d` in place.
 
@@ -91,7 +91,7 @@ function checkBoundary(d: Design, id: string | undefined) {
 
 export function addComponent(
   d: Design,
-  input: Edit & { id?: string; type: ComponentType; label: string; tech?: string; description?: string; boundary?: string; detail?: string; code?: string; cost?: number; capacity?: number; source?: string; tags?: string[]; position?: { x: number; y: number } },
+  input: Edit & { id?: string; type: ComponentType; label: string; tech?: string; description?: string; boundary?: string; detail?: string; code?: string; cost?: number; capacity?: number; source?: string; tags?: string[]; refs?: Ref[]; position?: { x: number; y: number } },
 ) {
   checkBoundary(d, input.boundary);
   if (input.detail === d.id) throw new Error('A component can’t open its own design.');
@@ -109,6 +109,7 @@ export function addComponent(
     capacity: input.capacity,
     source: input.source,
     tags: input.tags?.length ? [...new Set(input.tags)] : undefined,
+    refs: input.refs?.length ? input.refs : undefined,
     position: input.position,
     ...placed(d, input),
   });
@@ -306,10 +307,11 @@ export function removeTracked(d: Design, id: string, step?: string) {
  * Changes fields of a component, boundary or connection as a recorded edit; each field keeps its value from before the step.
  * Agent edits reopen the step for review; the reviewer's own edits pass `reopen: false`.
  */
-export function updateTracked(d: Design, id: string, fields: Record<string, string | number | boolean | string[] | undefined>, step?: string, reopen = true) {
+export function updateTracked(d: Design, id: string, fields: Record<string, string | number | boolean | string[] | Ref[] | undefined>, step?: string, reopen = true) {
   const x = [...d.components, ...d.boundaries, ...d.connections].find((i) => i.id === id) as Record<string, unknown> | undefined;
   if (!x) throw new Error(`unknown component, boundary or connection "${id}"`);
-  const text = (v: unknown) => (v === undefined ? undefined : Array.isArray(v) ? v.join(', ') : String(v));
+  const one = (v: unknown) => (v && typeof v === 'object' && 'kind' in v ? `${(v as Ref).kind}: ${(v as Ref).value}` : String(v));
+  const text = (v: unknown) => (v === undefined ? undefined : Array.isArray(v) ? v.map(one).join(', ') : String(v));
   const s = d.steps.find((t) => t.id === useStep(d, step, reopen))!;
   const was = snapshot(d);
   for (const [field, to] of Object.entries(fields)) {

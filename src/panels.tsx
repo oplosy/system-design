@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
-import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type BoundaryKind, type ComponentType, type ConnectionKind, type Design } from '../core/schema.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, REF_KINDS, RefSchema, type BoundaryKind, type ComponentType, type ConnectionKind, type Design, type Ref, type RefKind } from '../core/schema.ts';
 import { codeUrl, costAt, flowLatency, money, stepCostChange } from '../core/export.ts';
 import { failureImpact, loadOf } from '../core/lint.ts';
 import * as m from '../core/mutations.ts';
@@ -268,6 +268,83 @@ function Block({ label, children }: { label: string; children: React.ReactNode }
 }
 
 type Change = (fn: (d: Design) => void) => void;
+
+const REF_NAMES: Record<RefKind, string> = {
+  repo: 'Repository',
+  docs: 'Docs',
+  runbook: 'Runbook',
+  dashboard: 'Dashboard',
+  ticket: 'Ticket',
+  owner: 'Owner',
+  oncall: 'On call',
+  slo: 'SLO',
+  otel: 'OTel service',
+  k8s: 'Kubernetes',
+  cloud: 'Cloud resource',
+  backstage: 'Backstage',
+  link: 'Link',
+};
+// Only web addresses open; identifiers (otel, k8s, an ARN) and anything else stay text.
+const webLink = (v: string) => (/^https?:\/\/\S+$/i.test(v) ? v : undefined);
+
+/** A part's links and identifiers in other tools: one row each, plus a row to add one. */
+function RefsEditor({ refs = [], onChange }: { refs?: Ref[]; onChange: (refs: Ref[] | undefined) => void }) {
+  const [kind, setKind] = useState<RefKind>('link');
+  const [value, setValue] = useState('');
+  const set = (next: Ref[]) => onChange(next.length ? next : undefined);
+  const fresh = RefSchema.safeParse({ kind, value });
+  const add = () => {
+    if (!fresh.success) return;
+    set([...refs, fresh.data]);
+    setValue('');
+  };
+  return (
+    <div className="refs">
+      {refs.map((r, i) => (
+        <div className="ref-row" key={`${r.kind}-${i}`}>
+          <span className="ref-kind">{REF_NAMES[r.kind]}</span>
+          {webLink(r.value) ? (
+            <a className="ref ref-value" href={webLink(r.value)} target="_blank" rel="noreferrer noopener" title={r.value}>
+              {r.label ?? r.value.replace(/^https?:\/\//i, '')}
+            </a>
+          ) : (
+            <code className="ref-value" title={r.value}>
+              {r.value}
+            </code>
+          )}
+          <button className="icon-btn ref-remove" onClick={() => set(refs.filter((_, j) => j !== i))} aria-label={`Remove ${REF_NAMES[r.kind]} ${r.value}`} title="Remove">
+            ×
+          </button>
+        </div>
+      ))}
+      <form
+        className="ref-row ref-add"
+        onSubmit={(e) => {
+          e.preventDefault();
+          add();
+        }}
+      >
+        <select className="ed ref-kind" value={kind} onChange={(e) => setKind(e.target.value as RefKind)} aria-label="Kind of link">
+          {REF_KINDS.map((k) => (
+            <option key={k} value={k}>
+              {REF_NAMES[k]}
+            </option>
+          ))}
+        </select>
+        <input
+          className="ed ref-value"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={kind === 'otel' ? 'service.name' : kind === 'k8s' ? 'namespace/kind/name' : kind === 'cloud' ? 'ARN or resource id' : kind === 'backstage' ? 'component:default/name' : 'https://…'}
+          aria-label="Link or identifier"
+        />
+        <button className="text-btn" type="submit" disabled={!fresh.success}>
+          Add
+        </button>
+      </form>
+    </div>
+  );
+}
 
 /** Picks the boundary something sits in; `exclude` keeps a boundary out of its own subtree. */
 /** UML relations, named by how they are drawn; the diamond sits at the line's start (the whole). */
@@ -768,6 +845,9 @@ export function Inspector({
                   edit((d: Design) => d.components, { tags: tags.length ? tags : undefined });
                 }}
               />
+            </Prop>
+            <Prop label="Links">
+              <RefsEditor refs={component.refs} onChange={(refs) => edit((d: Design) => d.components, { refs })} />
             </Prop>
             <Prop label="Capacity">
               <Num label="Capacity" unit="req/s" value={component.capacity} onCommit={(v) => edit((d: Design) => d.components, { capacity: v })} />

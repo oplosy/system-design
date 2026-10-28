@@ -196,6 +196,21 @@ export const StepSchema = z.object({
   before: z.array(z.object({ kind: z.enum(['components', 'connections', 'notes', 'decisions', 'boundaries', 'flows']), item: z.record(z.string(), z.unknown()) })).optional(),
 });
 
+/**
+ * What a reference on a part points at. These are the keys that tie a part to the same thing elsewhere: a service's
+ * OpenTelemetry service.name, its Kubernetes workload, its cloud resource, its Backstage entity, and the pages people
+ * use to work on it.
+ */
+export const REF_KINDS = ['repo', 'docs', 'runbook', 'dashboard', 'ticket', 'owner', 'oncall', 'slo', 'otel', 'k8s', 'cloud', 'backstage', 'link'] as const;
+export type RefKind = (typeof REF_KINDS)[number];
+export const RefSchema = z.object({
+  kind: z.enum(REF_KINDS),
+  /** A web address, or an identifier such as "checkout" (otel), "shop/deployment/api" (k8s) or an ARN (cloud). */
+  value: z.string().trim().min(1).max(500).regex(/^[^\u0000-\u001f]*$/, 'no control characters'),
+  label: z.string().trim().max(80).optional(),
+});
+export type Ref = z.infer<typeof RefSchema>;
+
 export const ComponentSchema = z.object({
   id: Id,
   type: z.enum(COMPONENT_TYPES),
@@ -214,6 +229,8 @@ export const ComponentSchema = z.object({
   source: z.string().optional(),
   /** Free labels ("payments", "pii", "team-checkout"); the canvas can show only the parts with one of them. */
   tags: z.array(z.string().trim().min(1).max(40)).optional(),
+  /** Links and identifiers for this part in other tools; live data and other matches use them before names. */
+  refs: z.array(RefSchema).max(50).optional(),
   /** Requests per second it can take; lint compares it with the qps on lines into it. */
   capacity: z.number().nonnegative().optional(),
   position: Position.optional(),

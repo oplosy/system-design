@@ -3,7 +3,7 @@ import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type Design } from '../core/schema.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, RefSchema, type Design } from '../core/schema.ts';
 import { toDecisionRecord, toMermaid } from '../core/export.ts';
 import { infraDrift, syncInfra } from '../core/infra.ts';
 import { importAsStep, unpack } from '../core/importer.ts';
@@ -54,6 +54,12 @@ const componentFields = {
   cost: z.number().nonnegative().optional().describe("Expected running cost per month in the design's currency (USD unless set)"),
   capacity: z.number().nonnegative().optional().describe('Requests per second it can take; lint flags it when the qps on lines into it come near or over'),
   tags: z.array(z.string().min(1)).optional().describe('Labels such as "payments", "pii" or a team name; the reviewer can show only the parts with one tag'),
+  refs: z
+    .array(RefSchema)
+    .optional()
+    .describe(
+      'Where this part lives in other tools: otel (its OpenTelemetry service.name), k8s ("namespace/kind/name"), cloud (an ARN or resource id), backstage (an entity ref), and web pages: repo, docs, runbook, dashboard, ticket, owner, oncall, slo, link. Live load and other matching use these before names. Replaces the whole list.',
+    ),
 };
 const connectionFields = {
   from: z.string().describe('Component id'),
@@ -296,7 +302,7 @@ server.registerTool(
   'update_component',
   {
     description: 'Change a component. The change is recorded on the step (latest by default) for review, with its old values',
-    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), detail: componentFields.detail, code: componentFields.code, cost: componentFields.cost, capacity: componentFields.capacity, tags: componentFields.tags, step },
+    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), detail: componentFields.detail, code: componentFields.code, cost: componentFields.cost, capacity: componentFields.capacity, tags: componentFields.tags, refs: componentFields.refs, step },
   },
   async ({ design: designId, id, step, ...fields }) =>
     edit(designId, (d) => {

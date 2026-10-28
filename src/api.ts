@@ -3,6 +3,8 @@ import { parseDesign, type Design } from '../core/schema.ts';
 
 export type Summary = { id: string; title: string; description?: string; steps: number; unseen: number; updated?: number };
 export type LiveLoad = { lines: Record<string, Live>; unmatched: string[] };
+export type Hook = { id: string; url: string; format: 'cloudevents' | 'chat'; events?: string[]; designs?: string[]; signed: boolean };
+export type HookInput = { url: string; format: 'cloudevents' | 'chat'; events?: string[]; designs?: string[]; secret?: string };
 export type Trashed = { entry: string; id: string; title: string; deleted: number };
 
 export class ApiError extends Error {
@@ -59,6 +61,10 @@ function local(store: Map<string, Design>) {
     live: async (_: string): Promise<LiveLoad> => {
       throw new ApiError('A shared copy has no live data.', 404);
     },
+    hooks: async () => [] as Hook[],
+    addHook: async (_: HookInput): Promise<Hook> => readOnly(),
+    removeHook: async (_: string): Promise<unknown> => readOnly(),
+    testHook: async (_: string): Promise<{ ok: boolean; status?: number; error?: string }> => readOnly(),
   };
 }
 
@@ -74,4 +80,8 @@ export const api = shared ? local(shared) : {
   restore: (entry: string) => call<Design>('POST', `/api/trash/${entry}`),
   info: () => call<{ dir: string }>('GET', '/api/info'),
   live: (id: string) => call<LiveLoad>('GET', `/api/designs/${id}/live`),
+  hooks: () => call<Hook[]>('GET', '/api/v1/hooks'),
+  addHook: (input: HookInput) => call<Hook>('POST', '/api/v1/hooks', input),
+  removeHook: (id: string) => call<unknown>('DELETE', `/api/v1/hooks/${encodeURIComponent(id)}`),
+  testHook: (id: string) => call<{ ok: boolean; status?: number; error?: string }>('POST', `/api/v1/hooks/${encodeURIComponent(id)}/test`),
 };
