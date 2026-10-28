@@ -1,0 +1,13 @@
+services:
+  web:
+    image: nginx:1.27
+    depends_on: [api]
+  api:
+    build: ./api
+    environment:
+      DATABASE_URL: postgres://db:5432/shop
+      REDIS_HOST: cache
+  db:
+    image: postgres:16
+  cache:
+    image: redis:7

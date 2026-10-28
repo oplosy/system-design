@@ -10,7 +10,10 @@
     "share": "node cli/share.ts",
     "mcp": "node mcp/server.ts",
     "test": "node --test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:cli": "vite build --config vite.cli.config.ts",
+    "prepare": "npm run build && npm run build:cli",
+    "diff": "node cli/diff.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
@@ -30,5 +33,8 @@
     "@vitejs/plugin-react": "^6.1.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
+  },
+  "bin": {
+    "system-design": "dist-cli/main.js"
   }
 }

@@ -1,0 +1,66 @@
+name: System design check
+description: Check a design against the repository's infrastructure files and comment on pull requests with what differs and what a design change adds.
+branding:
+  icon: layers
+  color: gray-dark
+
+inputs:
+  design:
+    description: Path of the design .json file in the repository (download it from the app, or keep the designs folder in the repo with SYSTEM_DESIGN_DIR)
+    required: true
+  infra:
+    description: Files to check the design against, one per line (docker-compose, Kubernetes YAML, terraform show -json output, CloudFormation, Pulumi export, Backstage catalog, OpenAPI, AsyncAPI)
+    required: false
+    default: ''
+  comment:
+    description: Comment on pull requests; the job needs `pull-requests: write`. One comment is kept up to date, not one per push
+    required: false
+    default: 'true'
+  fail-on-drift:
+    description: Fail the job when the design differs from the infrastructure
+    required: false
+    default: 'false'
+  token:
+    description: Token used to comment
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  drifted:
+    description: '"true" when the design differs from any of the infrastructure files'
+    value: ${{ steps.check.outputs.drifted }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 24
+    - name: Install system-design
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      # Only the command line is needed, not the app.
+      run: npm ci --no-audit --no-fund --ignore-scripts && npm run build:cli
+    - name: Check the design
+      id: check
+      shell: bash
+      # Inputs reach the scripts as environment variables, never pasted into the script text.
+      env:
+        CLI: ${{ github.action_path }}/dist-cli/main.js
+        DESIGN: ${{ inputs.design }}
+        INFRA: ${{ inputs.infra }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: bash "$GITHUB_ACTION_PATH/action/check.sh"
+    - name: Comment on the pull request
+      if: inputs.comment == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+        DRIFTED: ${{ steps.check.outputs.drifted }}
+      run: bash "$GITHUB_ACTION_PATH/action/comment.sh"
+    - name: Fail on drift
+      if: inputs.fail-on-drift == 'true' && steps.check.outputs.drifted == 'true'
+      shell: bash
+      run: echo "::error::The design differs from the infrastructure; see the job summary." && exit 1

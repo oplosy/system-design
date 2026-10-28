@@ -1,0 +1,65 @@
+{
+  "id": "shop",
+  "version": 1,
+  "title": "Shop",
+  "rev": 0,
+  "steps": [
+    {
+      "id": "start",
+      "title": "Start",
+      "seen": true
+    },
+    {
+      "id": "services-from-compose",
+      "title": "Services from compose",
+      "summary": "Web, API and database from docker-compose.yml.",
+      "seen": false
+    }
+  ],
+  "components": [
+    {
+      "id": "web",
+      "type": "reverse-proxy",
+      "label": "web",
+      "tech": "nginx:1.27",
+      "source": "compose:web",
+      "step": "services-from-compose"
+    },
+    {
+      "id": "api",
+      "type": "service",
+      "label": "api",
+      "code": "./api",
+      "source": "compose:api",
+      "step": "services-from-compose"
+    },
+    {
+      "id": "db",
+      "type": "sql-db",
+      "label": "db",
+      "tech": "postgres:16",
+      "source": "compose:db",
+      "step": "services-from-compose"
+    }
+  ],
+  "connections": [
+    {
+      "id": "web-to-api",
+      "from": "web",
+      "to": "api",
+      "step": "services-from-compose"
+    },
+    {
+      "id": "api-to-db",
+      "from": "api",
+      "to": "db",
+      "step": "services-from-compose"
+    }
+  ],
+  "notes": [],
+  "decisions": [],
+  "boundaries": [],
+  "comments": [],
+  "flows": [],
+  "description": "Example design checked against docker-compose.yml by the GitHub Action."
+}

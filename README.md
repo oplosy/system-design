@@ -28,6 +28,16 @@ A local canvas for system and architecture designs that agents build and you rev
 
 ## Run
 
+Without cloning (Node 24+; the first run downloads and builds it):
+
+```bash
+npx -y github:oplosy/system-design
+```
+
+`system-design help` lists the commands: `start` (the app), `mcp` (the MCP server), `drift`, `diff` and `share`.
+
+From a clone:
+
 ```bash
 npm install
 npm run dev
@@ -51,8 +61,33 @@ Edit by hand: drag shapes from the palette, drag between nodes to connect them (
 Inside this repo, Claude Code picks it up from `.mcp.json`. To use it from any project:
 
 ```bash
-claude mcp add system-design -s user -- node C:/Users/mesut/Desktop/workspace/A-projects/system-design/mcp/server.ts
+claude mcp add system-design -s user -- npx -y github:oplosy/system-design mcp
 ```
+
+## Pull requests (GitHub Action)
+
+The action checks a design against the repository's infrastructure files and keeps one comment on each pull request up to date: what the infrastructure has that the design lacks (and the reverse), and, when the pull request changes the design file, the steps, parts, lines and decisions it adds and the parts and lines it removes. The same report goes to the job summary. Keep the design in the repository: download it from **Designs** (or point `SYSTEM_DESIGN_DIR` at a folder in the repo).
+
+```yaml
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  design:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oplosy/system-design@main
+        with:
+          design: docs/architecture.json
+          infra: |
+            docker-compose.yml
+            k8s/all.yaml
+          fail-on-drift: false
+```
+
+A pull request with nothing to report gets no comment. Names from the files are shown as code and `@` mentions are defused, so a comment can't ping or link anyone. Pull requests from forks get a read-only token: the report still lands in the job summary, and the comment is skipped with a warning. Locally, `system-design drift <design> <file> --markdown` and `system-design diff <before.json> <after.json> --markdown` print the same report. [`examples/shop`](examples/shop) is a design that leaves out the compose file's cache on purpose; this repository's CI runs the action on it.
 
 Main tool: `add_step` adds one reviewable change (components, connections, notes, decisions) in a single write, and can carry flows. Smaller tools: `create_design`, `update_design`, `add_component`, `connect`, `add_boundary`, `place_in`, `add_note`, `add_decision`, `update_component`, `remove_item`, `add_flow`, `update_connection`, `pick_option`, `sync_infra`, `import_diagram`, `export_design`, `simulate_failure`, `get_feedback`, `resolve_feedback`, `lint`, `get_design`, `list_designs`, `list_templates`.
 
@@ -64,7 +99,9 @@ Main tool: `add_step` adds one reviewable change (components, connections, notes
 | `server/api.ts` | JSON API and change events, mounted in the Vite dev server |
 | `server/main.ts` | Production server: the built app from `dist/` plus the API |
 | `server/share.ts` | Builds the shared HTML file |
-| `cli/drift.ts`, `cli/share.ts` | Drift check for CI, shared HTML from the command line |
+| `cli/` | The `system-design` command (`main.ts`): drift check, design diff, shared HTML; built to `dist-cli/` |
+| `action.yml`, `action/` | GitHub Action for pull requests |
+| `examples/` | Example design and compose file the action is tested on |
 | `mcp/server.ts` | MCP server for agents |
 | `src/` | React Flow canvas, shapes, panels |
 | `templates/` | Starting designs |

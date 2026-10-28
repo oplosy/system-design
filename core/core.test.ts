@@ -1271,3 +1271,30 @@ test('designs move to the data folder once, go to the trash and come back, and c
   await assert.rejects(store.importDesign({ id: 'x' }));
   assert.ok((await store.listDesigns()).every((d) => typeof d.updated === 'number'));
 });
+
+test('the command line reports drift and design changes as Markdown for pull requests', async () => {
+  const { execFile } = await import('node:child_process');
+  const run = (...args: string[]) =>
+    new Promise<{ code: number; out: string }>((resolve) => execFile(process.execPath, args, (e, out) => resolve({ code: e ? Number(e.code) : 0, out })));
+  const design = 'examples/shop/design.json';
+  const drift = await run('cli/drift.ts', design, 'examples/shop/docker-compose.yml', '--markdown');
+  assert.equal(drift.code, 1, 'the example leaves out the cache');
+  assert.match(drift.out, /\| \+ part \| `cache` \|/);
+  assert.equal((await run('cli/drift.ts', design, 'missing.yml')).code, 2);
+
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sd-diff-'));
+  const before = parseDesign(JSON.parse(await fs.readFile(design, 'utf8')));
+  const after = structuredClone(before);
+  const step = m.addStep(after, { title: 'Add a cache', summary: 'Ping @team about it.' });
+  const cache = m.addComponent(after, { type: 'cache', label: 'cache', step });
+  m.connect(after, { from: 'api', to: cache, step });
+  m.removeItem(after, 'web');
+  await fs.writeFile(path.join(dir, 'before.json'), JSON.stringify(before));
+  await fs.writeFile(path.join(dir, 'after.json'), JSON.stringify(after));
+  const diff = await run('cli/diff.ts', path.join(dir, 'before.json'), path.join(dir, 'after.json'), '--markdown');
+  assert.equal(diff.code, 0);
+  assert.match(diff.out, /\*\*New step: `Add a cache`\*\*\nPing @​team about it\./, 'mentions do not ping anyone');
+  assert.match(diff.out, /- \+ part `cache \(cache\)`\n- \+ line `api → cache`/);
+  assert.match(diff.out, /- − `part web`/);
+  assert.match((await run('cli/diff.ts', path.join(dir, 'none.json'), design, '--markdown')).out, /is new/);
+});

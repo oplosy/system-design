@@ -18,3 +18,19 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  # Runs this repository's own action on the example, which leaves out the cache on purpose.
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - id: check
+        uses: ./
+        with:
+          design: examples/shop/design.json
+          infra: examples/shop/docker-compose.yml
+      - name: The example's drift was found
+        shell: bash
+        env:
+          DRIFTED: ${{ steps.check.outputs.drifted }}
+        run: test "$DRIFTED" = true
