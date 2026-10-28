@@ -562,3 +562,30 @@ test('a shared HTML file inlines the app and bakes in the design and what its pa
   await assert.rejects(shareHtml('share-nope', dist), /not found/);
   await assert.rejects(shareHtml('share-outer', path.join(dist, 'none')), /npm run build/);
 });
+
+test('capacity is checked against incoming load, and a failure shows what it breaks', async () => {
+  const { lint, failureImpact, loadOf } = await import('./lint.ts');
+  const x = m.blankDesign('cap', 'Cap');
+  const add = (label: string, type: Parameters<typeof m.addComponent>[1]['type'], capacity?: number) => m.addComponent(x, { label, type, capacity });
+  const user = add('User', 'user');
+  const lb = add('LB', 'load-balancer', 10000);
+  const a = add('API A', 'service', 1000);
+  const b = add('API B', 'service', 1000);
+  const db = add('DB', 'sql-db', 1500);
+  const cache = add('Cache', 'cache');
+  m.connect(x, { from: user, to: lb, qps: 2000 });
+  m.connect(x, { from: lb, to: a, qps: 1000 });
+  m.connect(x, { from: lb, to: b, qps: 900 });
+  m.connect(x, { from: a, to: db, qps: 700 });
+  m.connect(x, { from: b, to: db, qps: 900 });
+  m.connect(x, { from: a, to: cache });
+  m.addFlow(x, { title: 'Read', path: [user, lb, a, db] });
+
+  assert.deepEqual(loadOf(x, db), { load: 1600, capacity: 1500 });
+  const issues = lint(x).filter((i) => i.rule.includes('capacity')).map((i) => `${i.id}:${i.rule}`);
+  assert.deepEqual(issues, ['api-a:near-capacity', 'api-b:near-capacity', 'db:over-capacity'], 'at 100% is near, past it is over; no capacity, no check');
+
+  assert.deepEqual(failureImpact(x, a), { flows: ['Read'], cutOff: ['Cache'] }, 'DB still has B; only A reaches the cache');
+  assert.deepEqual(failureImpact(x, lb), { flows: ['Read'], cutOff: ['API A', 'API B', 'DB', 'Cache'] });
+  assert.deepEqual(failureImpact(x, cache), { flows: [], cutOff: [] });
+});

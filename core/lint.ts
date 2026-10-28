@@ -37,6 +37,40 @@ export function lint(d: Design): Issue[] {
       if ([...near].some((n) => CLIENTS.has(type.get(n)!))) out.push({ id: c.id, rule: 'client-to-datastore', message: 'Clients reach this datastore directly, with no service in between.' });
     }
   }
+  for (const c of d.components) {
+    const { load, capacity } = loadOf(d, c.id);
+    if (capacity === undefined || capacity === 0 || load === 0) continue;
+    const pct = Math.round((load / capacity) * 100);
+    if (load > capacity) out.push({ id: c.id, rule: 'over-capacity', message: `Gets ${load} req/s against a capacity of ${capacity} (${pct}%).` });
+    else if (load >= 0.8 * capacity) out.push({ id: c.id, rule: 'near-capacity', message: `Gets ${load} req/s, ${pct}% of its capacity of ${capacity}.` });
+  }
   for (const x of d.decisions) if (!x.links.length) out.push({ id: x.id, rule: 'unlinked-decision', message: 'Decision is not linked to any component.' });
   return out;
+}
+
+/** Requests per second on the lines into a part (lines without qps count as 0), next to what it can take. */
+export function loadOf(d: Design, id: string) {
+  const load = d.connections.filter((x) => x.to === id).reduce((t, x) => t + (x.qps ?? 0), 0);
+  return { load, capacity: d.components.find((c) => c.id === id)?.capacity };
+}
+
+/**
+ * What breaks when a part goes down: the flows that pass through it, and the parts no entry point (users,
+ * clients, or parts nothing calls) can reach any more along the lines, though they could before.
+ */
+export function failureImpact(d: Design, id: string) {
+  const entries = d.components.filter((c) => CLIENTS.has(c.type)).map((c) => c.id);
+  const starts = entries.length ? entries : d.components.filter((c) => !d.connections.some((x) => x.to === c.id)).map((c) => c.id);
+  const reach = (without?: string) => {
+    const seen = new Set(starts.filter((s) => s !== without));
+    for (const at of seen) for (const x of d.connections) if (x.from === at && x.to !== without) seen.add(x.to);
+    return seen;
+  };
+  const before = reach();
+  const after = reach(id);
+  const label = (x: string) => d.components.find((c) => c.id === x)?.label ?? x;
+  return {
+    flows: d.flows.filter((f) => f.path.includes(id)).map((f) => f.title),
+    cutOff: [...before].filter((x) => x !== id && !after.has(x)).map(label),
+  };
 }

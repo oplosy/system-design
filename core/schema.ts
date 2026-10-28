@@ -210,6 +210,8 @@ export const ComponentSchema = z.object({
   code: z.string().optional(),
   /** Expected running cost per month, in the design's currency. */
   cost: z.number().nonnegative().optional(),
+  /** Requests per second it can take; lint compares it with the qps on lines into it. */
+  capacity: z.number().nonnegative().optional(),
   position: Position.optional(),
   option: Option,
   step: Id,

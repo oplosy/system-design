@@ -18,7 +18,8 @@ A local canvas for system and architecture designs that agents build and you rev
 - **Capacity notes:** a line can carry its load (requests per second) and one-way latency (ms). Both show under the line, and a flow adds up its hops' latency (a reply counts its line again).
 - **Share:** **Export → Shared HTML** (or `npm run share -- <design id> [out.html]`) writes one self-contained file with the app and the design baked in, plus every design its parts open. It opens from disk or any static host (a PR attachment, GitHub Pages) with no server: readers walk the steps, use the diff, play flows and open drill-downs; their changes stay in that tab. It is built from `dist/`, so run `npm run build` first, and again after app changes.
 - **Drift:** check a design against the infrastructure it describes (compose, Kubernetes or Terraform JSON). `npm run drift -- <design id or .json path> <infra file>` lists the parts and lines the infrastructure has and the design lacks, and exits 1 when there are any, so it can fail a CI job; `--write` adds them as one new step for review. Agents do the same with `sync_infra` (`dry_run` to only look). Parts match by id or label.
-- **Lint:** amber badges flag likely smells (isolated parts, a balancer with one target, a datastore in a public network or reached straight from clients, a one-sided queue, an unlinked decision). Hover a badge to read it.
+- **Capacity and failure:** a part can carry the requests per second it can take (**Capacity** in the inspector, `capacity` for agents). The inspector shows the load on the lines into it as of the step on the sheet, and lint flags it at 80% and past 100%. **If it fails** shows the flows that pass through the part and the parts users and clients could no longer reach; agents ask the same with `simulate_failure`.
+- **Lint:** amber badges flag likely smells (isolated parts, a balancer with one target, a datastore in a public network or reached straight from clients, a one-sided queue, a part near or over its capacity, an unlinked decision). Hover a badge to read it.
 - Everything is a JSON file in `designs/`, so changes are versioned and diffable. Each file carries the format `version` it was written in; older files are migrated when read, and a file from a newer version is refused rather than misread.
 
 ## Run
@@ -49,7 +50,7 @@ Inside this repo, Claude Code picks it up from `.mcp.json`. To use it from any p
 claude mcp add system-design -s user -- node C:/Users/mesut/Desktop/workspace/A-projects/system-design/mcp/server.ts
 ```
 
-Main tool: `add_step` adds one reviewable change (components, connections, notes, decisions) in a single write, and can carry flows. Smaller tools: `create_design`, `update_design`, `add_component`, `connect`, `add_boundary`, `place_in`, `add_note`, `add_decision`, `update_component`, `remove_item`, `add_flow`, `update_connection`, `pick_option`, `sync_infra`, `get_feedback`, `resolve_feedback`, `lint`, `get_design`, `list_designs`, `list_templates`.
+Main tool: `add_step` adds one reviewable change (components, connections, notes, decisions) in a single write, and can carry flows. Smaller tools: `create_design`, `update_design`, `add_component`, `connect`, `add_boundary`, `place_in`, `add_note`, `add_decision`, `update_component`, `remove_item`, `add_flow`, `update_connection`, `pick_option`, `sync_infra`, `simulate_failure`, `get_feedback`, `resolve_feedback`, `lint`, `get_design`, `list_designs`, `list_templates`.
 
 ## Layout
 

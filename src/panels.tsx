@@ -1,6 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type BoundaryKind, type ComponentType, type ConnectionKind, type Design } from '../core/schema.ts';
 import { codeUrl, costAt, flowLatency, money, stepCostChange } from '../core/export.ts';
+import { failureImpact, loadOf } from '../core/lint.ts';
 import * as m from '../core/mutations.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SketchContext } from './canvas.tsx';
@@ -465,6 +466,10 @@ export function Inspector({
   const decision = design.decisions.find((x) => x.id === selected);
   const boundary = design.boundaries.find((b) => b.id === selected);
   const item = component ?? connection ?? note ?? decision ?? boundary;
+  // The design as the sheet shows it at this step, so load and failure match what is drawn (and what lint flags).
+  const idx = m.stepIndex(design);
+  const onSheet = <T extends { step: string; option?: string }>(xs: T[]) => xs.filter((x) => idx.get(x.step)! <= idx.get(stepId)! && inOption(x));
+  const sheet = { ...design, components: onSheet(design.components), connections: onSheet(design.connections), flows: onSheet(design.flows) };
   const labelOf = (id: string) => [...design.components, ...design.boundaries].find((c) => c.id === id)?.label;
   const fieldText = (field: string, v: string | undefined) => (v === undefined ? '—' : field === 'boundary' || field === 'parent' ? (labelOf(v) ?? v) : v);
   const placeIn = (to: string | undefined) => change((d) => selected && m.placeIn(d, selected, to));
@@ -753,6 +758,28 @@ export function Inspector({
                 />
               )}
             </Prop>
+            <Prop label="Capacity">
+              <Num label="Capacity" unit="req/s" value={component.capacity} onCommit={(v) => edit((d: Design) => d.components, { capacity: v })} />
+              {(() => {
+                const { load, capacity } = loadOf(sheet, component.id);
+                if (!load) return null;
+                return <span className="quiet">gets {load}{capacity ? ` · ${Math.round((load / capacity) * 100)}%` : ''}</span>;
+              })()}
+            </Prop>
+            {sheet.connections.length > 0 && (
+              <Prop label="If it fails">
+                {(() => {
+                  const { flows, cutOff } = failureImpact(sheet, component.id);
+                  if (!flows.length && !cutOff.length) return <span className="quiet">No flow breaks and every part stays reachable.</span>;
+                  return (
+                    <span>
+                      {flows.length > 0 && <>Breaks {flows.length > 1 ? 'flows' : 'flow'} {flows.map((f) => `“${f}”`).join(', ')}. </>}
+                      {cutOff.length > 0 && <>Cuts off {cutOff.join(', ')}.</>}
+                    </span>
+                  );
+                })()}
+              </Prop>
+            )}
             <Prop label="Code">
               <Ed label="Code" placeholder={design.repo ? 'Path in the repo or URL' : 'URL, or a path once the design has a repo'} value={component.code} onCommit={(v) => edit((d: Design) => d.components, { code: v })} />
               {/* Only web links open; anything else (javascript:, a path with no repo) stays text. */}

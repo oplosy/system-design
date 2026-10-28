@@ -3,7 +3,7 @@
   "title": "System design – local design canvas",
   "description": "Local canvas where agents add architecture steps over MCP and a reviewer walks them in the browser. Designs are JSON files on disk.",
   "repo": "https://github.com/oplosy/system-design/tree/main",
-  "rev": 3,
+  "rev": 4,
   "steps": [
     {
       "id": "start",
@@ -26,6 +26,12 @@
       "id": "shareable-read-only-html-file",
       "title": "Shareable read-only HTML file",
       "summary": "Exports a design (plus the designs its parts open) as one self-contained HTML file: the built app with script and styles inlined and the designs baked in as JSON. In that file the client API switches to an in-memory store, so it runs from disk or any static host with no server.",
+      "seen": false
+    },
+    {
+      "id": "capacity-checks-and-failure-impact",
+      "title": "Capacity checks and failure impact",
+      "summary": "Parts get an optional capacity (req/s). Lint compares it with the qps on incoming lines; a failure analysis walks the graph from entry points without a part to find broken flows and parts cut off. Shown in the inspector and exposed to agents as simulate_failure.",
       "seen": false
     }
   ],
@@ -156,6 +162,14 @@
       "type": "file-storage",
       "label": "dist/ (built app)",
       "step": "shareable-read-only-html-file"
+    },
+    {
+      "id": "analysis",
+      "type": "module",
+      "label": "Lint + capacity + failure impact",
+      "tech": "lint, loadOf, failureImpact",
+      "code": "core/lint.ts",
+      "step": "capacity-checks-and-failure-impact"
     }
   ],
   "connections": [
@@ -319,6 +333,20 @@
       "to": "shared-file",
       "label": "opens anywhere",
       "step": "shareable-read-only-html-file"
+    },
+    {
+      "id": "browser-app-to-analysis",
+      "from": "browser-app",
+      "to": "analysis",
+      "label": "badges, inspector",
+      "step": "capacity-checks-and-failure-impact"
+    },
+    {
+      "id": "mcp-server-to-analysis",
+      "from": "mcp-server",
+      "to": "analysis",
+      "label": "lint, simulate_failure",
+      "step": "capacity-checks-and-failure-impact"
     }
   ],
   "notes": [
@@ -406,6 +434,20 @@
         "browser-app"
       ],
       "step": "shareable-read-only-html-file"
+    },
+    {
+      "id": "decision-static-capacity-and-reachabilit",
+      "title": "Static capacity and reachability analysis, not a traffic simulator",
+      "why": "The design already carries qps on lines; summing incoming qps against a per-part capacity and re-walking the graph without a failed part answers 'what saturates' and 'what breaks' with no new data model or runtime. It runs in lint, so badges and agents get it for free.",
+      "alternatives": [
+        "Discrete-event traffic simulation",
+        "Propagate load automatically from entry points"
+      ],
+      "tradeoffs": "Load is only what the lines say (no fan-out math, retries or caching hit rates); a failure is all-or-nothing reachability, no partial degradation or timeouts.",
+      "links": [
+        "analysis"
+      ],
+      "step": "capacity-checks-and-failure-impact"
     }
   ],
   "boundaries": [],

@@ -5,7 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type Design } from '../core/schema.ts';
 import { infraDrift, syncInfra } from '../core/infra.ts';
-import { lint } from '../core/lint.ts';
+import { failureImpact, lint } from '../core/lint.ts';
 import * as m from '../core/mutations.ts';
 import { createDesign, listDesigns, listTemplates, readDesign, updateDesign } from '../core/store.ts';
 import { guessType } from '../src/shapes.ts';
@@ -20,7 +20,7 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Show the key request paths as flows ("User uploads a photo"): component ids in order, each hop along a connection (either way, so responses can walk back).
 - Keep a big design readable with drill-down: create a design for a service's insides and set the service's detail to its id.
 - When there is a real choice to make (Redis vs CDN), offer it as options in add_step; the reviewer compares them on the canvas and picks one.
-- Put expected load (qps) and one-way latency (ms) on the lines that matter; a flow then shows its total time.
+- Put expected load (qps) and one-way latency (ms) on the lines that matter; a flow then shows its total time. Give parts that can saturate a capacity (req/s): lint flags them when their incoming qps nears or passes it, and simulate_failure shows what a part going down breaks.
 - Put a monthly cost on parts that cost real money (in the design's currency, USD unless set); each step then shows how much it moves the total.
 - Set code on parts whose code you know: a URL, or a path that opens against the design's repo.
 - When the project has docker-compose files, Kubernetes manifests or Terraform, run sync_infra with dry_run to see what the design is missing, and sync it as a step when the infrastructure is the truth.
@@ -46,6 +46,7 @@ const componentFields = {
   detail: z.string().optional().describe('Id of another design that shows what is inside this component; create it first with create_design'),
   code: z.string().optional().describe('Where its code lives: a repository URL, or a path in the repo such as "services/orders"'),
   cost: z.number().nonnegative().optional().describe("Expected running cost per month in the design's currency (USD unless set)"),
+  capacity: z.number().nonnegative().optional().describe('Requests per second it can take; lint flags it when the qps on lines into it come near or over'),
 };
 const connectionFields = {
   from: z.string().describe('Component id'),
@@ -235,6 +236,16 @@ server.registerTool('lint', { description: 'Check a design for likely smells: is
 );
 
 server.registerTool(
+  'simulate_failure',
+  { description: 'What breaks if a component goes down: the flows through it and the parts users and clients can no longer reach', inputSchema: { design, id: z.string().describe('Component id') } },
+  async ({ design: designId, id }) => {
+    const d = await readDesign(designId);
+    if (!d.components.some((c) => c.id === id)) throw new Error(`unknown component "${id}"`);
+    return ok(failureImpact(d, id));
+  },
+);
+
+server.registerTool(
   'update_connection',
   {
     description: 'Change a connection (label, mode, load, latency). The change is recorded on the step (latest by default) for review, with its old values',
@@ -252,7 +263,7 @@ server.registerTool(
   'update_component',
   {
     description: 'Change a component. The change is recorded on the step (latest by default) for review, with its old values',
-    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), detail: componentFields.detail, code: componentFields.code, cost: componentFields.cost, step },
+    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), detail: componentFields.detail, code: componentFields.code, cost: componentFields.cost, capacity: componentFields.capacity, step },
   },
   async ({ design: designId, id, step, ...fields }) =>
     edit(designId, (d) => {

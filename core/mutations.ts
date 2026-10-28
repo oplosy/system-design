@@ -91,7 +91,7 @@ function checkBoundary(d: Design, id: string | undefined) {
 
 export function addComponent(
   d: Design,
-  input: Edit & { id?: string; type: ComponentType; label: string; tech?: string; description?: string; boundary?: string; detail?: string; code?: string; cost?: number; position?: { x: number; y: number } },
+  input: Edit & { id?: string; type: ComponentType; label: string; tech?: string; description?: string; boundary?: string; detail?: string; code?: string; cost?: number; capacity?: number; position?: { x: number; y: number } },
 ) {
   checkBoundary(d, input.boundary);
   if (input.detail === d.id) throw new Error('A component can’t open its own design.');
@@ -106,6 +106,7 @@ export function addComponent(
     detail: input.detail,
     code: input.code,
     cost: input.cost,
+    capacity: input.capacity,
     position: input.position,
     ...placed(d, input),
   });
