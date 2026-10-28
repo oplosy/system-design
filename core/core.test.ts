@@ -1169,3 +1169,67 @@ Resources:
   assert.deepEqual(p.links.map((l) => `${l.from.split('.')[1]}>${l.to.split('.')[1]}`).sort(), ['front>web', 'web>db']);
   assert.deepEqual(p.skipped, ['aws:ec2/securityGroup:SecurityGroup', 'aws:lb/listener:Listener']);
 });
+
+test('pasted files reuse parts by name, and catalogs, specs and stacks keep their structure', async () => {
+  const { readInfra } = await import('./infra.ts');
+  const { importAsStep } = await import('./importer.ts');
+  const { guessType } = await import('../src/shapes.ts');
+
+  // An OpenAPI document lands on the service already drawn: its endpoints fill the empty description, its sign-in provider and webhooks add lines.
+  const d = m.blankDesign('reuse', 'Reuse');
+  const orders = m.addComponent(d, { type: 'service', label: 'Orders API' });
+  const api = JSON.stringify({
+    openapi: '3.1.0',
+    info: { title: 'Orders API' },
+    paths: { '/orders': { get: {} } },
+    components: { securitySchemes: { auth: { type: 'oauth2', flows: { clientCredentials: { tokenUrl: 'https://login.acme.com/oauth/token' } } } } },
+    webhooks: { orderShipped: { post: {} } },
+  });
+  importAsStep(d, api, { guess: guessType });
+  assert.deepEqual(d.components.map((c) => `${c.label}:${c.type}`), ['Orders API:service', 'login.acme.com:identity', 'Orders API webhooks:webhook']);
+  assert.equal(d.components.find((c) => c.id === orders)!.description, 'Endpoints: GET /orders');
+  assert.match(d.steps.at(-1)!.summary!, /2 parts, 2 lines, 1 description\./);
+  assert.throws(() => importAsStep(d, api, { guess: guessType }), /already on the sheet/);
+
+  // Two services' AsyncAPI documents share the channel between them.
+  const doc = (title: string, ops: Record<string, unknown>) => JSON.stringify({ asyncapi: '2.6.0', info: { title }, channels: { 'order/placed': ops } });
+  importAsStep(d, doc('Checkout', { subscribe: {} }));
+  importAsStep(d, doc('Billing', { publish: {} }));
+  assert.equal(d.components.filter((c) => c.label === 'order/placed').length, 1);
+  const channel = d.components.find((c) => c.label === 'order/placed')!.id;
+  assert.equal(d.connections.filter((c) => c.from === channel || c.to === channel).length, 2);
+
+  // Backstage: Systems sit in their Domains, subdomains in theirs; a domain with nothing drawn in it is not drawn.
+  const entity = (kind: string, name: string, spec = '{}') => `apiVersion: backstage.io/v1alpha1\nkind: ${kind}\nmetadata: { name: ${name} }\nspec: ${spec}\n`;
+  const catalog = [
+    entity('Domain', 'commerce'),
+    entity('Domain', 'payments', '{ subdomainOf: commerce }'),
+    entity('Domain', 'empty'),
+    entity('System', 'billing', '{ domain: payments }'),
+    entity('Component', 'invoicer', '{ type: service, system: billing }'),
+  ].join('---\n');
+  const b = readInfra(catalog);
+  assert.deepEqual(b.groups.map((g) => `${g.key}:${g.kind}:${g.parent ?? ''}`), ['commerce:context:', 'payments:context:commerce', 'billing:system:payments']);
+  const x = m.blankDesign('domains', 'Domains');
+  importAsStep(x, catalog);
+  assert.deepEqual(x.boundaries.map((g) => `${g.label}:${x.boundaries.find((p) => p.id === g.parent)?.label ?? ''}`), ['commerce:', 'payments:commerce', 'billing:payments']);
+
+  // Pulumi: components box what they hold, nested; azure-native types map; same names get their own parts.
+  const urn = (t: string, n: string) => `urn:pulumi:dev::shop::${t}::${n}`;
+  const shop = urn('my:app:Shop', 'shop');
+  const web = urn('my:app:Shop$my:app:Web', 'web');
+  const stack = JSON.stringify({
+    deployment: {
+      resources: [
+        { urn: shop, type: 'my:app:Shop' },
+        { urn: web, type: 'my:app:Web', parent: shop },
+        { urn: urn('my:app:Shop$aws:s3/bucket:Bucket', 'assets'), type: 'aws:s3/bucket:Bucket', custom: true, parent: shop },
+        { urn: urn('my:app:Shop$my:app:Web$aws:s3/bucket:Bucket', 'assets'), type: 'aws:s3/bucket:Bucket', custom: true, parent: web },
+        { urn: urn('azure-native:cache:Redis', 'sessions'), type: 'azure-native:cache:Redis', custom: true },
+      ],
+    },
+  });
+  const p = readInfra(stack);
+  assert.deepEqual(p.parts.map((q) => `${q.label}:${q.type}:${q.group ?? ''}`), ['assets:object-storage:shop', 'assets:object-storage:shop/web', 'sessions:cache:']);
+  assert.deepEqual(p.groups.map((g) => `${g.key}:${g.label}:${g.parent ?? ''}`), ['shop:shop:', 'shop/web:web:shop']);
+});

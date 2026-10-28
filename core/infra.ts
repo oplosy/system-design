@@ -9,7 +9,7 @@ import { asyncapi, backstage, isBackstage, openapi } from './specs.ts';
 
 export type Part = { key: string; label: string; image?: string; type: ComponentType; tech?: string; description?: string; group?: string; code?: string };
 export type Link = { from: string; to: string; label?: string; qps?: number; latency?: number; async?: boolean };
-export type Group = { key: string; label: string; kind: BoundaryKind };
+export type Group = { key: string; label: string; kind: BoundaryKind; parent?: string };
 export type Doc = Record<string, any>;
 
 const obj = (x: unknown): Doc => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Doc) : {});
@@ -334,18 +334,39 @@ function cloudformation(file: Doc) {
 }
 
 /** Pulumi type modules whose Terraform names differ, and types that would otherwise land on the wrong resource. */
-const PULUMI_PROVIDERS: Record<string, string> = { gcp: 'google', azure: 'azurerm' };
+const PULUMI_PROVIDERS: Record<string, string> = { gcp: 'google', azure: 'azurerm', 'azure-native': 'azurerm' };
 const PULUMI_MODULES: Record<string, string> = { apigateway: 'api_gateway', cloudrun: 'cloud_run', cloudrunv2: 'cloud_run_v2' };
-const PULUMI_TYPES: Record<string, string> = { 'aws:rds/instance:Instance': 'aws_db_instance' };
+const PULUMI_TYPES: Record<string, string> = {
+  'aws:rds/instance:Instance': 'aws_db_instance',
+  // azure-native follows Azure's resource names, not Terraform's.
+  'azure-native:containerservice:ManagedCluster': 'azurerm_kubernetes_cluster',
+  'azure-native:web:WebApp': 'azurerm_linux_web_app',
+  'azure-native:sql:Server': 'azurerm_mssql_server',
+  'azure-native:dbforpostgresql:Server': 'azurerm_postgresql_flexible_server',
+  'azure-native:dbforpostgresql:FlexibleServer': 'azurerm_postgresql_flexible_server',
+  'azure-native:dbformysql:Server': 'azurerm_mysql_flexible_server',
+  'azure-native:dbformysql:FlexibleServer': 'azurerm_mysql_flexible_server',
+  'azure-native:documentdb:DatabaseAccount': 'azurerm_cosmosdb_account',
+  'azure-native:cache:Redis': 'azurerm_redis_cache',
+  'azure-native:eventhub:EventHub': 'azurerm_eventhub',
+  'azure-native:network:LoadBalancer': 'azurerm_lb',
+  'azure-native:apimanagement:ApiManagementService': 'azurerm_api_management',
+  'azure-native:keyvault:Vault': 'azurerm_key_vault',
+  'azure-native:containerregistry:Registry': 'azurerm_container_registry',
+  'azure-native:compute:VirtualMachine': 'azurerm_linux_virtual_machine',
+  'azure-native:network:DnsZone': 'azurerm_dns_zone',
+  'azure-native:cdn:Profile': 'azurerm_cdn_frontdoor_profile',
+};
 
 /**
  * Reads `pulumi stack export` output through the Terraform reader: Pulumi's AWS, Google Cloud and Azure (classic)
  * providers are bridged from Terraform's, so "aws:lambda/function:Function" is aws_lambda_function, and each
- * resource's dependencies become depends_on.
+ * resource's dependencies become depends_on. Component resources (awsx, your own) become boundaries around what they hold.
  */
 function pulumi(file: Doc) {
-  // shortcut: components (awsx, your own) are not drawn and azure-native types are not mapped; their resources still are.
-  const resources = list(obj(file.deployment).resources).map(obj).filter((r) => r.custom && str(r.urn) && !String(r.type).startsWith('pulumi:'));
+  const all = list(obj(file.deployment).resources).map(obj).filter((r) => str(r.urn) && !String(r.type).startsWith('pulumi:'));
+  const resources = all.filter((r) => r.custom);
+  const components = new Map(all.filter((r) => !r.custom).map((r) => [String(r.urn), r]));
   const known = (t: string) => t in TF_TYPES || TF_BRIDGE.test(t) || TF_PLUMBING.test(t);
   const types = new Map<string, string>();
   const tfType = (t: string) => {
@@ -360,13 +381,36 @@ function pulumi(file: Doc) {
   };
   // urn:pulumi:stack::project::parent$type::name → name
   const name = (r: Doc) => String(r.urn).split('::').pop()!;
-  const address = new Map(resources.map((r) => [String(r.urn), `${tfType(String(r.type))}.${name(r).replace(/[^\w-]/g, '_')}`]));
+  const safe = (s: string) => s.replace(/[^\w-]/g, '_');
+  // The innermost component a resource sits in, by its parent chain; it becomes a Terraform module, so a boundary.
+  const byUrn = new Map(all.map((r) => [String(r.urn), r]));
+  const component = (r: Doc) => {
+    for (let p = byUrn.get(String(r.parent)), n = 0; p && n < 50; p = byUrn.get(String(p.parent)), n++) if (components.has(String(p.urn))) return p;
+    return undefined;
+  };
+  const names = new Map<string, string>();
+  const path = (c: Doc | undefined, n = 0): string => {
+    if (!c || n > 50) return '';
+    const at = `${path(component(c), n + 1)}module.${safe(name(c))}`;
+    names.set(at, name(c));
+    return `${at}.`;
+  };
+  const address = new Map<string, string>();
+  const taken = new Set<string>();
+  for (const r of resources) {
+    // Pulumi names need only be unique per type and parent type, so two "bucket"s can share one address; number the rest.
+    const at = `${path(component(r))}${tfType(String(r.type))}.${safe(name(r))}`;
+    let unique = at;
+    for (let i = 2; taken.has(unique); i++) unique = `${at}_${i}`;
+    taken.add(unique);
+    address.set(String(r.urn), unique);
+  }
   const tf = terraform({
     values: {
       root_module: {
         resources: resources.map((r) => ({
           address: address.get(r.urn),
-          type: address.get(r.urn)!.split('.')[0],
+          type: base(address.get(r.urn)!).split('.').at(-2),
           name: name(r),
           values: { name: name(r), engine: obj(r.outputs).engine ?? obj(r.inputs).engine },
           depends_on: list(r.dependencies).map((u) => address.get(String(u))).filter(Boolean),
@@ -374,7 +418,18 @@ function pulumi(file: Doc) {
       },
     },
   });
-  return { ...tf, skipped: tf.skipped.map((s) => s.replace(/^\S+/, (t) => types.get(t) ?? t)) };
+  // Components become boxes named after them, nested as they are; resources outside any stay unboxed.
+  const key = (k: string) => k.replace(/^module\./, '').replace(/\.module\./g, '/');
+  const groups: Group[] = [];
+  const add = (k: string) => {
+    if (k === 'root' || groups.some((g) => g.key === key(k))) return;
+    const parent = k.replace(/\.?module\.[^.]+$/, '');
+    if (parent) add(parent);
+    groups.push({ key: key(k), label: names.get(k) ?? k, kind: 'group', parent: parent ? key(parent) : undefined });
+  };
+  for (const g of tf.groups) add(g.key);
+  const parts = tf.parts.map((p) => ({ ...p, group: p.group && p.group !== 'root' ? key(p.group) : undefined }));
+  return { ...tf, parts, groups, skipped: tf.skipped.map((s) => s.replace(/^\S+/, (t) => types.get(t) ?? t)) };
 }
 
 function compose(file: Doc) {
@@ -473,30 +528,39 @@ function kube(docs: Doc[]) {
  * label, which then gets the source), lines it already draws either way are kept, and parts once imported from this
  * format that the infrastructure no longer has are removed, so the design comes to match. Returns what changed.
  */
-export function importInfra(d: Design, text: string, { step, guess, sync }: { step?: string; guess?: (words: string) => ComponentType | undefined; sync?: boolean } = {}) {
+export function importInfra(
+  d: Design,
+  text: string,
+  { step, guess, sync, reuse }: { step?: string; guess?: (words: string) => ComponentType | undefined; sync?: boolean; reuse?: boolean } = {},
+) {
   const read = readInfra(text);
   const { format, parts, links, groups } = read;
   const flows: TraceFlow[] = ('flows' in read && read.flows) || [];
   if (!parts.length) throw new Error('No services or workloads found.');
   const at = { step, reopen: false };
   const byName = <T extends { id: string; label: string }>(label: string, items: T[]) => items.find((x) => x.id === m.slugify(label) || m.slugify(x.label) === m.slugify(label));
-  const added = { components: [] as string[], connections: [] as string[], boundaries: [] as string[], removed: [] as string[], updated: [] as string[], flows: [] as string[] };
-  const boundaryIds = new Map(
-    groups.map((g) => {
-      const found = sync && byName(g.label, d.boundaries)?.id;
-      if (found) return [g.key, found];
-      added.boundaries.push(g.label);
-      return [g.key, m.addBoundary(d, { kind: g.kind, label: g.label, id: g.key, ...at })];
-    }),
-  );
+  const added = { components: [] as string[], connections: [] as string[], boundaries: [] as string[], removed: [] as string[], updated: [] as string[], described: [] as string[], flows: [] as string[] };
+  const boundaryIds = new Map<string, string>();
+  // Parents come first in groups, so a nested boundary finds its parent's id.
+  for (const g of groups) {
+    const found = (sync || reuse) && byName(g.label, d.boundaries)?.id;
+    if (!found) added.boundaries.push(g.label);
+    boundaryIds.set(g.key, found || m.addBoundary(d, { kind: g.kind, label: g.label, id: g.key, parent: g.parent && boundaryIds.get(g.parent), ...at }));
+  }
   const ids = new Map<string, string>();
   for (const p of parts) {
     const source = `${format}:${p.key}`;
-    // A part that came from somewhere else is a different thing, even with the same name.
-    const found = sync ? (d.components.find((c) => c.source === source) ?? byName(p.label, d.components.filter((c) => !c.source))) : undefined;
+    // In a sync a part that came from somewhere else is a different thing, even with the same name; a paste
+    // reuses any part of that name, so an OpenAPI document lands on the service already drawn.
+    const found = sync || reuse ? (d.components.find((c) => c.source === source) ?? byName(p.label, sync ? d.components.filter((c) => !c.source) : d.components)) : undefined;
     if (found) {
-      found.source = source;
+      found.source ??= source;
       ids.set(p.key, found.id);
+      // A description the design lacks (an API's endpoints, a catalog entry's) is filled in, never overwritten.
+      if (p.description && !found.description) {
+        m.updateTracked(d, found.id, { description: p.description }, step, false);
+        added.described.push(found.label);
+      }
       continue;
     }
     // "registry.io/team/postgres:16@sha256:…" → "postgres:16"
@@ -557,6 +621,7 @@ export function syncInfra(d: Design, text: string, title: string, guess?: (words
     found.length && `Found in the infrastructure but not in the design: ${found.join(', ')}.`,
     drift.removed.length && `No longer in the infrastructure: ${drift.removed.join(', ')}.`,
     drift.updated.length && `Measured load and latency: ${drift.updated.join('; ')}.`,
+    drift.described.length && `Descriptions filled in: ${drift.described.join(', ')}.`,
     drift.flows.length && `Flows seen in traces: ${drift.flows.join(', ')}.`,
   ]
     .filter(Boolean)

@@ -30,6 +30,7 @@ try {
   for (const b of drift.boundaries) console.log(`  + boundary ${b}`);
   for (const r of drift.removed) console.log(`  - part ${r} (no longer in the infrastructure)`);
   for (const u of drift.updated) console.log(`  ~ line ${u}`);
+  for (const p of drift.described) console.log(`  ~ part ${p} (description)`);
   for (const f of drift.flows) console.log(`  + flow ${f}`);
   if (write) {
     let step: string | undefined;

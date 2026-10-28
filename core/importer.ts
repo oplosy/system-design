@@ -54,7 +54,7 @@ export function importText(d: Design, text: string, { step, guess }: { step?: st
   if (isDrawio(text)) return importDiagram(d, readDrawio(text), { step, guess });
   if (isStructurizr(text)) return importDiagram(d, readStructurizr(text), { step, guess });
   const { skipped } = readInfra(text);
-  return { ...importInfra(d, text, { step, guess }), leftOut: skipped.length ? [`${skipped.join(', ')} (draw nothing)`] : [] };
+  return { ...importInfra(d, text, { step, guess, reuse: true }), leftOut: skipped.length ? [`${skipped.join(', ')} (draw nothing)`] : [] };
 }
 
 const count = (n: number, one: string, many = `${one}s`) => (n ? `${n} ${n > 1 ? many : one}` : '');
@@ -75,9 +75,10 @@ export function importAsStep(d: Design, text: string, { title, seen, guess }: { 
     count(added.boundaries.length, 'boundary', 'boundaries'),
     count(added.flows.length, 'flow'),
     count('updated' in added ? (added.updated as string[]).length : 0, 'measured line'),
+    count('described' in added ? (added.described as string[]).length : 0, 'description'),
   ].filter(Boolean);
   if (!what.length) throw new Error(`Everything in this ${format} is already on the sheet.`);
   const left = added.leftOut.length ? ` Left out: ${added.leftOut.join('; ')}.` : '';
-  d.steps.find((s) => s.id === step)!.summary = `From ${/s$/.test(format) ? '' : 'a '}${format}: ${what.join(', ')}.${left}`;
+  d.steps.find((s) => s.id === step)!.summary = `From ${/s$/.test(format) ? '' : /^[AEIOU]/.test(format) ? 'an ' : 'a '}${format}: ${what.join(', ')}.${left}`;
   return step;
 }

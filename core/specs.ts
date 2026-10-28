@@ -24,7 +24,7 @@ const RESOURCES: Record<string, ComponentType> = {
 const COMPONENTS: Record<string, ComponentType> = { service: 'service', website: 'client', library: 'library' };
 
 /**
- * Reads catalog-info.yaml entities: Components and Resources become parts, Systems the boundaries around them,
+ * Reads catalog-info.yaml entities: Components and Resources become parts, Systems the boundaries around them (inside their Domains),
  * dependsOn becomes lines, and an API one component provides and another consumes becomes a line between them.
  */
 export function backstage(docs: Doc[]) {
@@ -36,9 +36,27 @@ export function backstage(docs: Doc[]) {
   };
   const key = (d: Doc) => ref(obj(d.metadata).name, String(d.kind), str(obj(d.metadata).namespace));
   const title = (d: Doc) => String(obj(d.metadata).title ?? obj(d.metadata).name);
-  // A System's name is its boundary's id; parts find it by ref.
+  const ns = (d: Doc) => str(obj(d.metadata).namespace);
+  // A System's or Domain's name is its boundary's id; parts and systems find it by ref.
   const systems = new Map(entities.filter((d) => d.kind === 'System').map((d) => [key(d), String(obj(d.metadata).name)]));
-  const groups: Group[] = entities.filter((d) => d.kind === 'System').map((d) => ({ key: systems.get(key(d))!, label: title(d), kind: 'system' }));
+  const named = new Set(systems.values());
+  const domains = new Map(entities.filter((d) => d.kind === 'Domain').map((d) => [key(d), named.has(obj(d.metadata).name) ? `${obj(d.metadata).name}-domain` : String(obj(d.metadata).name)]));
+  const parentOf = (d: Doc) => {
+    const p = obj(d.spec)[d.kind === 'System' ? 'domain' : 'subdomainOf'];
+    return p ? domains.get(ref(p, 'domain', ns(d))) : undefined;
+  };
+  // Parents first: a domain's depth is how many domains it sits in (a cycle stops at the domain count).
+  const depth = (d: Doc, n = 0): number => {
+    const p = parentOf(d) && entities.find((e) => e.kind === 'Domain' && domains.get(key(e)) === parentOf(d));
+    return p && n < domains.size ? depth(p, n + 1) : n;
+  };
+  const groups: Group[] = [
+    ...entities
+      .filter((d) => d.kind === 'Domain')
+      .sort((a, b) => depth(a) - depth(b))
+      .map((d): Group => ({ key: domains.get(key(d))!, label: title(d), kind: 'context', parent: parentOf(d) })),
+    ...entities.filter((d) => d.kind === 'System').map((d): Group => ({ key: systems.get(key(d))!, label: title(d), kind: 'system', parent: parentOf(d) })),
+  ];
   const parts: Part[] = [];
   const skipped: string[] = [];
   for (const d of entities) {
@@ -46,7 +64,7 @@ export function backstage(docs: Doc[]) {
     const type = str(spec.type)?.toLowerCase() ?? '';
     const mapped = d.kind === 'Component' ? COMPONENTS[type] : d.kind === 'Resource' ? RESOURCES[type] : undefined;
     if (d.kind !== 'Component' && d.kind !== 'Resource') {
-      if (d.kind !== 'System' && d.kind !== 'API') skipped.push(`${d.kind} ${obj(d.metadata).name}`);
+      if (!['System', 'Domain', 'API'].includes(d.kind)) skipped.push(`${d.kind} ${obj(d.metadata).name}`);
       continue;
     }
     const system = spec.system && ref(spec.system, 'system', str(obj(d.metadata).namespace));
@@ -62,7 +80,6 @@ export function backstage(docs: Doc[]) {
       code: source,
     });
   }
-  const ns = (d: Doc) => str(obj(d.metadata).namespace);
   const links: Link[] = [];
   const providers = new Map<string, string[]>();
   for (const d of entities) for (const a of list(obj(d.spec).providesApis)) providers.set(ref(a, 'api', ns(d)), [...(providers.get(ref(a, 'api', ns(d))) ?? []), key(d)]);
@@ -77,12 +94,15 @@ export function backstage(docs: Doc[]) {
       for (const to of from) links.push({ from: key(d), to, label: apis.get(api) ?? api.split('/').pop() });
     }
   }
-  return { parts, links, groups: groups.filter((g) => parts.some((p) => p.group === g.key)), skipped };
+  // Keep the boxes that hold a part, and the domains around them (children come after parents, so walk backwards).
+  const used = new Set(parts.map((p) => p.group));
+  for (const g of [...groups].reverse()) if (used.has(g.key) && g.parent) used.add(g.parent);
+  return { parts, links, groups: groups.filter((g) => used.has(g.key)), skipped };
 }
 
 const METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
 
-/** Reads an OpenAPI (or Swagger 2) document: one service part whose description lists its endpoints. */
+/** Reads an OpenAPI (or Swagger 2) document: a service part whose description lists its endpoints, and what it calls out to. */
 export function openapi(doc: Doc) {
   const info = obj(doc.info);
   const label = str(info.title) ?? 'API';
@@ -90,7 +110,21 @@ export function openapi(doc: Doc) {
   const shown = endpoints.slice(0, 30).join(', ') + (endpoints.length > 30 ? ` and ${endpoints.length - 30} more` : '');
   const description = [str(info.description), shown && `Endpoints: ${shown}`].filter(Boolean).join('\n\n') || undefined;
   const parts: Part[] = [{ key: label, label, type: 'service', tech: str(info.version) ? `REST ${info.version}` : 'REST', description }];
-  return { parts, links: [] as Link[], groups: [] as Group[], skipped: [] as string[] };
+  const links: Link[] = [];
+  // What the service itself calls: the sign-in provider its OAuth / OpenID Connect schemes name, and webhook subscribers.
+  const schemes = Object.values(obj(obj(doc.components).securitySchemes ?? doc.securityDefinitions)).map(obj);
+  const urls = schemes.flatMap((s) => [s.openIdConnectUrl, s.authorizationUrl, s.tokenUrl, ...Object.values(obj(s.flows)).flatMap((f) => [obj(f).authorizationUrl, obj(f).tokenUrl])]);
+  const idp = urls.map((u) => str(u) && /^https?:\/\/([^/:]+)/i.exec(String(u))?.[1]).find(Boolean);
+  if (idp) {
+    parts.push({ key: `idp:${idp}`, label: idp, type: 'identity', tech: schemes.some((s) => s.type === 'openIdConnect') ? 'OpenID Connect' : 'OAuth 2' });
+    links.push({ from: label, to: `idp:${idp}`, label: 'verifies tokens' });
+  }
+  const hooks = Object.keys(obj(doc.webhooks));
+  if (hooks.length) {
+    parts.push({ key: 'webhooks', label: `${label} webhooks`, type: 'webhook', description: `Events: ${hooks.join(', ')}` });
+    links.push({ from: label, to: 'webhooks', async: true });
+  }
+  return { parts, links, groups: [] as Group[], skipped: [] as string[] };
 }
 
 /** Message protocol (AsyncAPI server protocol) → the kind of part its channels draw as. */
