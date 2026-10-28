@@ -3,7 +3,7 @@
   "title": "System design – local design canvas",
   "description": "Local canvas where agents add architecture steps over MCP and a reviewer walks them in the browser. Designs are JSON files on disk.",
   "repo": "https://github.com/oplosy/system-design/tree/main",
-  "rev": 9,
+  "rev": 10,
   "steps": [
     {
       "id": "start",
@@ -62,6 +62,12 @@
       "id": "paste-any-diagram-as-a-step",
       "title": "Paste any diagram as a step",
       "summary": "There is now a single importer that recognises the format. It reads Mermaid (flowchart, sequence, C4, architecture-beta), C4-PlantUML, compose, Kubernetes, Terraform and traces. It is reached by pasting on the canvas or through the MCP import_diagram tool. Each import becomes a new step and reuses parts by name. Copying parts writes a Mermaid flowchart to the clipboard.",
+      "seen": false
+    },
+    {
+      "id": "import-draw-io-and-structurizr-dsl",
+      "title": "Import draw.io and Structurizr DSL",
+      "summary": "The importer now reads draw.io diagrams and Structurizr workspaces. draw.io input can be a file, compressed pages or shapes copied from draw.io. Both readers produce the same diagram shape that Mermaid and C4 use, so merging by name and summarising what was left out work the same everywhere. Files can also be dropped onto the canvas.",
       "seen": false
     }
   ],
@@ -230,6 +236,21 @@
       "label": "Mermaid / C4-PlantUML text",
       "description": "Diagrams from docs, READMEs or other tools",
       "step": "paste-any-diagram-as-a-step"
+    },
+    {
+      "id": "rival-readers",
+      "type": "module",
+      "label": "draw.io + Structurizr readers",
+      "description": "Read draw.io XML and Structurizr DSL into the shared diagram shape (core/diagram.ts)",
+      "code": "core/drawio.ts",
+      "step": "import-draw-io-and-structurizr-dsl"
+    },
+    {
+      "id": "rival-files",
+      "type": "external",
+      "label": ".drawio / .dsl files",
+      "description": "Diagrams kept in draw.io, diagrams.net, Confluence or Structurizr",
+      "step": "import-draw-io-and-structurizr-dsl"
     }
   ],
   "connections": [
@@ -456,6 +477,20 @@
       "to": "infra-reader",
       "label": "compose / k8s / tf / traces",
       "step": "paste-any-diagram-as-a-step"
+    },
+    {
+      "id": "importer-to-rival-readers",
+      "from": "importer",
+      "to": "rival-readers",
+      "label": "draw.io / DSL",
+      "step": "import-draw-io-and-structurizr-dsl"
+    },
+    {
+      "id": "rival-files-to-importer",
+      "from": "rival-files",
+      "to": "importer",
+      "label": "paste or drop",
+      "step": "import-draw-io-and-structurizr-dsl"
     }
   ],
   "notes": [
@@ -653,6 +688,22 @@
         "mcp-server"
       ],
       "step": "paste-any-diagram-as-a-step"
+    },
+    {
+      "id": "decision-hand-written-readers-for-draw-i",
+      "title": "Hand-written readers for draw.io XML and Structurizr DSL, read at the container level",
+      "why": "These are the formats teams leave behind when they move from draw.io or Structurizr, so reading them is what makes switching cheap. A small tag walker and tokenizer keep the app dependency-free and run in both Node (MCP) and the browser. Compressed pages are inflated with the platform's DecompressionStream.",
+      "alternatives": [
+        "Add an XML parser dependency",
+        "Use the Structurizr Java parser via a CLI",
+        "Read every page and every C4 level"
+      ],
+      "tradeoffs": "Only the first draw.io page is read. A box is anything that holds or surrounds other shapes, so a decorative background rectangle becomes a boundary. Icon names only hint at the type. Structurizr components are folded into their containers, and relationships to a system drawn as a box are left out; both are listed in the step summary. Deployment views are ignored.",
+      "links": [
+        "rival-readers",
+        "importer"
+      ],
+      "step": "import-draw-io-and-structurizr-dsl"
     }
   ],
   "boundaries": [],

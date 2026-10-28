@@ -20,7 +20,6 @@ import { toPng, toSvg } from 'html-to-image';
 import { codeUrl, costAt, toDecisionRecord, toMermaid } from '../core/export.ts';
 import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
 import { lint } from '../core/lint.ts';
-import { importMermaid, parseMermaid } from '../core/mermaid.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { ApiError, api, shared, type Summary } from './api.ts';
@@ -47,6 +46,8 @@ const DOCK_LIMITS = { left: [200, 420], right: [280, 600] } as const;
 const GAP = 12;
 /** Marks clipboard content copied from this sheet. */
 const CLIP_MIME = 'application/x-system-design';
+/** Largest file a drop imports; bigger ones would hang the page while parsing. */
+const MAX_IMPORT = 5e6;
 
 type Editing = { id: string; at: Pt; value: string; multiline: boolean };
 
@@ -948,6 +949,26 @@ function Shell() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  /** Adds a pasted or dropped diagram or infrastructure file to the design as a new step, and shows that step. */
+  const importSource = async (raw: string, what: string) => {
+    // Loaded only here, so the YAML parser stays out of the main bundle.
+    const { formatOf, importAsStep, unpack } = await import('../core/importer.ts');
+    let text: string;
+    try {
+      text = await unpack(raw);
+    } catch (e) {
+      return setError(`That ${what} can’t be read: ${errorText(e)}`);
+    }
+    if (!formatOf(text)) return setError(`That ${what} isn’t a diagram or infrastructure file this can read.`);
+    const before = designRef.current?.steps.length ?? 0;
+    change((d) => void importAsStep(d, text, { seen: true, guess: guessType }));
+    const after = designRef.current?.steps.length ?? 0;
+    if (after > before) {
+      setSelected(null);
+      setViewIndex(after - 1);
+    }
+  };
+
   // Copied parts go to the clipboard as a Mermaid flowchart for other apps, marked so a paste here keeps every detail.
   // A pasted diagram or infrastructure file (Mermaid, C4-PlantUML, compose, Kubernetes, Terraform, traces) becomes a new step.
   useEffect(() => {
@@ -977,16 +998,7 @@ function Shell() {
       const ours = e.clipboardData?.types.includes(CLIP_MIME);
       e.preventDefault();
       if (ours || !text.trim()) return void (clip.current && pasteClip(clip.current));
-      // Loaded only here, so the YAML parser stays out of the main bundle.
-      const { formatOf, importAsStep } = await import('../core/importer.ts');
-      if (!formatOf(text)) return setError('That paste isn’t a diagram or infrastructure file this can read.');
-      const before = designRef.current?.steps.length ?? 0;
-      change((d) => void importAsStep(d, text, { seen: true, guess: guessType }));
-      const after = designRef.current?.steps.length ?? 0;
-      if (after > before) {
-        setSelected(null);
-        setViewIndex(after - 1);
-      }
+      await importSource(text, 'paste');
     };
     document.addEventListener('copy', onCopy);
     document.addEventListener('cut', onCopy);
@@ -1073,7 +1085,15 @@ function Shell() {
               onDrop={(e) => {
                 e.preventDefault();
                 const kind = e.dataTransfer.getData(DRAG_MIME);
-                if (isAddKind(kind)) add(kind, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+                if (isAddKind(kind)) return add(kind, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+                // A file from elsewhere (.drawio, .dsl, .mmd, compose, manifests…) imports like a paste.
+                const file = e.dataTransfer.files[0];
+                if (!file) return;
+                if (file.size > MAX_IMPORT) return setError(`${file.name} is too big to import (over ${MAX_IMPORT / 1e6} MB).`);
+                file
+                  .text()
+                  .then((t) => importSource(t, 'file'))
+                  .catch((err) => setError(errorText(err)));
               }}
             >
               <EdgeContext.Provider value={edgeActions}>
@@ -1510,35 +1530,26 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
     e.preventDefault();
     if (!title.trim()) return setErr('Give the design a title.');
     if (!/[a-z0-9]/i.test(title)) return setErr('Use at least one letter or digit.');
-    const fromMermaid = template === MERMAID;
-    const fromInfra = template === INFRA;
     // Loaded only here, so the YAML parser stays out of the main bundle.
-    const infra = fromInfra ? await import('../core/infra.ts') : null;
+    const importer = template === MERMAID || template === INFRA ? await import('../core/importer.ts') : null;
     const id = m.slugify(title);
-    const fill = fromMermaid
-      ? (d: Design) => importMermaid(d, source, { guess: guessType })
-      : infra
-        ? (d: Design) => infra.importInfra(d, source, { guess: guessType })
-        : null;
-    if (fill) {
+    let fill: ((d: Design) => void) | null = null;
+    if (importer) {
       // Import into a draft first, so a paste that can't become a valid design never leaves an empty one behind.
-      let left: string | undefined;
+      let left: string[];
       try {
+        const text = await importer.unpack(source);
+        if (!importer.formatOf(text)) throw new Error('This isn’t a diagram or infrastructure file this can read.');
+        fill = (d) => void importer.importText(d, text, { guess: guessType });
         const draft = m.blankDesign(id, title.trim());
-        fill(draft);
+        left = importer.importText(draft, text, { guess: guessType }).leftOut;
         parseDesign(draft);
-        const skipped = fromMermaid ? parseMermaid(source).skipped : infra!.readInfra(source).skipped;
-        if (skipped.length) {
-          left = fromMermaid
-            ? `${skipped.length > 1 ? 'Lines' : 'Line'} ${skipped.join(', ')} can’t be read and will be left out.`
-            : `Left out, since they draw nothing: ${skipped.join(', ')}.`;
-        }
       } catch (e) {
         return setErr(errorText(e));
       }
-      if (left && warned !== source) {
+      if (left.length && warned !== source) {
         setWarned(source);
-        return setErr(`${left} Create again to go ahead.`);
+        return setErr(`Left out: ${left.join('; ')}. Create again to go ahead.`);
       }
     }
     setBusy(true);
@@ -1554,7 +1565,7 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
   };
   const options = [
     { id: '', title: 'Blank sheet', description: 'Nothing on it yet. Build it yourself or let an agent fill it in.', steps: 1, unseen: 0 },
-    { id: MERMAID, title: 'Mermaid or C4 diagram', description: 'Paste a flowchart, sequence, C4 or architecture diagram (or C4-PlantUML); its boxes, arrows and groups become parts, lines and boundaries, a sequence a flow.', steps: 1, unseen: 0 },
+    { id: MERMAID, title: 'Diagram from another tool', description: 'Paste Mermaid (flowchart, sequence, C4, architecture), C4-PlantUML, draw.io XML or a Structurizr workspace; boxes, arrows and groups become parts, lines and boundaries, a sequence or dynamic view a flow.', steps: 1, unseen: 0 },
     { id: INFRA, title: 'Compose, Kubernetes, Terraform or traces', description: 'Paste a compose file, manifests, "terraform show -json" output, or OpenTelemetry / Jaeger traces; services, workloads and resources become parts, dependencies and calls become lines (traces add measured load, latency and flows).', steps: 1, unseen: 0 },
     ...templates,
   ];
@@ -1605,7 +1616,7 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
                 ? 'flowchart LR\n  user((User)) --> api[Orders API]\n  api --> db[(Orders DB)]'
                 : 'services:\n  api:\n    build: .\n    depends_on: [db]\n  db:\n    image: postgres:16'
             }
-            aria-label={template === MERMAID ? 'Mermaid or C4 diagram' : 'docker-compose, Kubernetes YAML, Terraform JSON or trace JSON'}
+            aria-label={template === MERMAID ? 'Mermaid, C4-PlantUML, draw.io or Structurizr' : 'docker-compose, Kubernetes YAML, Terraform JSON or trace JSON'}
             spellCheck={false}
             onChange={(e) => {
               setSource(e.target.value);

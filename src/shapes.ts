@@ -1810,7 +1810,7 @@ export function drawShape(type: ComponentType, sketch: boolean, seed: number) {
 export { gen };
 
 // Words too common across parts to say anything about the type.
-const GENERIC = new Set('api app apps server servers web data service services system the and for with main core new application'.split(' '));
+const GENERIC = new Set('api app apps server servers web data service services system the and for with main core new application node'.split(' '));
 const WORDS = Object.entries(SHAPES).map(([type, s]) => [type, new Set(`${s.name} ${s.keywords}`.toLowerCase().split(/\s+/))] as const);
 
 // Products listed under several parts, and the one they are usually drawn as.

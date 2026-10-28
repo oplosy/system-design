@@ -827,7 +827,7 @@ test('imports Mermaid sequence, C4 and architecture diagrams, and pastes any for
   const web = m.addComponent(shop, { type: 'client', label: 'web' });
   const step = importAsStep(shop, hand, { guess: guessType });
   const last = shop.steps.at(-1)!;
-  assert.deepEqual([last.id, last.title, last.summary, last.seen], [step, 'Import Mermaid sequence diagram', 'From a Mermaid sequence diagram: 3 parts, 3 lines, 1 flow.', false]);
+  assert.deepEqual([last.id, last.title, last.summary, last.seen], [step, 'Import Mermaid sequence diagram', 'From a Mermaid sequence diagram: 3 parts, 3 lines, 1 flow. Left out: line 15 (can’t be read).', false]);
   assert.equal(shop.components.filter((c) => c.label.toLowerCase() === 'web').length, 1);
   assert.ok(shop.connections.some((c) => c.from === web && c.step === step));
   assert.throws(() => importAsStep(structuredClone(shop), hand), /already on the sheet/);
@@ -892,4 +892,133 @@ test('imports Mermaid sequence, C4 and architecture diagrams, and pastes any for
 
   assert.deepEqual([formatOf('just some words'), formatOf('services:\n  api:\n    image: nginx'), formatOf('flowchart LR\n  a --> b')], [undefined, 'docker-compose file', 'Mermaid flowchart']);
   assert.throws(() => importAsStep(m.blankDesign('none', 'None'), 'hello'), /Paste a Mermaid flowchart/);
+});
+
+test('imports draw.io files and Structurizr workspaces, our own exports included', async () => {
+  const { readDrawio, expandDrawio } = await import('./drawio.ts');
+  const { readStructurizr } = await import('./structurizr.ts');
+  const { importDiagram } = await import('./diagram.ts');
+  const { formatOf, importAsStep, unpack } = await import('./importer.ts');
+  const { toDrawio, toStructurizr } = await import('./interop.ts');
+  const { guessType } = await import('../src/shapes.ts');
+  const zlib = await import('node:zlib');
+
+  const src = m.blankDesign('rival-src', 'Shop');
+  const vpc = m.addBoundary(src, { kind: 'vpc', label: 'VPC' });
+  const user = m.addComponent(src, { type: 'user', label: 'Shopper', position: { x: 0, y: 0 } });
+  const api = m.addComponent(src, { type: 'service', label: 'Orders API', tech: 'Node.js', boundary: vpc, position: { x: 300, y: 0 } });
+  const db = m.addComponent(src, { type: 'sql-db', label: 'Orders DB', tech: 'PostgreSQL', boundary: vpc, position: { x: 300, y: 200 } });
+  const q = m.addComponent(src, { type: 'queue', label: 'Jobs', boundary: vpc, position: { x: 600, y: 200 } });
+  const pay = m.addComponent(src, { type: 'external', label: 'Stripe', position: { x: 900, y: 0 } });
+  m.connect(src, { from: user, to: api, label: 'HTTPS' });
+  m.connect(src, { from: api, to: db });
+  m.connect(src, { from: api, to: q, async: true });
+  m.connect(src, { from: api, to: pay, label: 'charges' });
+  const shape = (d: typeof src) => ({
+    parts: d.components.map((c) => `${c.label}:${c.type}:${c.tech ?? ''}:${d.boundaries.find((b) => b.id === c.boundary)?.label ?? ''}`).sort(),
+    lines: d.connections.map((c) => `${d.components.find((x) => x.id === c.from)!.label}>${d.components.find((x) => x.id === c.to)!.label}:${c.label ?? ''}:${!!c.async}`).sort(),
+  });
+
+  // draw.io: our export comes back with its types, boxes (drawn around the parts) and positions.
+  const fromDrawio = m.blankDesign('rival-drawio', 'Back');
+  importDiagram(fromDrawio, readDrawio(toDrawio(src)), { guess: guessType });
+  const want = shape(src);
+  assert.deepEqual(shape(fromDrawio), { ...want, parts: want.parts.map((p) => p.replace('Stripe:external', 'Stripe:payment')) }, 'an external part is drawn as a plain grey box, so its name decides');
+  assert.deepEqual(fromDrawio.components.map((c) => c.position), src.components.map((c) => c.position));
+
+  // A hand-drawn AWS diagram: icons type the parts, a VPC group holds what is nested in it, labels may be HTML.
+  const aws = `<mxfile><diagram id="p1" name="Page-1"><mxGraphModel><root>
+    <mxCell id="0"/><mxCell id="1" parent="0"/>
+    <mxCell id="vpc" value="Prod VPC" style="points=[];shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc;dashed=0;" vertex="1" parent="1"><mxGeometry x="200" y="100" width="500" height="300" as="geometry"/></mxCell>
+    <object label="Resize&lt;br&gt;images on upload" id="fn"><mxCell style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;" vertex="1" parent="vpc"><mxGeometry x="40" y="60" width="78" height="78" as="geometry"/></mxCell></object>
+    <mxCell id="rds" value="" style="shape=mxgraph.aws4.rds_instance;" vertex="1" parent="vpc"><mxGeometry x="300" y="60" width="78" height="78" as="geometry"/></mxCell>
+    <mxCell id="s3" value="Uploads" style="shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;" vertex="1" parent="1"><mxGeometry x="800" y="160" width="78" height="78" as="geometry"/></mxCell>
+    <mxCell id="u" value="Users" style="shape=umlActor;" vertex="1" parent="1"><mxGeometry x="20" y="160" width="30" height="60" as="geometry"/></mxCell>
+    <mxCell id="note" value="draft" style="text;html=1;" vertex="1" parent="1"><mxGeometry x="0" y="0" width="60" height="20" as="geometry"/></mxCell>
+    <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="s3" target="fn"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e1l" value="ObjectCreated" style="edgeLabel;html=1;" vertex="1" connectable="0" parent="e1"><mxGeometry x="-0.1" relative="1" as="geometry"/></mxCell>
+    <mxCell id="e2" value="writes" style="endArrow=none;startArrow=block;dashed=1;" edge="1" parent="1" source="rds" target="fn"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e3" style="" edge="1" parent="1" source="u"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <mxCell id="e4" style="" edge="1" parent="1" source="u" target="vpc"><mxGeometry relative="1" as="geometry"/></mxCell>
+  </root></mxGraphModel></diagram><diagram id="p2" name="Notes"><mxGraphModel><root><mxCell id="0"/></root></mxGraphModel></diagram></mxfile>`;
+  const read = readDrawio(aws);
+  assert.deepEqual(read.leftOut, ['1 more page (only the first is read)', '1 line not attached at both ends', '1 line to a box rather than a part']);
+  const x = m.blankDesign('rival-aws', 'AWS');
+  importDiagram(x, read, { guess: guessType });
+  assert.deepEqual(
+    x.components.map((c) => `${c.label}:${c.type}:${c.description ?? ''}:${c.boundary ?? ''}`),
+    ['Resize:function:images on upload:prod-vpc', 'Rds:sql-db::prod-vpc', 'Uploads:object-storage::', 'Users:user::'],
+  );
+  assert.deepEqual([x.boundaries[0].kind, x.components[0].position], ['vpc', { x: 200 + 40 + 39 - 80, y: 100 + 60 + 39 - 35 }], 'nested geometry is relative to its parent');
+  assert.deepEqual(shape(x).lines, ['Resize>Rds:writes:true', 'Uploads>Resize:ObjectCreated:false'], 'an arrowhead only at the start points the line back');
+
+  // Compressed pages (older files) and draw.io's own clipboard (URI-encoded) read the same.
+  const page = /<mxGraphModel>[\s\S]*?<\/mxGraphModel>/.exec(aws)![0];
+  const compressed = `<mxfile><diagram id="p1">${zlib.deflateRawSync(Buffer.from(encodeURIComponent(page))).toString('base64')}</diagram></mxfile>`;
+  assert.throws(() => readDrawio(compressed), /compressed/);
+  assert.deepEqual(readDrawio(await expandDrawio(compressed)).nodes.map((n) => n.label), read.nodes.map((n) => n.label));
+  assert.equal(formatOf(await unpack(encodeURIComponent(page))), 'draw.io diagram');
+
+  // Structurizr: our export comes back, the system becoming the box around its containers.
+  const fromDsl = m.blankDesign('rival-dsl', 'Back');
+  const dsl = readStructurizr(toStructurizr(src));
+  importDiagram(fromDsl, dsl, { guess: guessType });
+  assert.deepEqual(shape(fromDsl), want);
+  assert.deepEqual(fromDsl.boundaries.map((b) => `${b.label}:${b.kind}:${fromDsl.boundaries.find((p) => p.id === b.parent)?.label ?? ''}`), ['Shop:system:', 'VPC:group:Shop']);
+
+  // Hand-written: hierarchical identifiers, relationships inside blocks, components, and a dynamic view as a flow.
+  const hand = `
+    /* An online shop */
+    workspace "Shop" {
+      !identifiers hierarchical
+      model {
+        customer = person "Customer"
+        stripe = softwareSystem "Stripe" "Payments" "External"
+        shop = softwareSystem "Shop" {
+          web = container "Web" "Storefront" "React"
+          api = container "API" {
+            technology "Go"
+            orders = component "Orders" "Order handling" "Go"
+            -> stripe "Charges cards" "HTTPS"
+          }
+          db = container "Database" "" "PostgreSQL" "Database"
+          events = container "Events" "" "Kafka" "Queue"
+        }
+        customer -> shop "Buys from"
+        customer -> shop.web "Browses"
+        shop.web -> shop.api "Calls"
+        shop.api.orders -> shop.db "Reads and writes"
+        shop.api -> shop.events "Publishes" "" "Async"
+        # a comment
+        shop.web->shop.api
+      }
+      views {
+        dynamic shop "checkout" "Customer checks out" {
+          customer -> shop.web "Places order"
+          shop.web -> shop.api "POST /orders"
+          shop.api -> stripe "Charge"
+          autoLayout
+        }
+        styles {
+          element "Database" {
+            shape cylinder
+          }
+        }
+      }
+    }`;
+  const h = readStructurizr(hand);
+  assert.deepEqual(h.leftOut, ['1 component (drawn as their containers)', '1 relationship with a software system drawn as a box (its containers carry them)']);
+  const y = m.blankDesign('rival-hand', 'Hand');
+  importDiagram(y, h, { guess: guessType });
+  assert.deepEqual(shape(y), {
+    parts: ['API:service:Go:Shop', 'Customer:user::', 'Database:sql-db:PostgreSQL:Shop', 'Events:stream:Kafka:Shop', 'Stripe:external::', 'Web:client:React:Shop'],
+    lines: ['API>Database:Reads and writes:false', 'API>Events:Publishes:true', 'API>Stripe:Charges cards:false', 'Customer>Web:Browses:false', 'Web>API:Calls:false'],
+  });
+  assert.deepEqual(y.flows.map((f) => `${f.title}: ${f.path.map((p) => y.components.find((c) => c.id === p)!.label).join(' > ')}`), ['Customer checks out: Customer > Web > API > Stripe']);
+  assert.equal(formatOf(hand), 'Structurizr workspace');
+
+  // As a step: what was left out goes in its summary.
+  const z = m.blankDesign('rival-step', 'Step');
+  importAsStep(z, aws, { guess: guessType });
+  assert.match(z.steps.at(-1)!.summary!, /^From a draw\.io diagram: 4 parts, 2 lines, 1 boundary\. Left out: 1 more page/);
 });

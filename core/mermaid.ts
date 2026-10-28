@@ -1,25 +1,12 @@
 import { BOUNDARY_KINDS, type BoundaryKind, type ComponentType, type Design } from './schema.ts';
-import * as m from './mutations.ts';
+import { importDiagram, type Diagram, type Edge, type Node } from './diagram.ts';
 import { DATASTORE, QUEUE } from './interop.ts';
 
 // Reads Mermaid diagrams (the subset diagrams use in practice) into components, connections, boundaries and flows:
 // flowcharts, sequence diagrams (whose messages become a flow), C4 diagrams (Mermaid's, and C4-PlantUML, which shares
 // the macros) and architecture-beta. Styling lines are ignored; a line that cannot be read is reported, not guessed at.
 
-type Node = {
-  key: string;
-  label?: string;
-  type?: ComponentType;
-  tech?: string;
-  description?: string;
-  /** Extra words for guessing the type (an architecture icon name). */
-  hint?: string;
-  /** For a typed shape (a C4 database), the guesses that may refine it. */
-  refine?: ReadonlySet<ComponentType>;
-};
-type Group = { key: string; label: string; parent?: string; kind?: BoundaryKind };
-type Edge = { from: string; to: string; label?: string; async: boolean };
-type Parsed = { nodes: Map<string, Node>; groups: Group[]; member: Map<string, string>; edges: Edge[]; flows: { title: string; path: string[] }[]; skipped: number[] };
+type Parsed = Omit<Diagram, 'nodes' | 'leftOut'> & { nodes: Map<string, Node>; skipped: number[] };
 
 export type MermaidKind = 'flowchart' | 'sequence' | 'c4' | 'architecture';
 const HEADERS: [RegExp, MermaidKind][] = [
@@ -298,58 +285,9 @@ function architecture(lines: string[], start: number, out: Parsed) {
   });
 }
 
-/**
- * Adds a parsed diagram to `step` of a design. Parts and boxes the design already has (same name) are reused, so a
- * paste extends a design rather than copying into it. A node's "Label (Tech)" splits into label and technology, and
- * `guess` may pick a better type from them (e.g. "PostgreSQL" → SQL DB) for plain boxes. Returns what was added.
- */
-export function importMermaid(d: Design, text: string, { step, guess }: { step?: string; guess?: (words: string) => ComponentType | undefined } = {}) {
-  const parsed = parseMermaid(text);
-  if (!parsed.nodes.length) throw new Error('No parts found in this diagram.');
-  const at = { step, reopen: false };
-  const same = (a: string, b: string) => m.slugify(a) === m.slugify(b);
-  // Only what was there before: two boxes of the same name in one diagram are still two parts.
-  const before = { components: [...d.components], boundaries: [...d.boundaries] };
-  const added = { components: [] as string[], connections: [] as string[], boundaries: [] as string[], flows: [] as string[], skipped: parsed.skipped };
-  const boundaryIds = new Map<string, string>();
-  for (const g of parsed.groups) {
-    const found = before.boundaries.find((b) => same(b.label, g.label));
-    if (found) boundaryIds.set(g.key, found.id);
-    else {
-      boundaryIds.set(g.key, m.addBoundary(d, { kind: g.kind ?? 'group', label: g.label, parent: g.parent && boundaryIds.get(g.parent), id: g.key, ...at }));
-      added.boundaries.push(g.label);
-    }
-  }
-  const ids = new Map<string, string>();
-  for (const n of parsed.nodes) {
-    const text = n.label ?? n.key;
-    const split = n.tech === undefined ? /^(.+?)\s*\(([^()]+)\)$/.exec(text) : null;
-    const [label, tech] = split ? [split[1], split[2]] : [text, n.tech];
-    const found = before.components.find((c) => same(c.label, label));
-    if (found) {
-      ids.set(n.key, found.id);
-      continue;
-    }
-    // A technology or icon given on its own (C4, architecture) names a product, so it outranks words in the label.
-    const named = n.tech ?? n.hint;
-    const guessed = (named && guess?.(named)) || guess?.(`${tech ?? ''} ${label}`);
-    const type = !n.type || n.type === 'service' ? guessed || n.type || 'service' : guessed && n.refine?.has(guessed) ? guessed : n.type;
-    const boundary = parsed.member.get(n.key);
-    ids.set(n.key, m.addComponent(d, { id: n.key, type, label, tech, description: n.description, boundary: boundary && boundaryIds.get(boundary), ...at }));
-    added.components.push(label);
-  }
-  const name = (id: string) => d.components.find((c) => c.id === id)!.label;
-  for (const e of parsed.edges) {
-    const from = ids.get(e.from)!, to = ids.get(e.to)!;
-    if (from === to || d.connections.some((c) => c.from === from && c.to === to)) continue;
-    m.connect(d, { from, to, label: e.label, async: e.async || undefined, ...at });
-    added.connections.push(`${name(from)} → ${name(to)}`);
-  }
-  for (const f of parsed.flows) {
-    const path = f.path.map((k) => ids.get(k)!);
-    if (d.flows.some((x) => x.title === f.title) || !path.every((p, i) => i === 0 || m.hopConnection(d, path[i - 1], p))) continue;
-    m.addFlow(d, { title: f.title, path, ...at });
-    added.flows.push(f.title);
-  }
-  return added;
+/** Adds a Mermaid diagram to `step` of a design; see importDiagram. Returns what was added. */
+export function importMermaid(d: Design, text: string, opts: { step?: string; guess?: (words: string) => ComponentType | undefined } = {}) {
+  const { skipped, ...parsed } = parseMermaid(text);
+  const lines = skipped.length > 1 ? `lines ${skipped.join(', ')}` : `line ${skipped[0]}`;
+  return importDiagram(d, { ...parsed, leftOut: skipped.length ? [`${lines} (can’t be read)`] : [] }, opts);
 }
