@@ -1398,7 +1398,7 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
   const options = [
     { id: '', title: 'Blank sheet', description: 'Nothing on it yet. Build it yourself or let an agent fill it in.', steps: 1, unseen: 0 },
     { id: MERMAID, title: 'Mermaid flowchart', description: 'Paste a flowchart; its boxes, arrows and subgraphs become parts, lines and boundaries.', steps: 1, unseen: 0 },
-    { id: INFRA, title: 'docker-compose or Kubernetes', description: 'Paste a compose file or manifests; services and workloads become parts, dependencies and env hosts become lines.', steps: 1, unseen: 0 },
+    { id: INFRA, title: 'docker-compose, Kubernetes or Terraform', description: 'Paste a compose file, manifests or "terraform show -json" output; services, workloads and resources become parts, dependencies and references become lines.', steps: 1, unseen: 0 },
     ...templates,
   ];
   return (
@@ -1448,7 +1448,7 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
                 ? 'flowchart LR\n  user((User)) --> api[Orders API]\n  api --> db[(Orders DB)]'
                 : 'services:\n  api:\n    build: .\n    depends_on: [db]\n  db:\n    image: postgres:16'
             }
-            aria-label={template === MERMAID ? 'Mermaid flowchart' : 'docker-compose or Kubernetes YAML'}
+            aria-label={template === MERMAID ? 'Mermaid flowchart' : 'docker-compose, Kubernetes YAML or Terraform JSON'}
             spellCheck={false}
             onChange={(e) => {
               setSource(e.target.value);

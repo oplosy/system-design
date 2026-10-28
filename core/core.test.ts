@@ -487,3 +487,50 @@ test('files from before versioning load as the current version, newer ones are r
   assert.throws(() => parseDesign({ ...old, version: version + 1 }), /newer than this app/);
   assert.throws(() => parseDesign({ ...old, version: 'two' }), /whole number/);
 });
+
+test('imports Terraform state and plan JSON, and finds what the design lacks', async () => {
+  const { readInfra, importInfra, infraDrift, syncInfra } = await import('./infra.ts');
+  const res = (address: string, type: string, values: object, extra: object = {}) => ({ address, mode: 'managed', type, name: address.split('.').pop()!.replace(/\[.*/, ''), values, ...extra });
+  const state = JSON.stringify({
+    format_version: '1.0',
+    values: {
+      root_module: {
+        resources: [
+          res('aws_lb.public', 'aws_lb', { name: 'public' }, { depends_on: ['aws_ecs_service.api'] }),
+          res('aws_ecs_service.api', 'aws_ecs_service', { name: 'api' }, { depends_on: ['aws_db_instance.main', 'aws_iam_role.task'] }),
+          res('aws_iam_role.task', 'aws_iam_role', {}),
+          res('aws_iam_role.other', 'aws_iam_role', {}),
+          { address: 'data.aws_vpc.default', mode: 'data', type: 'aws_vpc', name: 'default', values: {} },
+        ],
+        child_modules: [{ address: 'module.data', resources: [res('module.data.aws_db_instance.main', 'aws_db_instance', { identifier: 'orders-db', engine: 'postgres' })] }],
+      },
+    },
+  });
+  const read = readInfra(state);
+  assert.deepEqual(read.parts.map((p) => `${p.label}:${p.type}:${p.tech}:${p.group}`), ['public:load-balancer:ALB/NLB:root', 'api:service:ECS:root', 'orders-db:sql-db:RDS postgres:module.data']);
+  assert.deepEqual(read.skipped, ['aws_iam_role ×2'], 'IAM and data sources draw nothing');
+  assert.throws(() => readInfra('resource "aws_s3_bucket" "b" {}'), /terraform show -json/);
+
+  // depends_on in state is relative to the module, so "aws_db_instance.main" from the root does not reach module.data.
+  const x = await store.createDesign({ id: 'tf', title: 'TF' });
+  importInfra(x, state, { guess: () => 'container' });
+  assert.equal(x.components.find((c) => c.id === 'api')?.type, 'service', 'a Terraform type is not second-guessed');
+  assert.deepEqual(x.connections.map((c) => `${c.from}>${c.to}`), ['public>api']);
+
+  // A plan's configuration references (by attribute, across modules) become lines too.
+  const plan = JSON.stringify({
+    format_version: '1.2',
+    planned_values: { root_module: { resources: [res('aws_ecs_service.api', 'aws_ecs_service', { name: 'api' }), res('aws_sqs_queue.jobs[0]', 'aws_sqs_queue', { name: 'jobs' })] } },
+    configuration: { root_module: { resources: [{ address: 'aws_ecs_service.api', expressions: { environment: { references: ['aws_sqs_queue.jobs.url', 'aws_sqs_queue.jobs'] } } }] } },
+  });
+  assert.deepEqual(readInfra(plan).links, [{ from: 'aws_ecs_service.api', to: 'aws_sqs_queue.jobs[0]' }]);
+
+  const drift = infraDrift(x, plan);
+  assert.deepEqual([drift.components, drift.connections, drift.drifted], [['jobs'], ['api → jobs'], true], 'only what the design lacks');
+  assert.equal(x.components.length, 3, 'a drift check changes nothing');
+  const step = syncInfra(x, plan, 'Sync with plan');
+  assert.ok(step && !x.steps.find((s) => s.id === step)!.seen, 'the sync lands as a step to review');
+  assert.equal(x.components.find((c) => c.id === 'jobs')?.step, step);
+  assert.equal(infraDrift(x, plan).drifted, false);
+  assert.equal(syncInfra(x, plan, 'Again'), undefined, 'no empty step when nothing is missing');
+});

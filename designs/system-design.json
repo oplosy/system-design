@@ -3,7 +3,7 @@
   "title": "System design – local design canvas",
   "description": "Local canvas where agents add architecture steps over MCP and a reviewer walks them in the browser. Designs are JSON files on disk.",
   "repo": "https://github.com/oplosy/system-design/tree/main",
-  "rev": 1,
+  "rev": 2,
   "steps": [
     {
       "id": "start",
@@ -14,6 +14,12 @@
       "id": "existing-app-plus-a-production-server-an",
       "title": "Existing app plus a production server and CI",
       "summary": "Records the architecture as it stands (browser app, Vite-hosted API, MCP server, JSON files) and adds a standalone Node server that serves the built app and the same API without Vite, a format version on design files, and a CI workflow.",
+      "seen": false
+    },
+    {
+      "id": "drift-check-against-compose-kubernetes-a",
+      "title": "Drift check against compose, Kubernetes and Terraform",
+      "summary": "Adds Terraform JSON to the infrastructure reader and a drift check that reuses the import in sync mode: it reports what the infrastructure has and the design lacks, and can add it as a step for review. Exposed as a CI CLI and the sync_infra MCP tool.",
       "seen": false
     }
   ],
@@ -93,6 +99,28 @@
       "tech": "GitHub Actions",
       "code": ".github/workflows/ci.yml",
       "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "infra-reader",
+      "type": "module",
+      "label": "Infra reader + drift",
+      "tech": "readInfra, importInfra(sync), infraDrift, syncInfra",
+      "code": "core/infra.ts",
+      "step": "drift-check-against-compose-kubernetes-a"
+    },
+    {
+      "id": "drift-cli",
+      "type": "console",
+      "label": "Drift CLI",
+      "tech": "node cli/drift.ts",
+      "code": "cli/drift.ts",
+      "step": "drift-check-against-compose-kubernetes-a"
+    },
+    {
+      "id": "infra-files",
+      "type": "file-storage",
+      "label": "compose / k8s YAML / terraform show -json",
+      "step": "drift-check-against-compose-kubernetes-a"
     }
   ],
   "connections": [
@@ -173,6 +201,48 @@
       "to": "store",
       "label": "typecheck, test, build",
       "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "infra-reader-to-infra-files",
+      "from": "infra-reader",
+      "to": "infra-files",
+      "label": "reads",
+      "step": "drift-check-against-compose-kubernetes-a"
+    },
+    {
+      "id": "drift-cli-to-infra-reader",
+      "from": "drift-cli",
+      "to": "infra-reader",
+      "label": "infraDrift / syncInfra",
+      "step": "drift-check-against-compose-kubernetes-a"
+    },
+    {
+      "id": "drift-cli-to-store",
+      "from": "drift-cli",
+      "to": "store",
+      "label": "read, --write adds step",
+      "step": "drift-check-against-compose-kubernetes-a"
+    },
+    {
+      "id": "mcp-server-to-infra-reader",
+      "from": "mcp-server",
+      "to": "infra-reader",
+      "label": "sync_infra",
+      "step": "drift-check-against-compose-kubernetes-a"
+    },
+    {
+      "id": "browser-app-to-infra-reader",
+      "from": "browser-app",
+      "to": "infra-reader",
+      "label": "import on new design",
+      "step": "drift-check-against-compose-kubernetes-a"
+    },
+    {
+      "id": "ci-to-drift-cli",
+      "from": "ci",
+      "to": "drift-cli",
+      "label": "exit 1 on drift",
+      "step": "drift-check-against-compose-kubernetes-a"
     }
   ],
   "notes": [
@@ -214,6 +284,35 @@
         "store"
       ],
       "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "decision-read-terraform-from-terraform-s",
+      "title": "Read Terraform from `terraform show -json`, not HCL source",
+      "why": "The JSON output is Terraform's stable machine format, carries resolved names, depends_on and (in plans) expression references, and the existing YAML parser already reads JSON, so no new dependency is needed.",
+      "alternatives": [
+        "Parse .tf files with an HCL parser dependency",
+        "Read terraform.tfstate directly"
+      ],
+      "tradeoffs": "Users must run terraform show -json first; links through skipped resources (service → target group → LB) are not followed yet.",
+      "links": [
+        "infra-reader"
+      ],
+      "step": "drift-check-against-compose-kubernetes-a"
+    },
+    {
+      "id": "decision-drift-is-the-import-in-sync-mod",
+      "title": "Drift is the import in sync mode, matched by id or label",
+      "why": "One code path for import and drift keeps type mapping, link detection and grouping identical; running it on a copy gives the report, running it on the design adds the missing items as one unseen step, so the reviewer stays in control.",
+      "alternatives": [
+        "Separate diff engine",
+        "Store a source address on each part for exact matching"
+      ],
+      "tradeoffs": "Only reports what the design lacks, not parts the infrastructure dropped; a rename on one side shows up as a new part.",
+      "links": [
+        "infra-reader",
+        "drift-cli"
+      ],
+      "step": "drift-check-against-compose-kubernetes-a"
     }
   ],
   "boundaries": [],
