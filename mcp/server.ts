@@ -309,7 +309,7 @@ server.registerTool(
   'sync_infra',
   {
     description:
-      'Compare a design with the infrastructure it describes (docker-compose, Kubernetes YAML, or `terraform show -json` output) and add what the design lacks (parts, lines, boundaries) as one new step for review. Parts match by id or label.',
+      'Compare a design with the infrastructure it describes (docker-compose, Kubernetes YAML, or `terraform show -json` output) and bring it in line as one new step for review: add the parts, lines and boundaries it lacks, and remove parts once imported from that format that the infrastructure no longer has. Parts match by their recorded source, else by id or label.',
     inputSchema: {
       design,
       path: z.string().describe('Absolute path of the infrastructure file'),

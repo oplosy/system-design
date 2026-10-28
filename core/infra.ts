@@ -43,9 +43,9 @@ export function readInfra(text: string) {
   const docs = Array.from(parseAllDocuments(text));
   for (const doc of docs) if (doc.errors.length) throw new Error(`YAML: ${doc.errors[0].message}`);
   const values = docs.map((doc) => obj(doc.toJS())).flatMap((v) => (v.kind === 'List' ? list(v.items).map(obj) : [v]));
-  if (values.length === 1 && values[0].format_version && (values[0].values || values[0].planned_values)) return terraform(values[0]);
-  if (values.length === 1 && Object.keys(obj(values[0].services)).length) return compose(values[0]);
-  if (values.some((v) => typeof v.kind === 'string')) return kube(values);
+  if (values.length === 1 && values[0].format_version && (values[0].values || values[0].planned_values)) return { format: 'terraform', ...terraform(values[0]) };
+  if (values.length === 1 && Object.keys(obj(values[0].services)).length) return { format: 'compose', ...compose(values[0]) };
+  if (values.some((v) => typeof v.kind === 'string')) return { format: 'kubernetes', ...kube(values) };
   throw new Error('Paste a docker-compose file (with services:), Kubernetes manifests (with kind:) or "terraform show -json" output.');
 }
 
@@ -125,15 +125,23 @@ const TF_TYPES: Record<string, [ComponentType, string]> = {
   kubernetes_deployment: ['service', 'Kubernetes'],
 };
 
+/** Resources that only wire two others together; the parts on either end get a line. */
+const TF_BRIDGE =
+  /^(aws_(lb|alb)_(listener|listener_rule|target_group|target_group_attachment)|aws_api_gateway_(integration|resource|method)|aws_apigatewayv2_(integration|route)|aws_lambda_event_source_mapping|aws_lambda_permission|aws_sns_topic_subscription|aws_cloudwatch_event_(rule|target)|google_pubsub_subscription|google_compute_(backend_service|url_map|target_https?_proxy))$/;
+/** Shared plumbing that would link everything to everything: never walked through. */
+const TF_PLUMBING =
+  /^(aws_(security_group|vpc|subnet|route|internet_gateway|eip|network_|default_|db_subnet_group|elasticache_subnet_group|iam_|kms_)|google_(compute_(network|subnetwork|firewall)|project_iam|service_account)|azurerm_(resource_group|virtual_network|subnet|network_|role_))/;
+/** Which end of a wiring resource calls the other: lower calls higher, equal ranks don't link. */
+const TF_FRONT: Partial<Record<ComponentType, number>> = { cdn: 0, 'api-gateway': 1, 'load-balancer': 2, 'event-bus': 3, pubsub: 4, stream: 5, queue: 6 };
+
 /** "module.api.aws_lb.main[0]" → "module.api.aws_lb.main": instances of one resource share its links. */
 const base = (address: string) => address.replace(/\[[^\]]*\]/g, '');
 
 /**
  * Reads `terraform show -json` output, of state or of a saved plan. Lines come from depends_on and, in a plan,
- * from the references in each resource's configuration.
+ * from the references in each resource's configuration, followed through resources that are not drawn.
  */
 function terraform(file: Doc) {
-  // shortcut: only direct links between drawn resources; a link through a skipped one (service → target group → LB) is lost. Follow skipped resources if imports look too sparse.
   const resources: Doc[] = [];
   const walk = (mod: Doc) => {
     resources.push(...list(mod.resources).map(obj).filter((r) => r.mode !== 'data'));
@@ -155,27 +163,20 @@ function terraform(file: Doc) {
     const engine = typeof v.engine === 'string' ? ` ${v.engine}` : '';
     parts.push({ key: String(r.address), label: String(named ?? `${r.name}${index}`), type: t[0], tech: `${t[1]}${engine}`, group: module(r) || 'root' });
   }
-  const byBase = new Map<string, string[]>();
-  for (const p of parts) byBase.set(base(p.key), [...(byBase.get(base(p.key)) ?? []), p.key]);
+  const typeOf = new Map(resources.map((r) => [base(String(r.address)), String(r.type)]));
+  const partsAt = new Map<string, string[]>();
+  for (const p of parts) partsAt.set(base(p.key), [...(partsAt.get(base(p.key)) ?? []), p.key]);
   // A reference names a resource and maybe an attribute: "aws_db_instance.main.address" → "aws_db_instance.main".
   const target = (ref: string, prefix: string) => {
     const segs = base(`${prefix}${ref}`).split('.');
-    for (let n = segs.length; n >= 2; n--) {
-      const hit = byBase.get(segs.slice(0, n).join('.'));
-      if (hit) return hit;
-    }
-    return [];
+    for (let n = segs.length; n >= 2; n--) if (typeOf.has(segs.slice(0, n).join('.'))) return segs.slice(0, n).join('.');
+    return undefined;
   };
-  const links: Link[] = [];
-  const seen = new Set<string>();
+  // Every resource's references to other resources, drawn or not, by base address.
+  const out = new Map<string, Set<string>>();
   const add = (from: string, refs: string[], prefix = '') => {
-    for (const f of byBase.get(base(from)) ?? []) {
-      for (const to of refs.flatMap((ref) => target(ref, prefix))) {
-        if (to === f || seen.has(`${f} ${to}`)) continue;
-        seen.add(`${f} ${to}`);
-        links.push({ from: f, to });
-      }
-    }
+    const f = base(from);
+    for (const t of refs.map((ref) => target(ref, prefix))) if (t && t !== f) out.set(f, (out.get(f) ?? new Set()).add(t));
   };
   for (const r of resources) add(String(r.address), list(r.depends_on).map(String));
   // Plans carry configuration with each expression's references, per module; addresses there are module-relative.
@@ -185,6 +186,63 @@ function terraform(file: Doc) {
     for (const [name, call] of Object.entries(obj(mod.module_calls))) config(obj(obj(call).module), `${prefix}module.${name}.`);
   };
   config(obj(obj(file.configuration).root_module), '');
+
+  const links: Link[] = [];
+  const seen = new Set<string>();
+  const link = (from: string, to: string) => {
+    for (const f of partsAt.get(from) ?? []) {
+      for (const t of partsAt.get(to) ?? []) {
+        if (f === t || seen.has(`${f} ${t}`)) continue;
+        seen.add(`${f} ${t}`);
+        links.push({ from: f, to: t });
+      }
+    }
+  };
+  const kind = (a: string) => (partsAt.has(a) ? 'part' : TF_BRIDGE.test(typeOf.get(a)!) ? 'bridge' : TF_PLUMBING.test(typeOf.get(a)!) ? 'plumbing' : 'hop');
+  // A part reaches the parts it references, also through undrawn resources in between (service → task definition → DB).
+  for (const a of partsAt.keys()) {
+    const visited = new Set([a]);
+    let frontier = [a];
+    for (let depth = 0; depth < 3 && frontier.length; depth++) {
+      const next: string[] = [];
+      for (const x of frontier) {
+        for (const y of out.get(x) ?? []) {
+          if (visited.has(y)) continue;
+          visited.add(y);
+          if (kind(y) === 'part') link(a, y);
+          else if (kind(y) === 'hop') next.push(y);
+        }
+      }
+      frontier = next;
+    }
+  }
+  // Wiring resources (listeners, target groups, subscriptions, event source mappings…) point at both ends, so the
+  // direction comes from the ends: a balancer, gateway, topic or queue calls what sits behind it.
+  const near = new Map<string, Set<string>>();
+  for (const [f, ts] of out) {
+    for (const t of ts) {
+      near.set(f, (near.get(f) ?? new Set()).add(t));
+      near.set(t, (near.get(t) ?? new Set()).add(f));
+    }
+  }
+  const rank = (a: string) => TF_FRONT[TF_TYPES[typeOf.get(a)!][0]] ?? 9;
+  const grouped = new Set<string>();
+  for (const a of typeOf.keys()) {
+    if (kind(a) !== 'bridge' || grouped.has(a)) continue;
+    const cluster = [a];
+    const ends = new Set<string>();
+    grouped.add(a);
+    for (const x of cluster) {
+      for (const y of near.get(x) ?? []) {
+        if (kind(y) === 'part') ends.add(y);
+        else if (kind(y) === 'bridge' && !grouped.has(y)) {
+          grouped.add(y);
+          cluster.push(y);
+        }
+      }
+    }
+    for (const f of ends) for (const t of ends) if (rank(f) < rank(t)) link(f, t);
+  }
   const many = new Set(parts.map((p) => p.group)).size > 1;
   for (const p of parts) if (!many) p.group = undefined;
   const groups: Group[] = many ? [...new Set(parts.map((p) => p.group!))].map((n) => ({ key: n, label: n, kind: 'group' })) : [];
@@ -282,20 +340,20 @@ function kube(docs: Doc[]) {
 
 /**
  * Adds a compose file, manifests or Terraform JSON to `step` of a design. `guess` may pick a type from a part's image
- * and name (e.g. "postgres:16" → SQL DB) for parts that would otherwise be plain services. With `sync`, parts and
- * boundaries the design already has (same id or label) are reused and lines it already draws, either way, are kept,
- * so only what the design lacks is added. Returns what was added.
+ * and name (e.g. "postgres:16" → SQL DB) for parts that would otherwise be plain services. Each part it adds keeps
+ * where it came from (`source`). With `sync`, parts the design already has are reused (same source, else same id or
+ * label, which then gets the source), lines it already draws either way are kept, and parts once imported from this
+ * format that the infrastructure no longer has are removed, so the design comes to match. Returns what changed.
  */
 export function importInfra(d: Design, text: string, { step, guess, sync }: { step?: string; guess?: (words: string) => ComponentType | undefined; sync?: boolean } = {}) {
-  const { parts, links, groups } = readInfra(text);
+  const { format, parts, links, groups } = readInfra(text);
   if (!parts.length) throw new Error('No services or workloads found.');
   const at = { step, reopen: false };
-  // shortcut: matches by id or label only, so a part renamed on one side shows up as new; store the source address on parts if that gets noisy.
-  const existing = (label: string, items: { id: string; label: string }[]) => (sync ? items.find((x) => x.id === m.slugify(label) || m.slugify(x.label) === m.slugify(label))?.id : undefined);
-  const added = { components: [] as string[], connections: [] as string[], boundaries: [] as string[] };
+  const byName = <T extends { id: string; label: string }>(label: string, items: T[]) => items.find((x) => x.id === m.slugify(label) || m.slugify(x.label) === m.slugify(label));
+  const added = { components: [] as string[], connections: [] as string[], boundaries: [] as string[], removed: [] as string[] };
   const boundaryIds = new Map(
     groups.map((g) => {
-      const found = existing(g.label, d.boundaries);
+      const found = sync && byName(g.label, d.boundaries)?.id;
       if (found) return [g.key, found];
       added.boundaries.push(g.label);
       return [g.key, m.addBoundary(d, { kind: g.kind, label: g.label, id: g.key, ...at })];
@@ -303,16 +361,19 @@ export function importInfra(d: Design, text: string, { step, guess, sync }: { st
   );
   const ids = new Map<string, string>();
   for (const p of parts) {
-    const found = existing(p.label, d.components);
+    const source = `${format}:${p.key}`;
+    // A part that came from somewhere else is a different thing, even with the same name.
+    const found = sync ? (d.components.find((c) => c.source === source) ?? byName(p.label, d.components.filter((c) => !c.source))) : undefined;
     if (found) {
-      ids.set(p.key, found);
+      found.source = source;
+      ids.set(p.key, found.id);
       continue;
     }
     // "registry.io/team/postgres:16@sha256:…" → "postgres:16"
     const tech = p.tech ?? p.image?.split('@')[0].split('/').pop();
     // A part with a known tech (Terraform resource, Ingress) already has its type; only image-based parts need a guess.
     const type = (p.type === 'service' && !p.tech && guess?.(`${tech?.split(':')[0] ?? ''} ${p.label}`)) || p.type;
-    ids.set(p.key, m.addComponent(d, { id: p.label, type, label: p.label, tech, code: p.code, boundary: p.group && boundaryIds.get(p.group), ...at }));
+    ids.set(p.key, m.addComponent(d, { id: p.label, type, label: p.label, tech, code: p.code, source, boundary: p.group && boundaryIds.get(p.group), ...at }));
     added.components.push(p.label);
   }
   const label = (id: string) => d.components.find((c) => c.id === id)?.label ?? id;
@@ -323,20 +384,30 @@ export function importInfra(d: Design, text: string, { step, guess, sync }: { st
     m.connect(d, { from, to, label: l.label, ...at });
     added.connections.push(`${label(from)} → ${label(to)}`);
   }
+  if (sync) {
+    // Only parts this format put there: a hand-drawn part, or one from another file type, is not the infrastructure's to remove.
+    const keys = new Set(parts.map((p) => `${format}:${p.key}`));
+    for (const c of d.components.filter((x) => x.source?.startsWith(`${format}:`) && !keys.has(x.source))) {
+      added.removed.push(c.label);
+      if (step) m.removeTracked(d, c.id, step);
+      else m.removeItem(d, c.id);
+    }
+  }
   return added;
 }
 
-/** What `text` has that design `d` lacks (parts, lines, boundaries), without changing `d`. */
+/** What `text` has that design `d` lacks, and the imported parts it no longer has, without changing `d`. */
 export function infraDrift(d: Design, text: string, guess?: (words: string) => ComponentType | undefined) {
   const added = importInfra(structuredClone(d), text, { sync: true, guess });
-  return { ...added, drifted: added.components.length + added.connections.length + added.boundaries.length > 0 };
+  return { ...added, drifted: added.components.length + added.connections.length + added.boundaries.length + added.removed.length > 0 };
 }
 
-/** Adds what `text` has and `d` lacks as one new, unseen step for review. Returns the step id, or undefined when nothing is missing. */
+/** Brings `d` in line with `text` as one new, unseen step for review. Returns the step id, or undefined when nothing differs. */
 export function syncInfra(d: Design, text: string, title: string, guess?: (words: string) => ComponentType | undefined) {
   const drift = infraDrift(d, text, guess);
   if (!drift.drifted) return undefined;
-  const summary = `Found in the infrastructure but not in the design: ${[...drift.components, ...drift.connections, ...drift.boundaries].join(', ')}.`;
+  const found = [...drift.components, ...drift.connections, ...drift.boundaries];
+  const summary = [found.length && `Found in the infrastructure but not in the design: ${found.join(', ')}.`, drift.removed.length && `No longer in the infrastructure: ${drift.removed.join(', ')}.`].filter(Boolean).join(' ');
   const step = m.addStep(d, { title, summary });
   importInfra(d, text, { step, sync: true, guess });
   return step;

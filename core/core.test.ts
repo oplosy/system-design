@@ -589,3 +589,61 @@ test('capacity is checked against incoming load, and a failure shows what it bre
   assert.deepEqual(failureImpact(x, lb), { flows: ['Read'], cutOff: ['API A', 'API B', 'DB', 'Cache'] });
   assert.deepEqual(failureImpact(x, cache), { flows: [], cutOff: [] });
 });
+
+test('drift matches parts by where they came from and removes what the infrastructure dropped', async () => {
+  const { importInfra, infraDrift, syncInfra } = await import('./infra.ts');
+  const compose = (names: string[]) => `services:\n${names.map((n) => `  ${n}:\n    image: ${n}`).join('\n')}`;
+  const x = m.blankDesign('src', 'Src');
+  importInfra(x, compose(['api', 'worker']));
+  assert.deepEqual(x.components.map((c) => c.source), ['compose:api', 'compose:worker']);
+  // Renamed in the design, removed from the infrastructure, plus a hand-drawn part and one from Terraform.
+  x.components[0].label = 'Orders API';
+  m.addComponent(x, { type: 'cdn', label: 'CDN' });
+  m.addComponent(x, { type: 'queue', label: 'jobs', source: 'terraform:aws_sqs_queue.jobs' });
+
+  const drift = infraDrift(x, compose(['api']));
+  assert.deepEqual([drift.components, drift.removed], [[], ['worker']], 'the renamed part still matches; only what compose put there can go');
+  const step = syncInfra(x, compose(['api']), 'Sync')!;
+  assert.deepEqual(x.components.map((c) => c.label), ['Orders API', 'CDN', 'jobs']);
+  assert.deepEqual(x.steps.find((s) => s.id === step)!.removed?.map((r) => r.label), ['worker'], 'the removal is on the step, so the diff shows it and revert brings it back');
+  assert.match(x.steps.find((s) => s.id === step)!.summary!, /No longer in the infrastructure: worker/);
+
+  // A design drawn by hand gets its sources on the first sync, by name.
+  const hand = m.blankDesign('hand', 'Hand');
+  m.addComponent(hand, { type: 'service', label: 'api' });
+  assert.equal(infraDrift(hand, compose(['api'])).drifted, false);
+  syncInfra(hand, compose(['api', 'db']), 'Sync');
+  assert.deepEqual(hand.components.map((c) => c.source), ['compose:api', 'compose:db']);
+});
+
+test('Terraform lines follow wiring and undrawn resources, not shared plumbing', async () => {
+  const { readInfra } = await import('./infra.ts');
+  const res = (address: string, values: object = {}, depends_on: string[] = []) => ({ address, mode: 'managed', type: address.split('.')[0], name: address.split('.')[1], values, depends_on });
+  const state = JSON.stringify({
+    format_version: '1.0',
+    values: {
+      root_module: {
+        resources: [
+          res('aws_lb.web', { name: 'web' }),
+          res('aws_lb_listener.http', {}, ['aws_lb.web', 'aws_lb_target_group.api']),
+          res('aws_lb_target_group.api'),
+          res('aws_ecs_service.api', { name: 'api' }, ['aws_lb_target_group.api', 'aws_ecs_task_definition.api', 'aws_iam_role.shared', 'aws_security_group.app']),
+          res('aws_ecs_task_definition.api', {}, ['aws_db_instance.db']),
+          res('aws_db_instance.db', { identifier: 'db' }),
+          res('aws_sqs_queue.jobs', { name: 'jobs' }),
+          res('aws_lambda_event_source_mapping.jobs', {}, ['aws_sqs_queue.jobs', 'aws_lambda_function.worker']),
+          res('aws_lambda_function.worker', { function_name: 'worker' }, ['aws_iam_role.shared', 'aws_security_group.app']),
+          res('aws_iam_role.shared'),
+          res('aws_security_group.app', {}, ['aws_db_instance.db']),
+        ],
+      },
+    },
+  });
+  const { parts, links } = readInfra(state);
+  const label = new Map(parts.map((p) => [p.key, p.label]));
+  assert.deepEqual(
+    links.map((l) => `${label.get(l.from)}>${label.get(l.to)}`).sort(),
+    ['api>db', 'jobs>worker', 'web>api'],
+    'LB → service through listener and target group, queue → function through the mapping, service → DB through its task definition; the shared role and security group link nothing',
+  );
+});

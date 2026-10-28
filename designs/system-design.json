@@ -3,7 +3,7 @@
   "title": "System design – local design canvas",
   "description": "Local canvas where agents add architecture steps over MCP and a reviewer walks them in the browser. Designs are JSON files on disk.",
   "repo": "https://github.com/oplosy/system-design/tree/main",
-  "rev": 4,
+  "rev": 5,
   "steps": [
     {
       "id": "start",
@@ -32,6 +32,12 @@
       "id": "capacity-checks-and-failure-impact",
       "title": "Capacity checks and failure impact",
       "summary": "Parts get an optional capacity (req/s). Lint compares it with the qps on incoming lines; a failure analysis walks the graph from entry points without a part to find broken flows and parts cut off. Shown in the inspector and exposed to agents as simulate_failure.",
+      "seen": false
+    },
+    {
+      "id": "drift-tracks-part-sources-and-removals",
+      "title": "Drift tracks part sources and removals",
+      "summary": "Imported parts now record their source (format and infra key). Drift matches on it first, so renames survive, and reports parts once imported from that format that the infrastructure dropped; sync removes them in the review step. Terraform links now walk through undrawn resources and wiring (listeners, target groups, event source mappings) while skipping shared plumbing.",
       "seen": false
     }
   ],
@@ -355,6 +361,12 @@
       "text": "Binds 127.0.0.1 by default; PORT and HOST override. Unknown paths fall back to index.html.",
       "attachTo": "prod-server",
       "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "note-2",
+      "text": "Removals only touch parts whose source is the same format; hand-drawn parts and parts from another infra file are never removed.",
+      "attachTo": "infra-reader",
+      "step": "drift-tracks-part-sources-and-removals"
     }
   ],
   "decisions": [
@@ -448,6 +460,34 @@
         "analysis"
       ],
       "step": "capacity-checks-and-failure-impact"
+    },
+    {
+      "id": "decision-record-an-import-source-on-part",
+      "title": "Record an import source on parts instead of matching by name only",
+      "why": "Name matching broke on renames and could not tell which design parts the infrastructure owns, so dropped resources went unreported. A source like terraform:aws_lb.public gives exact matching and a safe removal set.",
+      "alternatives": [
+        "Keep name matching and report every unmatched part as removed",
+        "Separate mapping file per infra file"
+      ],
+      "tradeoffs": "Designs drawn by hand get sources only on their first sync (by name); two infra files of the same format against one design would remove each other's parts.",
+      "links": [
+        "infra-reader"
+      ],
+      "step": "drift-tracks-part-sources-and-removals"
+    },
+    {
+      "id": "decision-follow-terraform-references-thr",
+      "title": "Follow Terraform references through undrawn resources with typed rules",
+      "why": "Real stacks connect parts through resources that are not drawn (target groups, listeners, task definitions, event source mappings). Walking directed references through ordinary resources, joining wiring resources by which end is a front door, and never walking IAM, security groups or networks gives the expected lines without linking everything to everything.",
+      "alternatives": [
+        "Only direct references",
+        "Undirected walk through everything"
+      ],
+      "tradeoffs": "Wiring types are a fixed list (mostly AWS); unknown wiring stays unlinked, and the walk stops after three hops.",
+      "links": [
+        "infra-reader"
+      ],
+      "step": "drift-tracks-part-sources-and-removals"
     }
   ],
   "boundaries": [],
