@@ -3,7 +3,7 @@
   "title": "System design – local design canvas",
   "description": "Local canvas where agents add architecture steps over MCP and a reviewer walks them in the browser. Designs are JSON files on disk.",
   "repo": "https://github.com/oplosy/system-design/tree/main",
-  "rev": 5,
+  "rev": 6,
   "steps": [
     {
       "id": "start",
@@ -38,6 +38,12 @@
       "id": "drift-tracks-part-sources-and-removals",
       "title": "Drift tracks part sources and removals",
       "summary": "Imported parts now record their source (format and infra key). Drift matches on it first, so renames survive, and reports parts once imported from that format that the infrastructure dropped; sync removes them in the review step. Terraform links now walk through undrawn resources and wiring (listeners, target groups, event source mappings) while skipping shared plumbing.",
+      "seen": false
+    },
+    {
+      "id": "export-to-structurizr-c4-plantuml-and-dr",
+      "title": "Export to Structurizr, C4-PlantUML and draw.io",
+      "summary": "Adds text exports for other architecture tools so teams can try this one without leaving theirs: Structurizr DSL and C4-PlantUML at C4 container level, and a draw.io file with sheet positions. Same code serves the Export menu and the export_design MCP tool.",
       "seen": false
     }
   ],
@@ -176,6 +182,14 @@
       "tech": "lint, loadOf, failureImpact",
       "code": "core/lint.ts",
       "step": "capacity-checks-and-failure-impact"
+    },
+    {
+      "id": "interop",
+      "type": "module",
+      "label": "Interop exports",
+      "tech": "toStructurizr, toPlantUml, toDrawio",
+      "code": "core/interop.ts",
+      "step": "export-to-structurizr-c4-plantuml-and-dr"
     }
   ],
   "connections": [
@@ -353,6 +367,20 @@
       "to": "analysis",
       "label": "lint, simulate_failure",
       "step": "capacity-checks-and-failure-impact"
+    },
+    {
+      "id": "browser-app-to-interop",
+      "from": "browser-app",
+      "to": "interop",
+      "label": "Export menu",
+      "step": "export-to-structurizr-c4-plantuml-and-dr"
+    },
+    {
+      "id": "mcp-server-to-interop",
+      "from": "mcp-server",
+      "to": "interop",
+      "label": "export_design",
+      "step": "export-to-structurizr-c4-plantuml-and-dr"
     }
   ],
   "notes": [
@@ -488,6 +516,20 @@
         "infra-reader"
       ],
       "step": "drift-tracks-part-sources-and-removals"
+    },
+    {
+      "id": "decision-map-parts-to-c4-by-type-one-sof",
+      "title": "Map parts to C4 by type, one software system per design",
+      "why": "Structurizr and C4-PlantUML need people, systems and containers; the design has only typed parts. Users become people, third-party types external systems, the rest containers of one system named after the design, with datastore and queue shapes. Boundaries become groups.",
+      "alternatives": [
+        "Let the user pick a C4 role per part",
+        "Export as a system landscape only"
+      ],
+      "tradeoffs": "Designs that span several systems flatten into one; Network and Software-kit parts export as plain containers.",
+      "links": [
+        "interop"
+      ],
+      "step": "export-to-structurizr-c4-plantuml-and-dr"
     }
   ],
   "boundaries": [],

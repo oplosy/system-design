@@ -647,3 +647,48 @@ test('Terraform lines follow wiring and undrawn resources, not shared plumbing',
     'LB → service through listener and target group, queue → function through the mapping, service → DB through its task definition; the shared role and security group link nothing',
   );
 });
+
+test('exports Structurizr DSL, C4-PlantUML and draw.io', async () => {
+  const { toStructurizr, toPlantUml, toDrawio } = await import('./interop.ts');
+  const x = m.blankDesign('shop', 'Shop "v2"');
+  const vpc = m.addBoundary(x, { kind: 'vpc', label: 'VPC' });
+  const sub = m.addBoundary(x, { kind: 'subnet', label: 'Private', parent: vpc });
+  const user = m.addComponent(x, { type: 'user', label: 'Buyer', position: { x: 0, y: 0 } });
+  const stripe = m.addComponent(x, { type: 'payment', label: 'Stripe', boundary: vpc });
+  const api = m.addComponent(x, { id: '1-api', type: 'service', label: 'API', tech: 'Go', boundary: vpc, position: { x: 200, y: 0 } });
+  const db = m.addComponent(x, { type: 'sql-db', label: 'Orders <db>', tech: 'PostgreSQL', boundary: sub, position: { x: 200, y: 200 } });
+  const q = m.addComponent(x, { type: 'queue', label: 'Jobs', position: { x: 400, y: 0 } });
+  m.connect(x, { from: user, to: api, label: 'HTTPS' });
+  m.connect(x, { from: api, to: db });
+  m.connect(x, { from: api, to: q, async: true });
+  m.connect(x, { from: api, to: stripe, label: 'charge' });
+
+  const dsl = toStructurizr(x);
+  assert.match(dsl, /^workspace "Shop \\"v2\\"" "" \{/);
+  assert.match(dsl, /buyer = person "Buyer" ""/);
+  assert.match(dsl, /stripe = softwareSystem "Stripe" "" "External"/, 'a third party sits outside the system, even inside a boundary');
+  assert.match(dsl, /group "VPC" \{\n\s+group "Private" \{\n\s+orders_db = container "Orders <db>" "" "PostgreSQL" "Database"/);
+  assert.match(dsl, /x1_api = container "API" "" "Go" ""/, 'identifiers never start with a digit');
+  assert.match(dsl, /buyer -> system_\.x1_api "HTTPS"/);
+  assert.match(dsl, /system_\.x1_api -> system_\.jobs "" "" "Async"/);
+  assert.equal(dsl.split('{').length, dsl.split('}').length, 'braces balance');
+
+  const puml = toPlantUml(x);
+  assert.match(puml, /Person\(buyer, "Buyer", ""\)/);
+  assert.match(puml, /Boundary\(b_vpc, "VPC", "vpc"\) \{\n {2}Boundary\(b_private, "Private", "subnet"\) \{\n {4}ContainerDb\(orders_db, "Orders <db>", "PostgreSQL", ""\)/);
+  assert.match(puml, /System_Ext\(stripe, "Stripe", ""\)/);
+  assert.match(puml, /Rel\(x1_api, jobs, "async"\)/);
+  assert.match(puml, /title Shop "v2"/);
+
+  const xml = toDrawio(x);
+  assert.match(xml, /value="Orders &#60;db&#62;&lt;br&gt;&lt;i&gt;PostgreSQL&lt;\/i&gt;" style="shape=cylinder3/);
+  assert.match(xml, /id="c-stripe"[^>]*><mxGeometry x="\d+" y="\d+"/, 'a part never laid out still gets a place');
+  assert.match(xml, /id="e-[^"]+" value="" style="endArrow=block;html=1;dashed=1;" edge="1" parent="1" source="c-1-api" target="c-jobs"/);
+  // The VPC box holds the Private box, which holds the DB at (200, 200).
+  const geo = (id: string) => xml.match(new RegExp(`id="${id}"[^>]*><mxGeometry x="(-?\\d+)" y="(-?\\d+)" width="(\\d+)" height="(\\d+)"`))!.slice(1).map(Number);
+  const [px, py, pw, ph] = geo('b-private');
+  assert.ok(px <= 200 && py <= 200 && px + pw >= 360 && py + ph >= 270);
+  const [vx, vy, vw, vh] = geo('b-vpc');
+  assert.ok(vx <= px && vy <= py && vx + vw >= px + pw && vy + vh >= py + ph);
+  assert.ok(xml.indexOf('id="b-vpc"') < xml.indexOf('id="b-private"'), 'outer boxes draw first');
+});

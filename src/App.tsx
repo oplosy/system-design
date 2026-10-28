@@ -18,6 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { toPng, toSvg } from 'html-to-image';
 import { codeUrl, costAt, toDecisionRecord, toMermaid } from '../core/export.ts';
+import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
 import { lint } from '../core/lint.ts';
 import { importMermaid, parseMermaid } from '../core/mermaid.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
@@ -799,6 +800,9 @@ function Shell() {
       }
     }
     if (kind === 'decisions') return downloadText(toDecisionRecord(design), `${design.id}-decisions.md`);
+    if (kind === 'structurizr') return downloadText(toStructurizr(design), `${design.id}.dsl`);
+    if (kind === 'plantuml') return downloadText(toPlantUml(design), `${design.id}.puml`);
+    if (kind === 'drawio') return downloadText(toDrawio(design), `${design.id}.drawio`);
     const el = canvasRef.current?.querySelector<HTMLElement>('.react-flow__viewport');
     const shown = getNodes().filter((n) => !n.hidden);
     if (!el || !shown.length) return setError('Nothing on the sheet to export.');
@@ -1282,6 +1286,9 @@ const EXPORTS = [
   { kind: 'svg', title: 'SVG image', desc: 'Scalable, for docs and slides' },
   { kind: 'mermaid', title: 'Mermaid diagram', desc: 'Flowchart text for Markdown, GitHub, Notion' },
   { kind: 'decisions', title: 'Decision record', desc: 'Every decision with why, alternatives and cost, as Markdown' },
+  { kind: 'structurizr', title: 'Structurizr DSL', desc: 'C4 container model for Structurizr' },
+  { kind: 'plantuml', title: 'C4-PlantUML', desc: 'C4 container diagram as PlantUML' },
+  { kind: 'drawio', title: 'draw.io', desc: 'Editable diagram for diagrams.net, positions kept' },
   { kind: 'html', title: 'Shared HTML', desc: 'One file that opens anywhere: walk the steps, play flows; nothing is saved' },
 ] as const;
 

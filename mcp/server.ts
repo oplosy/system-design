@@ -4,7 +4,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type Design } from '../core/schema.ts';
+import { toDecisionRecord, toMermaid } from '../core/export.ts';
 import { infraDrift, syncInfra } from '../core/infra.ts';
+import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
 import { failureImpact, lint } from '../core/lint.ts';
 import * as m from '../core/mutations.ts';
 import { createDesign, listDesigns, listTemplates, readDesign, updateDesign } from '../core/store.ts';
@@ -233,6 +235,17 @@ server.registerTool('add_flow', { description: 'Add a request path that the revi
 
 server.registerTool('lint', { description: 'Check a design for likely smells: isolated parts, single points of failure, exposed datastores, unlinked decisions', inputSchema: { id: design } }, async ({ id }) =>
   ok(lint(await readDesign(id))),
+);
+
+const EXPORTERS = { mermaid: toMermaid, structurizr: toStructurizr, plantuml: toPlantUml, drawio: toDrawio, decisions: toDecisionRecord };
+
+server.registerTool(
+  'export_design',
+  {
+    description: 'A design as text for another tool: a Mermaid flowchart, Structurizr DSL or C4-PlantUML (C4 container level), a draw.io file, or the decision record as Markdown',
+    inputSchema: { id: design, format: z.enum(['mermaid', 'structurizr', 'plantuml', 'drawio', 'decisions']) },
+  },
+  async ({ id, format }) => ({ content: [{ type: 'text' as const, text: EXPORTERS[format](await readDesign(id)) }] }),
 );
 
 server.registerTool(

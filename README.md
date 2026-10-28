@@ -16,6 +16,7 @@ A local canvas for system and architecture designs that agents build and you rev
 - **Code links:** a part can say where its code lives under **Code**: a web address, or a path that opens against the design's **Repo** (set under **Design** in the step panel, e.g. `https://github.com/acme/shop/tree/main`). Parts with a link get a `</>` badge that opens it in a new tab. Agents set `code` on parts and `repo` with `update_design`; a compose import fills `code` from each service's `build` path.
 - **Cost:** a part can carry its monthly cost (**Cost** in the inspector, `cost` for agents) in the design's currency, USD unless changed under **Design**. The part shows the cost as of the step on the sheet; the step panel shows the total so far and how much the step moves it, counting the parts it adds, cost edits (yours and the agent's) and removals. An edit in the inspector is recorded on the step on the sheet without reopening it; a cost a later step changed is shown read-only there.
 - **Capacity notes:** a line can carry its load (requests per second) and one-way latency (ms). Both show under the line, and a flow adds up its hops' latency (a reply counts its line again).
+- **Export to other tools:** **Export** also writes Structurizr DSL and C4-PlantUML (C4 container level: users become people, third parties external systems, datastores and queues get their shapes, boundaries become groups) and a draw.io file that keeps the sheet's positions. Agents get the same text with `export_design`.
 - **Share:** **Export → Shared HTML** (or `npm run share -- <design id> [out.html]`) writes one self-contained file with the app and the design baked in, plus every design its parts open. It opens from disk or any static host (a PR attachment, GitHub Pages) with no server: readers walk the steps, use the diff, play flows and open drill-downs; their changes stay in that tab. It is built from `dist/`, so run `npm run build` first, and again after app changes.
 - **Drift:** check a design against the infrastructure it describes (compose, Kubernetes or Terraform JSON). `npm run drift -- <design id or .json path> <infra file>` lists the parts and lines the infrastructure has and the design lacks, and the imported parts the infrastructure no longer has, and exits 1 when there are any, so it can fail a CI job; `--write` brings the design in line as one new step for review (removals show in its diff and revert like any other). Agents do the same with `sync_infra` (`dry_run` to only look). Imported parts remember where they came from, so renaming one in the design keeps it matched; hand-drawn parts and parts from another file type are never removed.
 - **Capacity and failure:** a part can carry the requests per second it can take (**Capacity** in the inspector, `capacity` for agents). The inspector shows the load on the lines into it as of the step on the sheet, and lint flags it at 80% and past 100%. **If it fails** shows the flows that pass through the part and the parts users and clients could no longer reach; agents ask the same with `simulate_failure`.
@@ -50,13 +51,13 @@ Inside this repo, Claude Code picks it up from `.mcp.json`. To use it from any p
 claude mcp add system-design -s user -- node C:/Users/mesut/Desktop/workspace/A-projects/system-design/mcp/server.ts
 ```
 
-Main tool: `add_step` adds one reviewable change (components, connections, notes, decisions) in a single write, and can carry flows. Smaller tools: `create_design`, `update_design`, `add_component`, `connect`, `add_boundary`, `place_in`, `add_note`, `add_decision`, `update_component`, `remove_item`, `add_flow`, `update_connection`, `pick_option`, `sync_infra`, `simulate_failure`, `get_feedback`, `resolve_feedback`, `lint`, `get_design`, `list_designs`, `list_templates`.
+Main tool: `add_step` adds one reviewable change (components, connections, notes, decisions) in a single write, and can carry flows. Smaller tools: `create_design`, `update_design`, `add_component`, `connect`, `add_boundary`, `place_in`, `add_note`, `add_decision`, `update_component`, `remove_item`, `add_flow`, `update_connection`, `pick_option`, `sync_infra`, `export_design`, `simulate_failure`, `get_feedback`, `resolve_feedback`, `lint`, `get_design`, `list_designs`, `list_templates`.
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `core/` | Schema (zod), file store, shared edit functions, tests |
+| `core/` | Schema (zod), file store, shared edit functions, imports and exports, tests |
 | `server/api.ts` | JSON API and change events, mounted in the Vite dev server |
 | `server/main.ts` | Production server: the built app from `dist/` plus the API |
 | `server/share.ts` | Builds the shared HTML file |
