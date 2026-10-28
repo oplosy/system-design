@@ -4,9 +4,11 @@ import type { Design } from '../core/schema.ts';
 import { BOUNDARY_PAD, EMPTY_BOUNDARY, boundaryBoxes } from './boundaries.ts';
 import { DECISION_SIZE, NOTE_SIZE, SHAPES } from './shapes.ts';
 
-// ELK is most of the app's code; it loads on the first layout instead of with the page.
+// ELK is most of the app's code; it loads on the first layout instead of with the page. A shared file, which can't
+// fetch that chunk from disk, carries it as a plain script that sets window.ELK (see server/share.ts).
 let elk: Promise<InstanceType<typeof ELK>> | undefined;
-const engine = () => (elk ??= import('elkjs/lib/elk.bundled.js').then((x) => new x.default()));
+const inlined = (globalThis as { ELK?: typeof ELK }).ELK;
+const engine = () => (elk ??= inlined ? Promise.resolve(new inlined()) : import('elkjs/lib/elk.bundled.js').then((x) => new x.default()));
 const ROOT = '__root';
 
 export const LAYOUTS = [

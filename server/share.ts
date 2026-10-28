@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Design } from '../core/schema.ts';
@@ -52,10 +53,12 @@ export async function shareHtml(id: string, dist = DIST) {
   if (!script || !style) throw new Error('dist/index.html does not look like a Vite build: rebuild with `npm run build`.');
   // JSON in a script tag: escaping "<" keeps "</script>" and "<!--" inside strings from ending it.
   const data = `<script type="application/json" id="shared-designs">${JSON.stringify(designs).replace(/</g, '\\u003c')}</script>`;
-  const [js, css] = await Promise.all([asset(script[1]), asset(style[1])]);
+  // The layout engine, which the app loads as a separate chunk, goes in as a plain script so Layout works offline.
+  const elk = createRequire(import.meta.url).resolve('elkjs/lib/elk.bundled.js');
+  const [js, css, layoutEngine] = await Promise.all([asset(script[1]), asset(style[1]), fs.readFile(elk, 'utf8')]);
   // Function replacers: the bundle is full of "$&"-like text that string replacements would expand.
   return html
     .replace(/<title>[^<]*<\/title>/, () => `<title>${escapeHtml(designs[0].title)}</title>`)
     .replace(style[0], () => `<style>${safe(css, 'style')}</style>`)
-    .replace(script[0], () => `${data}\n<script type="module">${safe(js, 'script')}</script>`);
+    .replace(script[0], () => `${data}\n<script>${safe(layoutEngine, 'script')}</script>\n<script type="module">${safe(js, 'script')}</script>`);
 }

@@ -28,7 +28,11 @@ A local canvas for system and architecture designs that agents build and you rev
 
 ## Run
 
-Without cloning (Node 24+; the first run downloads and builds it):
+Without cloning (Node 24+), from npm once a release is published there, or straight from GitHub (the first run builds it):
+
+```bash
+npx -y system-design
+```
 
 ```bash
 npx -y github:oplosy/system-design
@@ -43,7 +47,7 @@ npm install
 npm run dev
 ```
 
-Without Vite, build once and serve the built app and the API from one Node server (`PORT` and `HOST` override `5180` and `127.0.0.1`; the API answers only requests addressed to this machine or to `HOST`, and refuses writes from other sites):
+Without Vite, build once and serve the built app and the API from one Node server (`PORT` and `HOST` override `5180` and `127.0.0.1`; the API answers only requests addressed to this machine or to `HOST`, and refuses writes from other sites; to open it from another machine by name or address, start it with that `HOST`, or `HOST=0.0.0.0` for any):
 
 ```bash
 npm run build
@@ -131,3 +135,11 @@ Set `SYSTEM_DESIGN_WEBHOOK` to a Slack, Discord or Teams incoming webhook (or an
 | `designs/` | Where designs lived before the data folder; read once to copy them over, then ignored |
 
 Checks: `npm test`, `npm run typecheck`. Requires Node 24+ (runs TypeScript directly).
+
+## Releasing
+
+Set `version` in `package.json`, commit, and push a matching tag (`git tag v1.1.0 && git push origin v1.1.0`). The release workflow runs the checks, publishes to npm when the `NPM_TOKEN` secret (an npm automation token) is set, and moves the major tag (`v1`) that action users pin to.
+
+## License
+
+MIT

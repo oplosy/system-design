@@ -63,15 +63,17 @@ const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
  * evil.example resolving to 127.0.0.1) and a write whose Origin is another site (a plain form POST needs no preflight).
  * HOST set to a name or an address the server is bound to is allowed too; tools without a browser send no Origin.
  */
-export function trusted(req: IncomingMessage, host = process.env.HOST) {
+export function trusted(req: IncomingMessage, host = process.env.HOST): true | string {
   const name = (h: string) => new URL(`http://${h}`).hostname;
   try {
     const at = name(req.headers.host ?? '');
-    if (!LOOPBACK.has(at) && at !== (host && name(host)) && host !== '0.0.0.0' && host !== '::') return false;
+    if (!LOOPBACK.has(at) && at !== (host && name(host)) && host !== '0.0.0.0' && host !== '::') {
+      return `This server answers only to localhost. To open it as ${at}, start it with HOST=${at} (or HOST=0.0.0.0 for any name).`;
+    }
     if (req.method === 'GET' || req.method === 'HEAD' || !req.headers.origin) return true;
-    return new URL(req.headers.origin).host === req.headers.host;
+    return new URL(req.headers.origin).host === req.headers.host || 'Changes from other sites are refused.';
   } catch {
-    return false;
+    return 'This request has an unreadable Host or Origin header.';
   }
 }
 
@@ -94,7 +96,8 @@ export function createApi() {
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://local');
     const [, resource, id, sub] = url.pathname.split('/');
-    if (!trusted(req)) return send(res, 403, { error: 'Requests from other sites are refused.' });
+    const trust = trusted(req);
+    if (trust !== true) return send(res, 403, { error: trust });
     try {
       if (resource === 'events' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });

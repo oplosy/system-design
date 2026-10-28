@@ -1451,12 +1451,13 @@ test('a save that meets a newer file replays the edits onto it instead of droppi
 test('the API refuses other sites and rebound host names, but not tools or this page', async () => {
   const { trusted } = await import('../server/api.ts');
   const req = (method: string, host: string, origin?: string) => ({ method, headers: { host, ...(origin && { origin }) } }) as never;
-  assert.ok(trusted(req('GET', '127.0.0.1:5180')));
-  assert.ok(trusted(req('PUT', '127.0.0.1:5180')), 'curl, the CLI: no Origin');
-  assert.ok(trusted(req('PUT', 'localhost:5180', 'http://localhost:5180')));
-  assert.ok(!trusted(req('POST', '127.0.0.1:5180', 'https://evil.example')));
-  assert.ok(!trusted(req('POST', '127.0.0.1:5180', 'null')), 'sandboxed frames and file pages');
-  assert.ok(!trusted(req('GET', 'evil.example:5180')), 'DNS rebinding');
-  assert.ok(trusted(req('GET', 'devbox:5180'), 'devbox'));
-  assert.ok(trusted(req('GET', '192.168.1.5:5180'), '0.0.0.0'));
+  assert.equal(trusted(req('GET', '127.0.0.1:5180')), true);
+  assert.equal(trusted(req('PUT', '127.0.0.1:5180')), true, 'curl, the CLI: no Origin');
+  assert.equal(trusted(req('PUT', 'localhost:5180', 'http://localhost:5180')), true);
+  assert.notEqual(trusted(req('POST', '127.0.0.1:5180', 'https://evil.example')), true);
+  assert.notEqual(trusted(req('POST', '127.0.0.1:5180', 'null')), true, 'sandboxed frames and file pages');
+  assert.notEqual(trusted(req('GET', 'evil.example:5180')), true, 'DNS rebinding');
+  assert.equal(trusted(req('GET', 'devbox:5180'), 'devbox'), true);
+  assert.equal(trusted(req('GET', '192.168.1.5:5180'), '0.0.0.0'), true);
+  assert.match(String(trusted(req('GET', '192.168.1.5:5180'))), /HOST=192\.168\.1\.5/);
 });
