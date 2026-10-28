@@ -171,6 +171,9 @@ export type ComponentType = (typeof COMPONENT_TYPES)[number];
 export const BOUNDARY_KINDS = ['region', 'zone', 'datacenter', 'vpc', 'subnet', 'vlan', 'cluster', 'site', 'system', 'context', 'lane', 'group'] as const;
 export type BoundaryKind = (typeof BOUNDARY_KINDS)[number];
 
+/** Version of the design file format this app writes. */
+export const SCHEMA_VERSION = 1;
+
 const Id = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'lowercase letters, digits and dashes');
 const Position = z.object({ x: z.number(), y: z.number() });
 /** The step option an item belongs to; it shows only while that option is viewed, until the reviewer picks one. */
@@ -296,6 +299,8 @@ export const CommentSchema = z.object({
 export const DesignSchema = z
   .object({
     id: Id,
+    /** File format version; parseDesign migrates older files up to SCHEMA_VERSION. */
+    version: z.literal(SCHEMA_VERSION),
     title: z.string().min(1),
     description: z.string().optional(),
     template: z.string().optional(),
@@ -393,9 +398,24 @@ export const isId = (s: string) => Id.safeParse(s).success;
 
 export class ValidationError extends Error {}
 
-/** Parses a design, turning schema errors into one readable message. */
+/** MIGRATIONS[n] upgrades a version n + 1 design to n + 2 in place. Bump SCHEMA_VERSION when adding one. */
+const MIGRATIONS: ((d: Record<string, unknown>) => void)[] = [];
+
+/** Brings a design written by an older version up to SCHEMA_VERSION; files from before versioning count as 1. */
+function migrate(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const d = { ...(value as Record<string, unknown>) };
+  const from = d.version ?? 1;
+  if (typeof from !== 'number' || !Number.isInteger(from) || from < 1) throw new ValidationError(`version: must be a whole number from 1 up`);
+  if (from > SCHEMA_VERSION) throw new ValidationError(`version ${from} is newer than this app understands (${SCHEMA_VERSION}); update the app`);
+  for (let v = from; v < SCHEMA_VERSION; v++) MIGRATIONS[v - 1](d);
+  d.version = SCHEMA_VERSION;
+  return d;
+}
+
+/** Parses a design, migrating older files and turning schema errors into one readable message. */
 export function parseDesign(value: unknown): Design {
-  const r = DesignSchema.safeParse(value);
+  const r = DesignSchema.safeParse(migrate(value));
   if (!r.success) throw new ValidationError(z.prettifyError(r.error));
   return r.data;
 }

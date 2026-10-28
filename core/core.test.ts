@@ -480,3 +480,10 @@ test('templates load and start unseen', async () => {
     assert.ok(d.steps.every((s) => !s.seen));
   }
 });
+
+test('files from before versioning load as the current version, newer ones are refused', () => {
+  const { version, ...old } = m.blankDesign('old', 'Old');
+  assert.equal(parseDesign(old).version, version);
+  assert.throws(() => parseDesign({ ...old, version: version + 1 }), /newer than this app/);
+  assert.throws(() => parseDesign({ ...old, version: 'two' }), /whole number/);
+});

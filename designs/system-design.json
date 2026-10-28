@@ -1,0 +1,234 @@
+{
+  "id": "system-design",
+  "title": "System design – local design canvas",
+  "description": "Local canvas where agents add architecture steps over MCP and a reviewer walks them in the browser. Designs are JSON files on disk.",
+  "repo": "https://github.com/oplosy/system-design/tree/main",
+  "rev": 1,
+  "steps": [
+    {
+      "id": "start",
+      "title": "Start",
+      "seen": true
+    },
+    {
+      "id": "existing-app-plus-a-production-server-an",
+      "title": "Existing app plus a production server and CI",
+      "summary": "Records the architecture as it stands (browser app, Vite-hosted API, MCP server, JSON files) and adds a standalone Node server that serves the built app and the same API without Vite, a format version on design files, and a CI workflow.",
+      "seen": false
+    }
+  ],
+  "components": [
+    {
+      "id": "reviewer",
+      "type": "user",
+      "label": "Reviewer",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "agent",
+      "type": "agent",
+      "label": "Coding agent",
+      "tech": "Claude Code",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "browser-app",
+      "type": "client",
+      "label": "Canvas app",
+      "tech": "React, React Flow",
+      "code": "src",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "vite-dev",
+      "type": "service",
+      "label": "Vite dev server",
+      "tech": "Vite plugin (designApi)",
+      "code": "vite.config.ts",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "prod-server",
+      "type": "service",
+      "label": "Production server",
+      "tech": "node:http",
+      "code": "server/main.ts",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "design-api",
+      "type": "module",
+      "label": "Design API + SSE",
+      "tech": "createApi()",
+      "code": "server/api.ts",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "mcp-server",
+      "type": "service",
+      "label": "MCP server",
+      "tech": "stdio, @modelcontextprotocol/sdk",
+      "code": "mcp/server.ts",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "store",
+      "type": "module",
+      "label": "Store + schema",
+      "description": "Validates, migrates by version, writes with rev check and atomic rename",
+      "code": "core/store.ts",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "designs-dir",
+      "type": "file-storage",
+      "label": "designs/*.json",
+      "code": "designs",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "ci",
+      "type": "ci-cd",
+      "label": "CI",
+      "tech": "GitHub Actions",
+      "code": ".github/workflows/ci.yml",
+      "step": "existing-app-plus-a-production-server-an"
+    }
+  ],
+  "connections": [
+    {
+      "id": "reviewer-to-browser-app",
+      "from": "reviewer",
+      "to": "browser-app",
+      "label": "reviews steps",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "browser-app-to-vite-dev",
+      "from": "browser-app",
+      "to": "vite-dev",
+      "label": "HTTP /api (dev)",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "browser-app-to-prod-server",
+      "from": "browser-app",
+      "to": "prod-server",
+      "label": "HTTP /api + static (built)",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "vite-dev-to-design-api",
+      "from": "vite-dev",
+      "to": "design-api",
+      "label": "mounts",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "prod-server-to-design-api",
+      "from": "prod-server",
+      "to": "design-api",
+      "label": "mounts",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "design-api-to-store",
+      "from": "design-api",
+      "to": "store",
+      "label": "read/write",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "agent-to-mcp-server",
+      "from": "agent",
+      "to": "mcp-server",
+      "label": "MCP tools (stdio)",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "mcp-server-to-store",
+      "from": "mcp-server",
+      "to": "store",
+      "label": "read/write",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "store-to-designs-dir",
+      "from": "store",
+      "to": "designs-dir",
+      "label": "JSON files",
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "design-api-to-browser-app",
+      "from": "design-api",
+      "to": "browser-app",
+      "label": "change events (SSE)",
+      "async": true,
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "ci-to-store",
+      "from": "ci",
+      "to": "store",
+      "label": "typecheck, test, build",
+      "step": "existing-app-plus-a-production-server-an"
+    }
+  ],
+  "notes": [
+    {
+      "id": "note",
+      "text": "Binds 127.0.0.1 by default; PORT and HOST override. Unknown paths fall back to index.html.",
+      "attachTo": "prod-server",
+      "step": "existing-app-plus-a-production-server-an"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "decision-plain-node-http-server-for-prod",
+      "title": "Plain node:http server for production instead of keeping Vite",
+      "why": "The app could only run inside the Vite dev server. A small node:http server serves dist/ and mounts the same createApi() handler, so dev and prod share one API code path with no new dependency.",
+      "alternatives": [
+        "Run vite preview with the plugin",
+        "Express or Fastify",
+        "Package as Electron app"
+      ],
+      "tradeoffs": "Static serving (types, caching, traversal guard) is hand-written and minimal; no compression or HTTPS. Fine for a local tool bound to 127.0.0.1.",
+      "links": [
+        "prod-server",
+        "design-api",
+        "vite-dev"
+      ],
+      "step": "existing-app-plus-a-production-server-an"
+    },
+    {
+      "id": "decision-version-field-on-design-files-w",
+      "title": "Version field on design files with migrate-on-read",
+      "why": "Files had no format version, so a future schema change would make old designs fail validation. parseDesign now treats unversioned files as v1, runs migrations up to the current version, and refuses files from a newer version instead of misreading them.",
+      "alternatives": [
+        "No versioning, keep schema fields optional forever",
+        "Separate migration CLI"
+      ],
+      "tradeoffs": "Files are upgraded only when next written, so the folder can hold mixed versions until then.",
+      "links": [
+        "store"
+      ],
+      "step": "existing-app-plus-a-production-server-an"
+    }
+  ],
+  "boundaries": [],
+  "comments": [],
+  "flows": [
+    {
+      "id": "flow-agent-change-shows-up-live-in-the-b",
+      "title": "Agent change shows up live in the browser",
+      "path": [
+        "agent",
+        "mcp-server",
+        "store",
+        "designs-dir"
+      ],
+      "step": "existing-app-plus-a-production-server-an"
+    }
+  ]
+}

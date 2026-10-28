@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "app", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 5180 }
+    { "name": "app", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 5180 },
+    { "name": "prod", "runtimeExecutable": "node", "runtimeArgs": ["server/main.ts"], "port": 5181, "env": { "PORT": "5181" } }
   ]
 }

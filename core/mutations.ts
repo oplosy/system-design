@@ -1,4 +1,4 @@
-import type { BoundaryKind, Comment, ComponentType, Connection, ConnectionKind, Design } from './schema.ts';
+import { SCHEMA_VERSION, type BoundaryKind, type Comment, type ComponentType, type Connection, type ConnectionKind, type Design } from './schema.ts';
 
 // Pure, browser-safe edits shared by the UI and the MCP server. Each one mutates `d` in place.
 
@@ -19,7 +19,7 @@ function usedIds(d: Design) {
 
 /** A design with nothing on it but its first step. */
 export function blankDesign(id: string, title: string): Design {
-  return { id, title, rev: 0, steps: [{ id: 'start', title: 'Start', seen: true }], components: [], connections: [], notes: [], decisions: [], boundaries: [], comments: [], flows: [] };
+  return { id, version: SCHEMA_VERSION, title, rev: 0, steps: [{ id: 'start', title: 'Start', seen: true }], components: [], connections: [], notes: [], decisions: [], boundaries: [], comments: [], flows: [] };
 }
 
 export function uniqueId(d: Design, base: string) {

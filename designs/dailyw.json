@@ -1,8 +1,9 @@
 {
   "id": "dailyw",
+  "version": 1,
   "title": "dailyw – daily checklist and word list",
   "description": "Hotkey-toggled desktop panel for daily tasks and English words with Turkish meanings. Windows (PowerShell/WPF) and macOS (Swift) builds.",
-  "rev": 1,
+  "rev": 2,
   "steps": [
     {
       "id": "start",
@@ -21,6 +22,10 @@
       "id": "user",
       "type": "user",
       "label": "User",
+      "position": {
+        "x": 98,
+        "y": 12
+      },
       "step": "add-native-macos-client-alongside-the-wi"
     },
     {
@@ -30,6 +35,10 @@
       "tech": "PowerShell 5.1 + WPF",
       "description": "Alt+Q panel, tray icon, VBS launcher restarts on crash",
       "code": "dailyw.ps1",
+      "position": {
+        "x": 60,
+        "y": 170
+      },
       "step": "add-native-macos-client-alongside-the-wi"
     },
     {
@@ -37,6 +46,10 @@
       "type": "file-storage",
       "label": "Windows JSON files",
       "tech": "tasks.json / words.json next to script",
+      "position": {
+        "x": 12,
+        "y": 344
+      },
       "step": "add-native-macos-client-alongside-the-wi"
     },
     {
@@ -46,6 +59,10 @@
       "tech": "Swift, AppKit + SwiftUI, Carbon hotkey",
       "description": "Option+Q panel, menu bar icon, built by build-mac.sh",
       "code": "dailyw.swift",
+      "position": {
+        "x": 290,
+        "y": 170
+      },
       "step": "add-native-macos-client-alongside-the-wi"
     },
     {
@@ -53,6 +70,10 @@
       "type": "file-storage",
       "label": "macOS JSON files",
       "tech": "~/Library/Application Support/dailyw",
+      "position": {
+        "x": 702,
+        "y": 344
+      },
       "step": "add-native-macos-client-alongside-the-wi"
     },
     {
@@ -60,6 +81,10 @@
       "type": "external",
       "label": "Google Translate (keyless)",
       "tech": "translate.googleapis.com, unofficial",
+      "position": {
+        "x": 222,
+        "y": 320
+      },
       "step": "add-native-macos-client-alongside-the-wi"
     }
   ],
@@ -124,6 +149,10 @@
         "mac-app",
         "win-app"
       ],
+      "position": {
+        "x": 422,
+        "y": 320
+      },
       "step": "add-native-macos-client-alongside-the-wi"
     },
     {
@@ -138,6 +167,10 @@
         "mac-data",
         "win-data"
       ],
+      "position": {
+        "x": 15,
+        "y": 510
+      },
       "step": "add-native-macos-client-alongside-the-wi"
     }
   ],

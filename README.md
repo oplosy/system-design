@@ -17,13 +17,20 @@ A local canvas for system and architecture designs that agents build and you rev
 - **Cost:** a part can carry its monthly cost (**Cost** in the inspector, `cost` for agents) in the design's currency, USD unless changed under **Design**. The part shows the cost as of the step on the sheet; the step panel shows the total so far and how much the step moves it, counting the parts it adds, cost edits (yours and the agent's) and removals. An edit in the inspector is recorded on the step on the sheet without reopening it; a cost a later step changed is shown read-only there.
 - **Capacity notes:** a line can carry its load (requests per second) and one-way latency (ms). Both show under the line, and a flow adds up its hops' latency (a reply counts its line again).
 - **Lint:** amber badges flag likely smells (isolated parts, a balancer with one target, a datastore in a public network or reached straight from clients, a one-sided queue, an unlinked decision). Hover a badge to read it.
-- Everything is a JSON file in `designs/`, so changes are versioned and diffable.
+- Everything is a JSON file in `designs/`, so changes are versioned and diffable. Each file carries the format `version` it was written in; older files are migrated when read, and a file from a newer version is refused rather than misread.
 
 ## Run
 
 ```bash
 npm install
 npm run dev
+```
+
+Without Vite, build once and serve the built app and the API from one Node server (`PORT` and `HOST` override `5180` and `127.0.0.1`):
+
+```bash
+npm run build
+npm start
 ```
 
 Open http://127.0.0.1:5180. Create a design from the **Twitter from scratch** or **Three-tier web app** template, start blank, or paste a Mermaid flowchart: its nodes, arrows and subgraphs become parts, lines and boundaries, with part types taken from node shapes and names, head word first ("PostgreSQL" → SQL DB, "Kafka consumer" → worker). Lines it can’t read are listed before anything is created; styling lines (`classDef`, `style`) are ignored. Or paste a docker-compose file or Kubernetes manifests: services and workloads become parts (typed from their image), `depends_on`, Ingress backends and environment values that address another service (a URL, `host:port`, a cluster DNS name, or a variable named like `DB_HOST` or `API_URL`) become lines, and more than one network or namespace becomes boundaries. Kinds that draw nothing (ConfigMap, Secret…) are listed before anything is created. Helm templates need rendering first (`helm template`).
@@ -48,6 +55,7 @@ Main tool: `add_step` adds one reviewable change (components, connections, notes
 | --- | --- |
 | `core/` | Schema (zod), file store, shared edit functions, tests |
 | `server/api.ts` | JSON API and change events, mounted in the Vite dev server |
+| `server/main.ts` | Production server: the built app from `dist/` plus the API |
 | `mcp/server.ts` | MCP server for agents |
 | `src/` | React Flow canvas, shapes, panels |
 | `templates/` | Starting designs |
