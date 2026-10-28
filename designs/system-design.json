@@ -3,7 +3,7 @@
   "title": "System design – local design canvas",
   "description": "Local canvas where agents add architecture steps over MCP and a reviewer walks them in the browser. Designs are JSON files on disk.",
   "repo": "https://github.com/oplosy/system-design/tree/main",
-  "rev": 7,
+  "rev": 8,
   "steps": [
     {
       "id": "start",
@@ -50,6 +50,12 @@
       "id": "tag-views-over-one-model",
       "title": "Tag views over one model",
       "summary": "Parts carry free tags; a View menu shows one tag at a time, hiding the rest of the parts, their lines, attached notes and boxes left empty. Agents set tags through add_step, add_component and update_component.",
+      "seen": false
+    },
+    {
+      "id": "import-opentelemetry-and-jaeger-traces",
+      "title": "Import OpenTelemetry and Jaeger traces",
+      "summary": "The infra reader also accepts recorded traces (OTLP JSON or a Jaeger download). Services, databases, queues and outside hosts become parts. Calls become lines with measured qps and one-way latency. Each kind of request becomes a flow. Drift reports lines whose numbers are off by more than a quarter.",
       "seen": false
     }
   ],
@@ -196,6 +202,13 @@
       "tech": "toStructurizr, toPlantUml, toDrawio",
       "code": "core/interop.ts",
       "step": "export-to-structurizr-c4-plantuml-and-dr"
+    },
+    {
+      "id": "trace-files",
+      "type": "tracing",
+      "label": "OTLP / Jaeger trace JSON",
+      "description": "Collector file-exporter output or a Jaeger JSON download",
+      "step": "import-opentelemetry-and-jaeger-traces"
     }
   ],
   "connections": [
@@ -387,6 +400,13 @@
       "to": "interop",
       "label": "export_design",
       "step": "export-to-structurizr-c4-plantuml-and-dr"
+    },
+    {
+      "id": "trace-files-to-infra-reader",
+      "from": "trace-files",
+      "to": "infra-reader",
+      "label": "spans",
+      "step": "import-opentelemetry-and-jaeger-traces"
     }
   ],
   "notes": [
@@ -550,6 +570,23 @@
         "browser-app"
       ],
       "step": "tag-views-over-one-model"
+    },
+    {
+      "id": "decision-read-trace-files-offline-instea",
+      "title": "Read trace files offline instead of querying a tracing backend",
+      "why": "A file works the same from the UI, the drift CLI and MCP, without credentials or network access. It keeps the app local and dependency-free, and CI can drift-check a captured sample.",
+      "alternatives": [
+        "Query the Jaeger/Tempo HTTP API directly",
+        "Use the OTLP protobuf format",
+        "Add an OpenTelemetry SDK dependency"
+      ],
+      "tradeoffs": "Numbers come from whatever sample was captured. qps is calls over the capture window, latency is half the caller's median, and the flow is walked from one sample trace. Traces never remove parts, because a missing service may simply not have been sampled. Only JSON is read; protobuf exports need converting first.",
+      "links": [
+        "infra-reader",
+        "trace-files",
+        "drift-cli"
+      ],
+      "step": "import-opentelemetry-and-jaeger-traces"
     }
   ],
   "boundaries": [],

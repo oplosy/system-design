@@ -1,5 +1,5 @@
 // Checks a design against the infrastructure it describes, for CI:
-//   node cli/drift.ts <design id or .json path> <docker-compose / k8s YAML / terraform show -json file> [--write]
+//   node cli/drift.ts <design id or .json path> <docker-compose / k8s YAML / terraform show -json / OTLP or Jaeger trace file> [--write]
 // Exits 1 when the design differs (parts or lines it lacks, imported parts the infrastructure dropped), 0 when not, 2 on error.
 // --write brings the design in line as one unseen step for review (design id only).
 import fs from 'node:fs/promises';
@@ -29,6 +29,8 @@ try {
   for (const c of drift.connections) console.log(`  + line ${c}`);
   for (const b of drift.boundaries) console.log(`  + boundary ${b}`);
   for (const r of drift.removed) console.log(`  - part ${r} (no longer in the infrastructure)`);
+  for (const u of drift.updated) console.log(`  ~ line ${u}`);
+  for (const f of drift.flows) console.log(`  + flow ${f}`);
   if (write) {
     let step: string | undefined;
     await updateDesign(d.id, (x) => {

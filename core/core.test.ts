@@ -705,3 +705,74 @@ test('tags are kept once each and their edits are recorded on the step', () => {
   assert.deepEqual(parseDesign(structuredClone(x)).components[0].tags, ['payments']);
   assert.throws(() => parseDesign({ ...structuredClone(x), components: [{ ...x.components[0], tags: ['  '] }, x.components[1]] }));
 });
+
+test('imports OpenTelemetry and Jaeger traces with measured load, latency and flows', async () => {
+  const { importInfra, infraDrift, syncInfra, readInfra } = await import('./infra.ts');
+  const ms = (n: number) => String(BigInt(1_700_000_000_000 + n) * 1_000_000n);
+  const attr = (o: Record<string, string>) => Object.entries(o).map(([key, v]) => ({ key, value: { stringValue: v } }));
+  const span = (trace: string, id: string, parent: string, name: string, kind: number, start: number, end: number, a: Record<string, string> = {}) => ({
+    traceId: trace, spanId: id, parentSpanId: parent, name, kind, startTimeUnixNano: ms(start), endTimeUnixNano: ms(end), attributes: attr(a),
+  });
+  const batch = (service: string, spans: object[]) => JSON.stringify({ resourceSpans: [{ resource: { attributes: attr({ 'service.name': service }) }, scopeSpans: [{ spans }] }] });
+  // Two requests a second apart; the collector's file exporter writes one JSON object per line.
+  const trace = (t: string, at: number) => [
+    batch('frontend', [span(t, 's1', '', 'GET /orders', 2, at, at + 100), span(t, 'c1', 's1', 'GET', 3, at + 10, at + 60)]),
+    batch('orders', [
+      span(t, 's2', 'c1', 'GET /orders', 2, at + 15, at + 55),
+      span(t, 'c2', 's2', 'SELECT', 3, at + 20, at + 30, { 'db.system': 'postgresql', 'db.name': 'shop' }),
+      span(t, 'p1', 's2', 'publish', 4, at + 35, at + 36, { 'messaging.system': 'kafka', 'messaging.destination.name': 'order-events' }),
+    ]),
+    batch('payments', [
+      span(t, 'k1', 'p1', 'process', 5, at + 200, at + 210, { 'messaging.system': 'kafka', 'messaging.destination.name': 'order-events' }),
+      span(t, 'h1', 'k1', 'POST', 3, at + 201, at + 205, { 'url.full': 'https://api.stripe.com/v1/charges' }),
+    ]),
+  ];
+  const otlp = [...trace('t1', 0), ...trace('t2', 1000)].join('\n');
+
+  const x = m.blankDesign('otel', 'OTel');
+  importInfra(x, otlp);
+  const byId = (id: string) => x.components.find((c) => c.id === id)!;
+  assert.deepEqual(x.components.map((c) => `${c.label}:${c.type}:${c.tech ?? ''}`).sort(), ['api.stripe.com:external:', 'frontend:service:', 'order-events:stream:kafka', 'orders:service:', 'payments:service:', 'shop:sql-db:postgresql']);
+  const line = (a: string, b: string) => x.connections.find((c) => byId(c.from).label === a && byId(c.to).label === b);
+  assert.deepEqual(line('frontend', 'orders') && [line('frontend', 'orders')!.latency, line('frontend', 'orders')!.qps], [25, 1.7], 'half the 50 ms the caller saw; 2 calls in 1.2 s');
+  assert.equal(line('orders', 'shop')?.latency, 5);
+  assert.deepEqual([line('orders', 'order-events')?.async, line('order-events', 'payments')?.async, line('order-events', 'payments')?.latency], [true, true, undefined]);
+  assert.ok(line('payments', 'api.stripe.com'));
+  assert.equal(x.connections.length, 5, 'no direct orders → payments line: that hop goes through the topic');
+  assert.deepEqual(
+    x.flows.map((f) => [f.title, f.path.map((p) => byId(p).label).join(' > ')]),
+    [['GET /orders', 'frontend > orders > shop > orders > order-events > payments > api.stripe.com']],
+  );
+  assert.equal(parseDesign(structuredClone(x)).flows.length, 1);
+
+  // A design drawn by hand gets the measured numbers on its lines, as a reviewed change, and traces never remove parts.
+  const hand = m.blankDesign('hand-otel', 'Hand');
+  const fe = m.addComponent(hand, { type: 'service', label: 'frontend' });
+  const or = m.addComponent(hand, { type: 'service', label: 'orders' });
+  m.addComponent(hand, { type: 'cdn', label: 'CDN', source: 'otel:svc:cdn' });
+  m.connect(hand, { from: fe, to: or, qps: 1.6, latency: 100 });
+  const drift = infraDrift(hand, otlp);
+  assert.deepEqual([drift.updated, drift.removed, drift.flows], [['frontend → orders: 1.7 req/s, 25 ms'], [], ['GET /orders']], 'qps within a quarter keeps its value; latency 4× off is replaced');
+  const step = syncInfra(hand, otlp, 'Sync with traces')!;
+  assert.deepEqual([hand.connections[0].qps, hand.connections[0].latency], [1.6, 25]);
+  assert.deepEqual(hand.steps.find((s) => s.id === step)!.changed?.map((c) => `${c.field}:${c.from}>${c.to}`), ['latency:100>25']);
+  assert.ok(hand.components.some((c) => c.label === 'CDN'));
+
+  // Jaeger's JSON download.
+  const jaeger = JSON.stringify({
+    data: [{
+      traceID: 'j1',
+      processes: { p1: { serviceName: 'web' }, p2: { serviceName: 'api' } },
+      spans: [
+        { traceID: 'j1', spanID: 'a', operationName: 'GET /', references: [], startTime: 0, duration: 30000, processID: 'p1', tags: [{ key: 'span.kind', value: 'server' }] },
+        { traceID: 'j1', spanID: 'b', operationName: 'GET /api', references: [{ refType: 'CHILD_OF', spanID: 'a' }], startTime: 1000, duration: 20000, processID: 'p1', tags: [{ key: 'span.kind', value: 'client' }] },
+        { traceID: 'j1', spanID: 'c', operationName: 'GET /api', references: [{ refType: 'CHILD_OF', spanID: 'b' }], startTime: 2000, duration: 10000, processID: 'p2', tags: [{ key: 'span.kind', value: 'server' }] },
+        { traceID: 'j1', spanID: 'd', operationName: 'GET', references: [{ refType: 'CHILD_OF', spanID: 'c' }], startTime: 3000, duration: 2000, processID: 'p2', tags: [{ key: 'span.kind', value: 'client' }, { key: 'db.system', value: 'redis' }] },
+      ],
+    }],
+  });
+  const j = readInfra(jaeger);
+  assert.deepEqual(j.parts.map((p) => `${p.label}:${p.type}`), ['web:service', 'api:service', 'redis:cache']);
+  assert.deepEqual(j.links.map((l) => `${l.from}>${l.to}:${l.latency}`), ['svc:web>svc:api:10', 'svc:api>db:redis::1']);
+  assert.throws(() => readInfra('{"resourceSpans": []}'), /no spans/);
+});

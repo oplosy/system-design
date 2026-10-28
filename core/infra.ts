@@ -1,12 +1,13 @@
 import { parseAllDocuments } from 'yaml';
 import type { BoundaryKind, ComponentType, Design } from './schema.ts';
 import * as m from './mutations.ts';
+import { readSpans, readTraces, type TraceFlow } from './traces.ts';
 
 // Reads a docker-compose file or Kubernetes manifests into parts, lines and boundaries.
 // Lines come from depends_on/links, Ingress backends and environment values that name another part's host.
 
 type Part = { key: string; label: string; image?: string; type: ComponentType; tech?: string; group?: string; code?: string };
-type Link = { from: string; to: string; label?: string };
+type Link = { from: string; to: string; label?: string; qps?: number; latency?: number; async?: boolean };
 type Group = { key: string; label: string; kind: BoundaryKind };
 type Doc = Record<string, any>;
 
@@ -39,6 +40,11 @@ function envEntries(env: unknown): [string, unknown][] {
 
 export function readInfra(text: string) {
   if (/^\s*(resource|module|provider)\s+"/m.test(text)) throw new Error('This looks like Terraform source. Run "terraform show -json" (or on a saved plan) and paste its output.');
+  const spans = readSpans(text);
+  if (spans) {
+    const { parts, links, flows }: { parts: Part[]; links: Link[]; flows: TraceFlow[] } = readTraces(spans);
+    return { format: 'otel', parts, links, flows, groups: [] as Group[], skipped: [] as string[] };
+  }
   if (/\{\{.*\}\}/.test(text)) throw new Error('This looks like a Helm template. Render it with "helm template <chart>" and paste the output.');
   const docs = Array.from(parseAllDocuments(text));
   for (const doc of docs) if (doc.errors.length) throw new Error(`YAML: ${doc.errors[0].message}`);
@@ -46,7 +52,7 @@ export function readInfra(text: string) {
   if (values.length === 1 && values[0].format_version && (values[0].values || values[0].planned_values)) return { format: 'terraform', ...terraform(values[0]) };
   if (values.length === 1 && Object.keys(obj(values[0].services)).length) return { format: 'compose', ...compose(values[0]) };
   if (values.some((v) => typeof v.kind === 'string')) return { format: 'kubernetes', ...kube(values) };
-  throw new Error('Paste a docker-compose file (with services:), Kubernetes manifests (with kind:) or "terraform show -json" output.');
+  throw new Error('Paste a docker-compose file (with services:), Kubernetes manifests (with kind:), "terraform show -json" output, or OpenTelemetry (OTLP JSON) or Jaeger traces.');
 }
 
 /** Terraform resource types that draw as a part: [type, tech]. Everything else (IAM, security groups, routes…) is left out. */
@@ -346,11 +352,13 @@ function kube(docs: Doc[]) {
  * format that the infrastructure no longer has are removed, so the design comes to match. Returns what changed.
  */
 export function importInfra(d: Design, text: string, { step, guess, sync }: { step?: string; guess?: (words: string) => ComponentType | undefined; sync?: boolean } = {}) {
-  const { format, parts, links, groups } = readInfra(text);
+  const read = readInfra(text);
+  const { format, parts, links, groups } = read;
+  const flows: TraceFlow[] = ('flows' in read && read.flows) || [];
   if (!parts.length) throw new Error('No services or workloads found.');
   const at = { step, reopen: false };
   const byName = <T extends { id: string; label: string }>(label: string, items: T[]) => items.find((x) => x.id === m.slugify(label) || m.slugify(x.label) === m.slugify(label));
-  const added = { components: [] as string[], connections: [] as string[], boundaries: [] as string[], removed: [] as string[] };
+  const added = { components: [] as string[], connections: [] as string[], boundaries: [] as string[], removed: [] as string[], updated: [] as string[], flows: [] as string[] };
   const boundaryIds = new Map(
     groups.map((g) => {
       const found = sync && byName(g.label, d.boundaries)?.id;
@@ -377,14 +385,30 @@ export function importInfra(d: Design, text: string, { step, guess, sync }: { st
     added.components.push(p.label);
   }
   const label = (id: string) => d.components.find((c) => c.id === id)?.label ?? id;
+  // Measured load and latency (from traces) replace what a line says only when it is missing or off by more than a quarter.
+  const off = (was: number | undefined, now: number | undefined) => now !== undefined && (was === undefined || Math.abs(now - was) > 0.25 * Math.max(was, 1));
   for (const l of links) {
     const from = ids.get(l.from);
     const to = ids.get(l.to);
-    if (!from || !to || from === to || d.connections.some((c) => (c.from === from && c.to === to) || (c.from === to && c.to === from))) continue;
-    m.connect(d, { from, to, label: l.label, ...at });
-    added.connections.push(`${label(from)} → ${label(to)}`);
+    if (!from || !to || from === to) continue;
+    const drawn = d.connections.find((c) => c.from === from && c.to === to) ?? d.connections.find((c) => c.from === to && c.to === from);
+    if (!drawn) {
+      m.connect(d, { from, to, label: l.label, qps: l.qps, latency: l.latency, async: l.async, ...at });
+      added.connections.push(`${label(from)} → ${label(to)}`);
+    } else if (drawn.from === from && (off(drawn.qps, l.qps) || off(drawn.latency, l.latency))) {
+      m.updateTracked(d, drawn.id, { qps: off(drawn.qps, l.qps) ? l.qps : drawn.qps, latency: off(drawn.latency, l.latency) ? l.latency : drawn.latency }, step, false);
+      added.updated.push(`${label(from)} → ${label(to)}: ${[l.qps !== undefined && `${l.qps} req/s`, l.latency !== undefined && `${l.latency} ms`].filter(Boolean).join(', ')}`);
+    }
   }
-  if (sync) {
+  for (const f of flows) {
+    const path = f.path.map((k) => ids.get(k)!);
+    // A hop the traces imply but no line carries (a consumer reached without a producer span) would break the flow; leave it out.
+    if (d.flows.some((x) => x.title === f.title) || !path.every((p, i) => i === 0 || m.hopConnection(d, path[i - 1], p))) continue;
+    m.addFlow(d, { title: f.title, path, ...at });
+    added.flows.push(f.title);
+  }
+  // Traces are a sample: a service missing from them has not necessarily gone.
+  if (sync && format !== 'otel') {
     // Only parts this format put there: a hand-drawn part, or one from another file type, is not the infrastructure's to remove.
     const keys = new Set(parts.map((p) => `${format}:${p.key}`));
     for (const c of d.components.filter((x) => x.source?.startsWith(`${format}:`) && !keys.has(x.source))) {
@@ -399,7 +423,7 @@ export function importInfra(d: Design, text: string, { step, guess, sync }: { st
 /** What `text` has that design `d` lacks, and the imported parts it no longer has, without changing `d`. */
 export function infraDrift(d: Design, text: string, guess?: (words: string) => ComponentType | undefined) {
   const added = importInfra(structuredClone(d), text, { sync: true, guess });
-  return { ...added, drifted: added.components.length + added.connections.length + added.boundaries.length + added.removed.length > 0 };
+  return { ...added, drifted: Object.values(added).some((x) => x.length > 0) };
 }
 
 /** Brings `d` in line with `text` as one new, unseen step for review. Returns the step id, or undefined when nothing differs. */
@@ -407,7 +431,14 @@ export function syncInfra(d: Design, text: string, title: string, guess?: (words
   const drift = infraDrift(d, text, guess);
   if (!drift.drifted) return undefined;
   const found = [...drift.components, ...drift.connections, ...drift.boundaries];
-  const summary = [found.length && `Found in the infrastructure but not in the design: ${found.join(', ')}.`, drift.removed.length && `No longer in the infrastructure: ${drift.removed.join(', ')}.`].filter(Boolean).join(' ');
+  const summary = [
+    found.length && `Found in the infrastructure but not in the design: ${found.join(', ')}.`,
+    drift.removed.length && `No longer in the infrastructure: ${drift.removed.join(', ')}.`,
+    drift.updated.length && `Measured load and latency: ${drift.updated.join('; ')}.`,
+    drift.flows.length && `Flows seen in traces: ${drift.flows.join(', ')}.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
   const step = m.addStep(d, { title, summary });
   importInfra(d, text, { step, sync: true, guess });
   return step;
