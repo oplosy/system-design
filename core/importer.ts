@@ -7,7 +7,8 @@ import { importInfra, readInfra } from './infra.ts';
 import { isStructurizr, readStructurizr } from './structurizr.ts';
 
 // One way in for anything pasted, dropped or handed over: Mermaid (flowchart, sequence, C4, architecture),
-// C4-PlantUML, draw.io, Structurizr DSL, docker-compose, Kubernetes, Terraform JSON or traces.
+// C4-PlantUML, draw.io, Structurizr DSL, docker-compose, Kubernetes, Terraform JSON, CloudFormation, Pulumi,
+// Backstage, OpenAPI, AsyncAPI or traces.
 
 const NAMES = {
   flowchart: 'Mermaid flowchart',
@@ -19,6 +20,11 @@ const NAMES = {
   compose: 'docker-compose file',
   kubernetes: 'Kubernetes manifests',
   terraform: 'Terraform JSON',
+  cloudformation: 'CloudFormation template',
+  pulumi: 'Pulumi stack export',
+  backstage: 'Backstage catalog',
+  openapi: 'OpenAPI document',
+  asyncapi: 'AsyncAPI document',
   otel: 'traces',
 } as const;
 
@@ -58,7 +64,7 @@ export function importAsStep(d: Design, text: string, { title, seen, guess }: { 
   const format = formatOf(text);
   if (!format) {
     throw new Error(
-      'Paste a Mermaid flowchart, sequence, C4 or architecture diagram, C4-PlantUML, a draw.io diagram, a Structurizr workspace, a docker-compose file, Kubernetes manifests, "terraform show -json" output or OTLP / Jaeger traces.',
+      'Paste a Mermaid flowchart, sequence, C4 or architecture diagram, C4-PlantUML, a draw.io diagram, a Structurizr workspace, a docker-compose file, Kubernetes manifests, "terraform show -json" output, a CloudFormation or CDK template, a Pulumi stack export, a Backstage catalog, an OpenAPI or AsyncAPI document, or OTLP / Jaeger traces.',
     );
   }
   const step = m.addStep(d, { title: title ?? `Import ${format}`, seen });

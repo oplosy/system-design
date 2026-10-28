@@ -1566,7 +1566,7 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
   const options = [
     { id: '', title: 'Blank sheet', description: 'Nothing on it yet. Build it yourself or let an agent fill it in.', steps: 1, unseen: 0 },
     { id: MERMAID, title: 'Diagram from another tool', description: 'Paste Mermaid (flowchart, sequence, C4, architecture), C4-PlantUML, draw.io XML or a Structurizr workspace; boxes, arrows and groups become parts, lines and boundaries, a sequence or dynamic view a flow.', steps: 1, unseen: 0 },
-    { id: INFRA, title: 'Compose, Kubernetes, Terraform or traces', description: 'Paste a compose file, manifests, "terraform show -json" output, or OpenTelemetry / Jaeger traces; services, workloads and resources become parts, dependencies and calls become lines (traces add measured load, latency and flows).', steps: 1, unseen: 0 },
+    { id: INFRA, title: 'Infrastructure, catalogs, API specs or traces', description: 'Paste a compose file, manifests, "terraform show -json" output, a CloudFormation / CDK template, a Pulumi stack export, a Backstage catalog, an OpenAPI or AsyncAPI document, or OpenTelemetry / Jaeger traces; services, workloads and resources become parts, dependencies and calls become lines (traces add measured load, latency and flows).', steps: 1, unseen: 0 },
     ...templates,
   ];
   return (
@@ -1616,7 +1616,7 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
                 ? 'flowchart LR\n  user((User)) --> api[Orders API]\n  api --> db[(Orders DB)]'
                 : 'services:\n  api:\n    build: .\n    depends_on: [db]\n  db:\n    image: postgres:16'
             }
-            aria-label={template === MERMAID ? 'Mermaid, C4-PlantUML, draw.io or Structurizr' : 'docker-compose, Kubernetes YAML, Terraform JSON or trace JSON'}
+            aria-label={template === MERMAID ? 'Mermaid, C4-PlantUML, draw.io or Structurizr' : 'docker-compose, Kubernetes YAML, Terraform JSON, CloudFormation, Pulumi, Backstage, OpenAPI, AsyncAPI or trace JSON'}
             spellCheck={false}
             onChange={(e) => {
               setSource(e.target.value);

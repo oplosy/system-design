@@ -3,7 +3,7 @@
   "title": "System design – local design canvas",
   "description": "Local canvas where agents add architecture steps over MCP and a reviewer walks them in the browser. Designs are JSON files on disk.",
   "repo": "https://github.com/oplosy/system-design/tree/main",
-  "rev": 10,
+  "rev": 11,
   "steps": [
     {
       "id": "start",
@@ -68,6 +68,12 @@
       "id": "import-draw-io-and-structurizr-dsl",
       "title": "Import draw.io and Structurizr DSL",
       "summary": "The importer now reads draw.io diagrams and Structurizr workspaces. draw.io input can be a file, compressed pages or shapes copied from draw.io. Both readers produce the same diagram shape that Mermaid and C4 use, so merging by name and summarising what was left out work the same everywhere. Files can also be dropped onto the canvas.",
+      "seen": false
+    },
+    {
+      "id": "read-backstage-openapi-asyncapi-cloudfor",
+      "title": "Read Backstage, OpenAPI, AsyncAPI, CloudFormation and Pulumi",
+      "summary": "The infrastructure reader now takes service catalogs, API specs and two more IaC formats. Backstage, OpenAPI and AsyncAPI get their own small readers; CloudFormation (and cdk synth) and Pulumi stack exports are converted into the Terraform JSON shape and go through the existing Terraform reader. All of them record a source, so paste, import_diagram, sync_infra and drift work for them unchanged.",
       "seen": false
     }
   ],
@@ -251,6 +257,15 @@
       "label": ".drawio / .dsl files",
       "description": "Diagrams kept in draw.io, diagrams.net, Confluence or Structurizr",
       "step": "import-draw-io-and-structurizr-dsl"
+    },
+    {
+      "id": "spec-readers",
+      "type": "module",
+      "label": "Catalog and API spec readers",
+      "tech": "TypeScript",
+      "description": "Backstage catalog-info.yaml (Components/Resources → parts, Systems → boundaries, dependsOn and provided/consumed APIs → lines), OpenAPI (service with its endpoints), AsyncAPI 2/3 (channels → queue/topic/stream parts with async lines).",
+      "code": "core/specs.ts",
+      "step": "read-backstage-openapi-asyncapi-cloudfor"
     }
   ],
   "connections": [
@@ -491,6 +506,13 @@
       "to": "importer",
       "label": "paste or drop",
       "step": "import-draw-io-and-structurizr-dsl"
+    },
+    {
+      "id": "infra-reader-to-spec-readers",
+      "from": "infra-reader",
+      "to": "spec-readers",
+      "label": "catalogs, API specs",
+      "step": "read-backstage-openapi-asyncapi-cloudfor"
     }
   ],
   "notes": [
@@ -704,6 +726,34 @@
         "importer"
       ],
       "step": "import-draw-io-and-structurizr-dsl"
+    },
+    {
+      "id": "decision-map-cloudformation-and-pulumi-o",
+      "title": "Map CloudFormation and Pulumi onto the Terraform reader",
+      "why": "Pulumi's AWS/GCP/Azure-classic providers are bridged from Terraform and CloudFormation types map almost one to one, so converting them to Terraform resources reuses the type table, the wiring rules (listeners, event source mappings, subscriptions) and the plumbing filter instead of writing two more graph walkers.",
+      "alternatives": [
+        "Separate readers with their own type tables and link rules",
+        "Only read Terraform and ask users to convert"
+      ],
+      "tradeoffs": "A few names need override tables (RDS instance, ELBv2, API Gateway, Cloud Run); azure-native and Pulumi component resources are not drawn; left-out lists are translated back to the source format's type names.",
+      "links": [
+        "infra-reader",
+        "spec-readers"
+      ],
+      "step": "read-backstage-openapi-asyncapi-cloudfor"
+    },
+    {
+      "id": "decision-backstage-apis-become-lines-not",
+      "title": "Backstage APIs become lines, not parts",
+      "why": "An API entity is a contract between a provider and its consumers; drawing it as the line between them keeps the sheet about running parts while naming what flows.",
+      "alternatives": [
+        "Draw each API as its own part"
+      ],
+      "tradeoffs": "An API consumed but not provided in the pasted catalog draws nothing and is listed as left out.",
+      "links": [
+        "spec-readers"
+      ],
+      "step": "read-backstage-openapi-asyncapi-cloudfor"
     }
   ],
   "boundaries": [],

@@ -27,7 +27,7 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Put a monthly cost on parts that cost real money (in the design's currency, USD unless set); each step then shows how much it moves the total.
 - Set code on parts whose code you know: a URL, or a path that opens against the design's repo.
 - Tag parts by concern ("payments", "pii", a team name) when a design is big; each tag becomes a view the reviewer can switch to.
-- When the project has docker-compose files, Kubernetes manifests or Terraform, run sync_infra with dry_run to see what the design is missing, and sync it as a step when the infrastructure is the truth.
+- When the project has docker-compose files, Kubernetes manifests, Terraform, CloudFormation / CDK, Pulumi or a Backstage catalog, run sync_infra with dry_run to see what the design is missing, and sync it as a step when the infrastructure is the truth.
 - When the project already has diagrams (Mermaid, C4-PlantUML, draw.io files, a Structurizr workspace), bring them in with import_diagram instead of redrawing them.
 - After a step, run lint and fix what it finds or say in a note why it is fine.
 - Start from list_designs; call get_design before editing an existing one.
@@ -326,7 +326,7 @@ server.registerTool(
   'sync_infra',
   {
     description:
-      'Compare a design with the infrastructure it describes (docker-compose, Kubernetes YAML, `terraform show -json` output, or OpenTelemetry OTLP / Jaeger JSON traces) and bring it in line as one new step for review: add the parts, lines and boundaries it lacks, and remove parts once imported from that format that the infrastructure no longer has. Traces also set measured qps and latency on lines and add a flow per kind of request; they never remove parts. Parts match by their recorded source, else by id or label.',
+      'Compare a design with the infrastructure it describes (docker-compose, Kubernetes YAML, `terraform show -json` output, a CloudFormation template or `cdk synth` output, `pulumi stack export` output, a Backstage catalog-info.yaml, an OpenAPI or AsyncAPI document, or OpenTelemetry OTLP / Jaeger JSON traces) and bring it in line as one new step for review: add the parts, lines and boundaries it lacks, and remove parts once imported from that format that the infrastructure no longer has. Traces also set measured qps and latency on lines and add a flow per kind of request; they never remove parts. Parts match by their recorded source, else by id or label.',
     inputSchema: {
       design,
       path: z.string().describe('Absolute path of the infrastructure file'),
@@ -345,7 +345,7 @@ server.registerTool(
   'import_diagram',
   {
     description:
-      'Add an existing diagram to a design as one new step for review: a Mermaid flowchart, sequence diagram (becomes a flow), C4 or architecture-beta diagram, C4-PlantUML, a draw.io file (.drawio, compressed or not), a Structurizr DSL workspace (dynamic views become flows), docker-compose, Kubernetes YAML, `terraform show -json` output or OTLP / Jaeger traces. Parts the design already has (same name) are reused, so it extends a design rather than copying one. Give the text, or the path of a file holding it.',
+      'Add an existing diagram to a design as one new step for review: a Mermaid flowchart, sequence diagram (becomes a flow), C4 or architecture-beta diagram, C4-PlantUML, a draw.io file (.drawio, compressed or not), a Structurizr DSL workspace (dynamic views become flows), docker-compose, Kubernetes YAML, `terraform show -json` output, CloudFormation / `cdk synth`, `pulumi stack export`, a Backstage catalog, OpenAPI, AsyncAPI (channels become queues or topics with async lines) or OTLP / Jaeger traces. Parts the design already has (same name) are reused, so it extends a design rather than copying one. Give the text, or the path of a file holding it.',
     inputSchema: {
       design,
       text: z.string().optional().describe('The diagram or file content'),

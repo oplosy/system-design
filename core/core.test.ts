@@ -1022,3 +1022,150 @@ test('imports draw.io files and Structurizr workspaces, our own exports included
   importAsStep(z, aws, { guess: guessType });
   assert.match(z.steps.at(-1)!.summary!, /^From a draw\.io diagram: 4 parts, 2 lines, 1 boundary\. Left out: 1 more page/);
 });
+
+test('imports catalogs, API specs, CloudFormation and Pulumi stacks, and checks drift against them', async () => {
+  const { readInfra, infraDrift } = await import('./infra.ts');
+  const { formatOf, importAsStep } = await import('./importer.ts');
+  const { guessType } = await import('../src/shapes.ts');
+  const lines = (d: ReturnType<typeof m.blankDesign>) =>
+    d.connections.map((c) => `${d.components.find((x) => x.id === c.from)!.label}>${d.components.find((x) => x.id === c.to)!.label}${c.label ? `:${c.label}` : ''}${c.async ? ':async' : ''}`).sort();
+
+  // Backstage: Systems box their parts, dependsOn and provided / consumed APIs become lines; Kubernetes-like kind: does not fool it.
+  const catalog = `
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata: { name: shop, title: Shop }
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: orders
+  description: Takes orders
+  annotations: { backstage.io/source-location: "url:https://github.com/acme/orders/" }
+spec: { type: service, system: shop, dependsOn: [resource:orders-db], providesApis: [orders-api] }
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata: { name: storefront }
+spec: { type: website, system: shop, consumesApis: [orders-api, payments-api] }
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata: { name: orders-db }
+spec: { type: database, system: shop }
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata: { name: sessions }
+spec: { type: redis }
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata: { name: orders-api, title: Orders API }
+spec: { type: openapi }
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata: { name: team-a }
+`;
+  assert.equal(formatOf(catalog), 'Backstage catalog');
+  const b = m.blankDesign('cat', 'Cat');
+  importAsStep(b, catalog, { guess: guessType });
+  assert.deepEqual(
+    b.components.map((c) => `${c.label}:${c.type}:${c.tech ?? ''}:${c.boundary ?? ''}`),
+    ['orders:service::shop', 'storefront:client::shop', 'orders-db:sql-db::shop', 'sessions:cache:redis:'],
+  );
+  assert.equal(b.components[0].description, 'Takes orders');
+  assert.equal(b.components[0].code, 'https://github.com/acme/orders/');
+  assert.deepEqual(lines(b), ['orders>orders-db', 'storefront>orders:Orders API']);
+  assert.match(b.steps.at(-1)!.summary!, /Left out: Group team-a, API payments-api \(no provider in the catalog\)/);
+  assert.equal(infraDrift(b, catalog, guessType).drifted, false, 'a design imported from a catalog has no drift against it');
+  assert.deepEqual(infraDrift(b, catalog.replace('dependsOn: [resource:orders-db], ', ''), guessType).drifted, false, 'a line gone from the catalog is not removed');
+  assert.deepEqual(infraDrift(b, catalog.replace(/---\napiVersion: backstage.io\/v1alpha1\nkind: Resource\nmetadata: \{ name: sessions \}\nspec: \{ type: redis \}\n/, ''), guessType).removed, ['sessions']);
+
+  // OpenAPI: one service, its endpoints in the description.
+  const api = JSON.stringify({ openapi: '3.1.0', info: { title: 'Orders API', version: '2.0', description: 'Orders.' }, paths: { '/orders': { get: {}, post: {}, parameters: [] }, '/orders/{id}': { delete: {} } } });
+  assert.equal(formatOf(api), 'OpenAPI document');
+  const o = readInfra(api).parts[0];
+  assert.deepEqual([o.label, o.type, o.tech, o.description], ['Orders API', 'service', 'REST 2.0', 'Orders.\n\nEndpoints: GET /orders, POST /orders, DELETE /orders/{id}']);
+
+  // AsyncAPI 2 names operations from the client's side; 3 says send / receive. Kafka channels are streams.
+  const v2 = `asyncapi: 2.6.0
+info: { title: Orders }
+servers: { prod: { url: kafka:9092, protocol: kafka } }
+channels:
+  order/placed: { publish: { message: {} } }
+  invoice/sent: { subscribe: { message: {} } }
+`;
+  const v3 = JSON.stringify({
+    asyncapi: '3.0.0',
+    info: { title: 'Orders' },
+    servers: { prod: { host: 'mq', protocol: 'amqp' } },
+    channels: { orderPlaced: { address: 'order/placed' }, invoiceSent: { address: 'invoice/sent' } },
+    operations: { onOrder: { action: 'receive', channel: { $ref: '#/channels/orderPlaced' } }, sendInvoice: { action: 'send', channel: { $ref: '#/channels/invoiceSent' } } },
+  });
+  for (const [text, type] of [[v2, 'stream'], [v3, 'queue']] as const) {
+    assert.equal(formatOf(text), 'AsyncAPI document');
+    const a = m.blankDesign('a', 'A');
+    importAsStep(a, text, { guess: guessType });
+    assert.deepEqual(a.components.map((c) => `${c.label}:${c.type}`), ['Orders:service', `order/placed:${type}`, `invoice/sent:${type}`]);
+    assert.deepEqual(lines(a), ['Orders>invoice/sent:async', 'order/placed>Orders:async']);
+  }
+
+  // CloudFormation YAML with short-form functions: types, references and wiring follow the Terraform reader.
+  const cfn = `AWSTemplateFormatVersion: "2010-09-09"
+Parameters: { Stage: { Type: String } }
+Resources:
+  Jobs: { Type: AWS::SQS::Queue }
+  Orders: { Type: AWS::DynamoDB::Table }
+  Db: { Type: AWS::RDS::DBInstance, Properties: { Engine: postgres } }
+  Role: { Type: AWS::IAM::Role }
+  Worker:
+    Type: AWS::Lambda::Function
+    Properties:
+      Role: !GetAtt Role.Arn
+      Environment: { Variables: { TABLE: !Ref Orders, DB: !Sub "\${Db.Endpoint.Address}", STAGE: !Ref Stage } }
+  Trigger:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties: { EventSourceArn: !GetAtt [Jobs, Arn], FunctionName: !Ref Worker }
+`;
+  assert.equal(formatOf(cfn), 'CloudFormation template');
+  const c = readInfra(cfn);
+  assert.deepEqual(c.parts.map((p) => `${p.label}:${p.type}:${p.tech}`), ['Jobs:queue:SQS', 'Orders:nosql-db:DynamoDB', 'Db:sql-db:RDS postgres', 'Worker:function:Lambda']);
+  assert.deepEqual(c.links.map((l) => `${l.from}>${l.to}`).sort(), ['aws_lambda_function.Worker>aws_db_instance.Db', 'aws_lambda_function.Worker>aws_dynamodb_table.Orders', 'aws_sqs_queue.Jobs>aws_lambda_function.Worker']);
+  assert.deepEqual(c.skipped, ['AWS::IAM::Role', 'AWS::Lambda::EventSourceMapping']);
+
+  // cdk synth: JSON, names from construct paths, the CDK metadata resource ignored.
+  const cdk = JSON.stringify({
+    Resources: {
+      UploadsB4A1E2C3: { Type: 'AWS::S3::Bucket', Metadata: { 'aws:cdk:path': 'Shop/Uploads/Resource' } },
+      ResizeFn9F3A: { Type: 'AWS::Lambda::Function', Properties: { Environment: { Variables: { BUCKET: { Ref: 'UploadsB4A1E2C3' } } } }, Metadata: { 'aws:cdk:path': 'Shop/Resize/Resource' } },
+      CDKMetadata: { Type: 'AWS::CDK::Metadata' },
+    },
+  });
+  const k = readInfra(cdk);
+  assert.deepEqual([k.parts.map((p) => p.label), k.links.length, k.skipped], [['Uploads', 'Resize'], 1, []]);
+
+  // Pulumi stack export: bridged type names, urn names, dependencies; components and the stack itself are not parts.
+  const urn = (t: string, n: string) => `urn:pulumi:dev::shop::${t}::${n}`;
+  const stack = JSON.stringify({
+    version: 3,
+    deployment: {
+      resources: [
+        { urn: urn('pulumi:pulumi:Stack', 'shop-dev'), type: 'pulumi:pulumi:Stack', custom: false },
+        { urn: urn('my:app:Api', 'api'), type: 'my:app:Api', custom: false },
+        { urn: urn('aws:rds/instance:Instance', 'db'), type: 'aws:rds/instance:Instance', custom: true, inputs: { engine: 'mysql' } },
+        { urn: urn('aws:ec2/securityGroup:SecurityGroup', 'sg'), type: 'aws:ec2/securityGroup:SecurityGroup', custom: true },
+        { urn: urn('my:app:Api$aws:lb/loadBalancer:LoadBalancer', 'front'), type: 'aws:lb/loadBalancer:LoadBalancer', custom: true },
+        { urn: urn('my:app:Api$aws:ecs/service:Service', 'web'), type: 'aws:ecs/service:Service', custom: true, dependencies: [urn('aws:rds/instance:Instance', 'db'), urn('aws:ec2/securityGroup:SecurityGroup', 'sg')] },
+        { urn: urn('aws:lb/listener:Listener', 'http'), type: 'aws:lb/listener:Listener', custom: true, dependencies: [urn('my:app:Api$aws:lb/loadBalancer:LoadBalancer', 'front'), urn('my:app:Api$aws:ecs/service:Service', 'web')] },
+        { urn: urn('gcp:cloudrun/service:Service', 'jobs'), type: 'gcp:cloudrun/service:Service', custom: true },
+      ],
+    },
+  });
+  assert.equal(formatOf(stack), 'Pulumi stack export');
+  const p = readInfra(stack);
+  assert.deepEqual(p.parts.map((x) => `${x.label}:${x.type}:${x.tech}`), ['db:sql-db:RDS mysql', 'front:load-balancer:ALB/NLB', 'web:service:ECS', 'jobs:service:Cloud Run']);
+  assert.deepEqual(p.links.map((l) => `${l.from.split('.')[1]}>${l.to.split('.')[1]}`).sort(), ['front>web', 'web>db']);
+  assert.deepEqual(p.skipped, ['aws:ec2/securityGroup:SecurityGroup', 'aws:lb/listener:Listener']);
+});

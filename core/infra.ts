@@ -2,17 +2,19 @@ import { parseAllDocuments } from 'yaml';
 import type { BoundaryKind, ComponentType, Design } from './schema.ts';
 import * as m from './mutations.ts';
 import { readSpans, readTraces, type TraceFlow } from './traces.ts';
+import { asyncapi, backstage, isBackstage, openapi } from './specs.ts';
 
 // Reads a docker-compose file or Kubernetes manifests into parts, lines and boundaries.
 // Lines come from depends_on/links, Ingress backends and environment values that name another part's host.
 
-type Part = { key: string; label: string; image?: string; type: ComponentType; tech?: string; group?: string; code?: string };
-type Link = { from: string; to: string; label?: string; qps?: number; latency?: number; async?: boolean };
-type Group = { key: string; label: string; kind: BoundaryKind };
-type Doc = Record<string, any>;
+export type Part = { key: string; label: string; image?: string; type: ComponentType; tech?: string; description?: string; group?: string; code?: string };
+export type Link = { from: string; to: string; label?: string; qps?: number; latency?: number; async?: boolean };
+export type Group = { key: string; label: string; kind: BoundaryKind };
+export type Doc = Record<string, any>;
 
 const obj = (x: unknown): Doc => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Doc) : {});
 const list = (x: unknown): unknown[] => (Array.isArray(x) ? x : []);
+const str = (x: unknown) => (typeof x === 'string' && x ? x : undefined);
 
 // Variable names whose value is an address, e.g. DB_HOST, API_URL, KAFKA_BOOTSTRAP_SERVERS.
 const ADDRESS_KEY = /(host|hosts|url|urls|uri|addr|address|endpoint|server|servers|dsn|broker|brokers|upstream)$/i;
@@ -46,13 +48,21 @@ export function readInfra(text: string) {
     return { format: 'otel', parts, links, flows, groups: [] as Group[], skipped: [] as string[] };
   }
   if (/\{\{.*\}\}/.test(text)) throw new Error('This looks like a Helm template. Render it with "helm template <chart>" and paste the output.');
-  const docs = Array.from(parseAllDocuments(text));
+  const docs = Array.from(parseAllDocuments(text, { customTags: CFN_TAGS }));
   for (const doc of docs) if (doc.errors.length) throw new Error(`YAML: ${doc.errors[0].message}`);
   const values = docs.map((doc) => obj(doc.toJS())).flatMap((v) => (v.kind === 'List' ? list(v.items).map(obj) : [v]));
   if (values.length === 1 && values[0].format_version && (values[0].values || values[0].planned_values)) return { format: 'terraform', ...terraform(values[0]) };
+  if (values.length === 1 && Object.values(obj(values[0].Resources)).some((r) => /^AWS::/.test(String(obj(r).Type)))) return { format: 'cloudformation', ...cloudformation(values[0]) };
+  if (values.length === 1 && Array.isArray(obj(values[0].deployment).resources)) return { format: 'pulumi', ...pulumi(values[0]) };
+  if (values.length === 1 && (typeof values[0].openapi === 'string' || values[0].swagger)) return { format: 'openapi', ...openapi(values[0]) };
+  if (values.length === 1 && values[0].asyncapi) return { format: 'asyncapi', ...asyncapi(values[0]) };
   if (values.length === 1 && Object.keys(obj(values[0].services)).length) return { format: 'compose', ...compose(values[0]) };
+  // Backstage entities have a kind: too, so they go before Kubernetes.
+  if (isBackstage(values)) return { format: 'backstage', ...backstage(values) };
   if (values.some((v) => typeof v.kind === 'string')) return { format: 'kubernetes', ...kube(values) };
-  throw new Error('Paste a docker-compose file (with services:), Kubernetes manifests (with kind:), "terraform show -json" output, or OpenTelemetry (OTLP JSON) or Jaeger traces.');
+  throw new Error(
+    'Paste a docker-compose file (with services:), Kubernetes manifests (with kind:), "terraform show -json" output, a CloudFormation or CDK template, a Pulumi stack export, a Backstage catalog, an OpenAPI or AsyncAPI document, or OpenTelemetry (OTLP JSON) or Jaeger traces.',
+  );
 }
 
 /** Terraform resource types that draw as a part: [type, tech]. Everything else (IAM, security groups, routes…) is left out. */
@@ -255,6 +265,118 @@ function terraform(file: Doc) {
   return { parts, links, groups, skipped: [...skipped].map(([type, n]) => (n > 1 ? `${type} ×${n}` : type)) };
 }
 
+/** CloudFormation's short-form functions (!Ref, !GetAtt, !Sub…) read as their long form, so references survive. */
+const CFN_TAGS = ['Ref', 'Condition', ...['GetAtt', 'Sub', 'Join', 'Select', 'Split', 'If', 'Equals', 'Not', 'And', 'Or', 'FindInMap', 'Base64', 'Cidr', 'GetAZs', 'ImportValue'].map((f) => `Fn::${f}`)].flatMap(
+  (name) => {
+    const tag = `!${name.replace('Fn::', '')}`;
+    return [
+      { tag, resolve: (v: string) => ({ [name]: v }) },
+      { tag, collection: 'seq' as const, resolve: (v: { toJSON(): unknown }) => ({ [name]: v.toJSON() }) },
+      { tag, collection: 'map' as const, resolve: (v: { toJSON(): unknown }) => ({ [name]: v.toJSON() }) },
+    ];
+  },
+);
+
+/** CloudFormation services whose Terraform resources are named differently: AWS::<service>::<Resource> → aws_<service>_<resource>. */
+const CFN_SERVICES: Record<string, string> = { ec2: '', apigateway: 'api_gateway', elasticloadbalancingv2: 'lb', events: 'cloudwatch_event', stepfunctions: 'sfn', opensearchservice: 'opensearch', logs: 'cloudwatch_log' };
+const CFN_RESOURCES: Record<string, string> = {
+  'AWS::RDS::DBInstance': 'aws_db_instance',
+  'AWS::RDS::DBCluster': 'aws_rds_cluster',
+  'AWS::ElastiCache::CacheCluster': 'aws_elasticache_cluster',
+  'AWS::ElasticLoadBalancingV2::LoadBalancer': 'aws_lb',
+  'AWS::ElasticLoadBalancing::LoadBalancer': 'aws_elb',
+  'AWS::Events::EventBus': 'aws_cloudwatch_event_bus',
+  'AWS::Route53::HostedZone': 'aws_route53_zone',
+  'AWS::SNS::Subscription': 'aws_sns_topic_subscription',
+};
+const snake = (s: string) => s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/([A-Z])([A-Z][a-z])/g, '$1_$2').toLowerCase();
+
+/** A resource's references to others: Ref, GetAtt and the ${Name} in Sub strings. */
+function cfnRefs(x: unknown): string[] {
+  if (Array.isArray(x)) return x.flatMap(cfnRefs);
+  return Object.entries(obj(x)).flatMap(([k, v]) => {
+    if (k === 'Ref') return typeof v === 'string' ? [v] : [];
+    if (k === 'Fn::GetAtt') return [String(Array.isArray(v) ? v[0] : String(v).split('.')[0])];
+    if (k === 'Fn::Sub') return [...String(Array.isArray(v) ? v[0] : v).matchAll(/\$\{([^}!.]+)/g)].map((m) => m[1]).concat(Array.isArray(v) ? cfnRefs(v[1]) : []);
+    return cfnRefs(v);
+  });
+}
+
+/**
+ * Reads a CloudFormation template (YAML or JSON, so also `cdk synth` output) by handing it to the Terraform reader:
+ * each type maps to its Terraform resource and references become depends_on, so types, wiring and plumbing match.
+ */
+function cloudformation(file: Doc) {
+  const resources = Object.entries(obj(file.Resources)).filter(([, r]) => obj(r).Type !== 'AWS::CDK::Metadata');
+  const types = new Map<string, string>();
+  const tfType = (t: string) => {
+    const [, service = '', resource = ''] = t.split('::');
+    const svc = service.toLowerCase();
+    const tf = CFN_RESOURCES[t] ?? ['aws', CFN_SERVICES[svc] ?? svc, snake(resource)].filter(Boolean).join('_');
+    types.set(tf, t);
+    return tf;
+  };
+  const address = new Map(resources.map(([id, r]) => [id, `${tfType(String(obj(r).Type))}.${id}`]));
+  const tf = terraform({
+    values: {
+      root_module: {
+        resources: resources.map(([id, r]) => {
+          const props = obj(obj(r).Properties);
+          // CDK logical ids carry a hash ("OrdersTable1A2B3C4D"); its construct path has the name it was given.
+          const path = str(obj(obj(r).Metadata)['aws:cdk:path'])?.split('/').filter((s) => s !== 'Resource' && s !== 'Default');
+          const deps = [...cfnRefs(props), ...[obj(r).DependsOn].flat().filter((x): x is string => typeof x === 'string')];
+          return { address: address.get(id), type: address.get(id)!.split('.')[0], name: id, values: { name: path?.at(-1) ?? id, engine: props.Engine }, depends_on: deps.map((x) => address.get(x)).filter(Boolean) };
+        }),
+      },
+    },
+  });
+  return { ...tf, skipped: tf.skipped.map((s) => s.replace(/^\S+/, (t) => types.get(t) ?? t)) };
+}
+
+/** Pulumi type modules whose Terraform names differ, and types that would otherwise land on the wrong resource. */
+const PULUMI_PROVIDERS: Record<string, string> = { gcp: 'google', azure: 'azurerm' };
+const PULUMI_MODULES: Record<string, string> = { apigateway: 'api_gateway', cloudrun: 'cloud_run', cloudrunv2: 'cloud_run_v2' };
+const PULUMI_TYPES: Record<string, string> = { 'aws:rds/instance:Instance': 'aws_db_instance' };
+
+/**
+ * Reads `pulumi stack export` output through the Terraform reader: Pulumi's AWS, Google Cloud and Azure (classic)
+ * providers are bridged from Terraform's, so "aws:lambda/function:Function" is aws_lambda_function, and each
+ * resource's dependencies become depends_on.
+ */
+function pulumi(file: Doc) {
+  // shortcut: components (awsx, your own) are not drawn and azure-native types are not mapped; their resources still are.
+  const resources = list(obj(file.deployment).resources).map(obj).filter((r) => r.custom && str(r.urn) && !String(r.type).startsWith('pulumi:'));
+  const known = (t: string) => t in TF_TYPES || TF_BRIDGE.test(t) || TF_PLUMBING.test(t);
+  const types = new Map<string, string>();
+  const tfType = (t: string) => {
+    const [pkg = '', path = '', resource = ''] = t.split(':');
+    const p = PULUMI_PROVIDERS[pkg] ?? pkg;
+    const mod = PULUMI_MODULES[path.split('/')[0].toLowerCase()] ?? path.split('/')[0].toLowerCase();
+    const res = snake(resource).replace(/_?v2$/, '');
+    const tries = [PULUMI_TYPES[t], `${p}_${mod}_${res}`, `${p}_${res}`, `${p}_${mod}`].filter((x): x is string => !!x);
+    const tf = tries.find(known) ?? tries[0];
+    types.set(tf, t);
+    return tf;
+  };
+  // urn:pulumi:stack::project::parent$type::name → name
+  const name = (r: Doc) => String(r.urn).split('::').pop()!;
+  const address = new Map(resources.map((r) => [String(r.urn), `${tfType(String(r.type))}.${name(r).replace(/[^\w-]/g, '_')}`]));
+  const tf = terraform({
+    values: {
+      root_module: {
+        resources: resources.map((r) => ({
+          address: address.get(r.urn),
+          type: address.get(r.urn)!.split('.')[0],
+          name: name(r),
+          values: { name: name(r), engine: obj(r.outputs).engine ?? obj(r.inputs).engine },
+          depends_on: list(r.dependencies).map((u) => address.get(String(u))).filter(Boolean),
+        })),
+      },
+    },
+  });
+  return { ...tf, skipped: tf.skipped.map((s) => s.replace(/^\S+/, (t) => types.get(t) ?? t)) };
+}
+
 function compose(file: Doc) {
   const services = obj(file.services);
   const names = Object.keys(services);
@@ -381,7 +503,7 @@ export function importInfra(d: Design, text: string, { step, guess, sync }: { st
     const tech = p.tech ?? p.image?.split('@')[0].split('/').pop();
     // A part with a known tech (Terraform resource, Ingress) already has its type; only image-based parts need a guess.
     const type = (p.type === 'service' && !p.tech && guess?.(`${tech?.split(':')[0] ?? ''} ${p.label}`)) || p.type;
-    ids.set(p.key, m.addComponent(d, { id: p.label, type, label: p.label, tech, code: p.code, source, boundary: p.group && boundaryIds.get(p.group), ...at }));
+    ids.set(p.key, m.addComponent(d, { id: p.label, type, label: p.label, tech, description: p.description, code: p.code, source, boundary: p.group && boundaryIds.get(p.group), ...at }));
     added.components.push(p.label);
   }
   const label = (id: string) => d.components.find((c) => c.id === id)?.label ?? id;
