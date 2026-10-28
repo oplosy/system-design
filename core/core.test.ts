@@ -534,3 +534,31 @@ test('imports Terraform state and plan JSON, and finds what the design lacks', a
   assert.equal(infraDrift(x, plan).drifted, false);
   assert.equal(syncInfra(x, plan, 'Again'), undefined, 'no empty step when nothing is missing');
 });
+
+test('a shared HTML file inlines the app and bakes in the design and what its parts open', async () => {
+  const { shareHtml } = await import('../server/share.ts');
+  const dist = await fs.mkdtemp(path.join(os.tmpdir(), 'sd-dist-'));
+  await fs.mkdir(path.join(dist, 'assets'));
+  await fs.writeFile(
+    path.join(dist, 'index.html'),
+    '<html><head><title>System Design</title>\n<script type="module" crossorigin src="/assets/index-a.js"></script>\n<link rel="stylesheet" crossorigin href="/assets/index-b.css"></head><body></body></html>',
+  );
+  await fs.writeFile(path.join(dist, 'assets/index-a.js'), 'const s = "</script>"; const r = "$&";');
+  await fs.writeFile(path.join(dist, 'assets/index-b.css'), 'body{color:red}');
+  const inner = await store.createDesign({ id: 'share-inner', title: 'Inner' });
+  const outer = await store.createDesign({ id: 'share-outer', title: 'Outer <b>' });
+  m.addComponent(outer, { type: 'service', label: '</script><x>', detail: inner.id });
+  m.addComponent(outer, { type: 'service', label: 'Gone', detail: 'share-missing' });
+  await store.writeDesign(outer);
+
+  const html = await shareHtml('share-outer', dist);
+  assert.match(html, /<title>Outer &#60;b&#62;<\/title>/);
+  assert.match(html, /<style>body\{color:red\}<\/style>/);
+  assert.ok(html.includes('<script type="module">const s = "<\\/script>"; const r = "$&";</script>'), 'the bundle cannot close its tag, and "$&" stays literal');
+  assert.doesNotMatch(html, /src="\/assets|href="\/assets/);
+  const baked = JSON.parse(html.match(/<script type="application\/json" id="shared-designs">(.*?)<\/script>/s)![1]);
+  assert.deepEqual(baked.map((d: { id: string }) => d.id), ['share-outer', 'share-inner'], 'drill-downs come along; a missing one is skipped');
+  assert.equal(baked[0].components[0].label, '</script><x>');
+  await assert.rejects(shareHtml('share-nope', dist), /not found/);
+  await assert.rejects(shareHtml('share-outer', path.join(dist, 'none')), /npm run build/);
+});

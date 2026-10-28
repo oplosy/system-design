@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 import { ValidationError } from '../core/schema.ts';
 import { ConflictError, DESIGNS_DIR, NotFoundError, createDesign, listDesigns, listTemplates, readDesign, writeDesign } from '../core/store.ts';
+import { shareHtml } from './share.ts';
 
 const MAX_BODY = 5 * 1024 * 1024;
 
@@ -59,7 +60,7 @@ export function createApi() {
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://local');
-    const [, resource, id] = url.pathname.split('/');
+    const [, resource, id, sub] = url.pathname.split('/');
     try {
       if (resource === 'events' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
@@ -78,6 +79,12 @@ export function createApi() {
           }
           return send(res, 201, await createDesign({ id: body.id, title: body.title, template: body.template as string | undefined }));
         }
+        if (id && sub === 'share' && req.method === 'GET') {
+          const html = await shareHtml(id);
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': `attachment; filename="${id}.html"` });
+          return res.end(html);
+        }
+        if (sub) return send(res, 404, { error: 'not found' });
         if (id && req.method === 'GET') return send(res, 200, await readDesign(id));
         if (id && req.method === 'PUT') {
           const body = (await readBody(req)) as { id?: unknown };

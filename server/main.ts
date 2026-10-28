@@ -2,10 +2,9 @@
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createApi } from './api.ts';
+import { DIST } from './share.ts';
 
-const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
 const PORT = Number(process.env.PORT ?? 5180);
 const HOST = process.env.HOST ?? '127.0.0.1';
 const TYPES: Record<string, string> = {

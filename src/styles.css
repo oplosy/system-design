@@ -467,6 +467,13 @@ kbd.lead {
   margin: 0 1px;
 }
 
+.shared-tag {
+  padding: 0 8px;
+  font: 500 12px/1 var(--mono);
+  color: var(--signal);
+  white-space: nowrap;
+}
+
 .vrule {
   flex: none;
   width: 1px;

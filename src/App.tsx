@@ -22,7 +22,7 @@ import { lint } from '../core/lint.ts';
 import { importMermaid, parseMermaid } from '../core/mermaid.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
-import { ApiError, api, type Summary } from './api.ts';
+import { ApiError, api, shared, type Summary } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
@@ -287,6 +287,8 @@ function Shell() {
 
   useEffect(() => {
     refreshLists();
+    // A shared copy has no server to hear from.
+    if (shared) return;
     const es = new EventSource('/api/events');
     es.onmessage = async (ev) => {
       const { id: changed } = JSON.parse(ev.data) as { id: string };
@@ -779,9 +781,23 @@ function Shell() {
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
-  const exportAs = async (kind: 'png' | 'svg' | 'mermaid' | 'decisions') => {
+  const exportAs = async (kind: (typeof EXPORTS)[number]['kind']) => {
     if (!design) return;
     if (kind === 'mermaid') return downloadText(toMermaid(design), `${design.id}.mmd`);
+    if (kind === 'html') {
+      // The server builds the file from what is on disk, so save the last edit first.
+      clearTimeout(saveState.current.timer);
+      if (saveState.current.pending) await flush();
+      try {
+        const res = await fetch(`/api/designs/${design.id}/share`);
+        if (!res.ok) return setError(`Export failed: ${(await res.json().catch(() => ({}))).error ?? res.statusText}`);
+        const url = URL.createObjectURL(await res.blob());
+        download(url, `${design.id}.html`);
+        return setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (e) {
+        return setError(`Export failed: ${errorText(e)}`);
+      }
+    }
     if (kind === 'decisions') return downloadText(toDecisionRecord(design), `${design.id}-decisions.md`);
     const el = canvasRef.current?.querySelector<HTMLElement>('.react-flow__viewport');
     const shown = getNodes().filter((n) => !n.hidden);
@@ -948,9 +964,15 @@ function Shell() {
             <span className="vrule" />
             <AppearanceMenu sketch={sketch} onSketch={setStyle} theme={theme} onTheme={setTheme} icon={icon} />
             {design && dockToggle('right')}
-            <button className="btn ink" onClick={() => setCreating(true)}>
-              New design
-            </button>
+            {shared ? (
+              <span className="shared-tag" title="Opened from a shared file. You can walk the steps and try changes, but nothing is saved.">
+                Shared copy
+              </span>
+            ) : (
+              <button className="btn ink" onClick={() => setCreating(true)}>
+                New design
+              </button>
+            )}
           </div>
         </header>
 
@@ -1260,6 +1282,7 @@ const EXPORTS = [
   { kind: 'svg', title: 'SVG image', desc: 'Scalable, for docs and slides' },
   { kind: 'mermaid', title: 'Mermaid diagram', desc: 'Flowchart text for Markdown, GitHub, Notion' },
   { kind: 'decisions', title: 'Decision record', desc: 'Every decision with why, alternatives and cost, as Markdown' },
+  { kind: 'html', title: 'Shared HTML', desc: 'One file that opens anywhere: walk the steps, play flows; nothing is saved' },
 ] as const;
 
 function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (kind: (typeof EXPORTS)[number]['kind']) => void }) {
@@ -1274,7 +1297,7 @@ function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (kind: (t
       </button>
       {open && (
         <div className="menu menu-right" role="menu" aria-label="Export">
-          {EXPORTS.map((x) => (
+          {EXPORTS.filter((x) => !(shared && x.kind === 'html')).map((x) => (
             <button
               key={x.kind}
               role="menuitem"

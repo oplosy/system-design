@@ -3,7 +3,7 @@
   "title": "System design – local design canvas",
   "description": "Local canvas where agents add architecture steps over MCP and a reviewer walks them in the browser. Designs are JSON files on disk.",
   "repo": "https://github.com/oplosy/system-design/tree/main",
-  "rev": 2,
+  "rev": 3,
   "steps": [
     {
       "id": "start",
@@ -20,6 +20,12 @@
       "id": "drift-check-against-compose-kubernetes-a",
       "title": "Drift check against compose, Kubernetes and Terraform",
       "summary": "Adds Terraform JSON to the infrastructure reader and a drift check that reuses the import in sync mode: it reports what the infrastructure has and the design lacks, and can add it as a step for review. Exposed as a CI CLI and the sync_infra MCP tool.",
+      "seen": false
+    },
+    {
+      "id": "shareable-read-only-html-file",
+      "title": "Shareable read-only HTML file",
+      "summary": "Exports a design (plus the designs its parts open) as one self-contained HTML file: the built app with script and styles inlined and the designs baked in as JSON. In that file the client API switches to an in-memory store, so it runs from disk or any static host with no server.",
       "seen": false
     }
   ],
@@ -121,6 +127,35 @@
       "type": "file-storage",
       "label": "compose / k8s YAML / terraform show -json",
       "step": "drift-check-against-compose-kubernetes-a"
+    },
+    {
+      "id": "share-builder",
+      "type": "module",
+      "label": "Share builder",
+      "tech": "shareHtml()",
+      "code": "server/share.ts",
+      "step": "shareable-read-only-html-file"
+    },
+    {
+      "id": "share-cli",
+      "type": "console",
+      "label": "Share CLI",
+      "tech": "node cli/share.ts",
+      "code": "cli/share.ts",
+      "step": "shareable-read-only-html-file"
+    },
+    {
+      "id": "shared-file",
+      "type": "file-storage",
+      "label": "<design>.html",
+      "description": "App + designs in one file; opens offline or on a static host",
+      "step": "shareable-read-only-html-file"
+    },
+    {
+      "id": "dist",
+      "type": "file-storage",
+      "label": "dist/ (built app)",
+      "step": "shareable-read-only-html-file"
     }
   ],
   "connections": [
@@ -243,6 +278,47 @@
       "to": "drift-cli",
       "label": "exit 1 on drift",
       "step": "drift-check-against-compose-kubernetes-a"
+    },
+    {
+      "id": "design-api-to-share-builder",
+      "from": "design-api",
+      "to": "share-builder",
+      "label": "GET /api/designs/:id/share",
+      "step": "shareable-read-only-html-file"
+    },
+    {
+      "id": "share-cli-to-share-builder",
+      "from": "share-cli",
+      "to": "share-builder",
+      "step": "shareable-read-only-html-file"
+    },
+    {
+      "id": "share-builder-to-store",
+      "from": "share-builder",
+      "to": "store",
+      "label": "design + drill-downs",
+      "step": "shareable-read-only-html-file"
+    },
+    {
+      "id": "share-builder-to-dist",
+      "from": "share-builder",
+      "to": "dist",
+      "label": "inlines JS/CSS",
+      "step": "shareable-read-only-html-file"
+    },
+    {
+      "id": "share-builder-to-shared-file",
+      "from": "share-builder",
+      "to": "shared-file",
+      "label": "writes",
+      "step": "shareable-read-only-html-file"
+    },
+    {
+      "id": "reviewer-to-shared-file",
+      "from": "reviewer",
+      "to": "shared-file",
+      "label": "opens anywhere",
+      "step": "shareable-read-only-html-file"
     }
   ],
   "notes": [
@@ -313,6 +389,23 @@
         "drift-cli"
       ],
       "step": "drift-check-against-compose-kubernetes-a"
+    },
+    {
+      "id": "decision-share-as-one-self-contained-htm",
+      "title": "Share as one self-contained HTML file, not a hosted link",
+      "why": "The tool is local and single-user; a file with the app and data inlined can be attached to a PR or put on any static host with no server, accounts or auth. Reusing the built app (with an in-memory API) keeps steps, diff, flows and drill-down identical to the real app.",
+      "alternatives": [
+        "Hosted share service with links",
+        "Separate lightweight viewer bundle",
+        "Static PNG/SVG export only"
+      ],
+      "tradeoffs": "The file is about 2 MB because it carries the whole app; it needs a fresh `npm run build` after app changes; readers can try edits but nothing is saved.",
+      "links": [
+        "share-builder",
+        "shared-file",
+        "browser-app"
+      ],
+      "step": "shareable-read-only-html-file"
     }
   ],
   "boundaries": [],
