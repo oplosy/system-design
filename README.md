@@ -23,7 +23,8 @@ A local canvas for system and architecture designs that agents build and you rev
 - **Tag views:** tag parts by concern (**Tags** in the inspector, `tags` for agents: "payments", "pii", a team). **View** in the top bar then shows one tag at a time: the other parts, their lines and notes, and boxes left empty step aside, so one model gives a payments view, a PII view, a per-team view.
 - **Capacity and failure:** a part can carry the requests per second it can take (**Capacity** in the inspector, `capacity` for agents). The inspector shows the load on the lines into it as of the step on the sheet, and lint flags it at 80% and past 100%. **If it fails** shows the flows that pass through the part and the parts users and clients could no longer reach; agents ask the same with `simulate_failure`.
 - **Lint:** amber badges flag likely smells (isolated parts, a balancer with one target, a datastore in a public network or reached straight from clients, a one-sided queue, a part near or over its capacity, an unlinked decision). Hover a badge to read it.
-- Everything is a JSON file in `designs/`, so changes are versioned and diffable. Each file carries the format `version` it was written in; older files are migrated when read, and a file from a newer version is refused rather than misread.
+- Everything is a JSON file in your data folder (`%APPDATA%system-designdesigns` on Windows, `~/Library/Application Support/system-design/designs` on macOS, `~/.local/share/system-design/designs` on Linux), outside the app, so updating or reinstalling it never touches your designs; set `SYSTEM_DESIGN_DIR` to keep them elsewhere, for example in a repo to version them with git. The app, the MCP server and the CLI all use the same folder, so what an agent writes is what you review. Designs from older versions, which kept them in `designs/` next to the code, are copied over on first start (the originals stay). **Designs** (in the design menu, and shown at start when there is no design to reopen) lists them all with search: open, rename, copy, download as `.json`, add one from a `.json` file, or delete; deleted designs go to a `.trash` folder and come back with **Restore**. The app reopens the design you last worked on.
+- Files are versioned and diffable. Each file carries the format `version` it was written in; older files are migrated when read, and a file from a newer version is refused rather than misread.
 
 ## Run
 
@@ -67,6 +68,6 @@ Main tool: `add_step` adds one reviewable change (components, connections, notes
 | `mcp/server.ts` | MCP server for agents |
 | `src/` | React Flow canvas, shapes, panels |
 | `templates/` | Starting designs |
-| `designs/` | Your designs |
+| `designs/` | Where designs lived before the data folder; read once to copy them over, then ignored |
 
 Checks: `npm test`, `npm run typecheck`. Requires Node 24+ (runs TypeScript directly).

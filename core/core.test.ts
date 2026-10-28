@@ -1233,3 +1233,41 @@ test('pasted files reuse parts by name, and catalogs, specs and stacks keep thei
   assert.deepEqual(p.parts.map((q) => `${q.label}:${q.type}:${q.group ?? ''}`), ['assets:object-storage:shop', 'assets:object-storage:shop/web', 'sessions:cache:']);
   assert.deepEqual(p.groups.map((g) => `${g.key}:${g.label}:${g.parent ?? ''}`), ['shop:shop:', 'shop/web:web:shop']);
 });
+
+test('designs move to the data folder once, go to the trash and come back, and copy or import under a free id', async () => {
+  // The old folder next to the code is copied once; what is already there wins, and a marker stops a second copy.
+  const from = await fs.mkdtemp(path.join(os.tmpdir(), 'sd-legacy-'));
+  const to = await fs.mkdtemp(path.join(os.tmpdir(), 'sd-data-'));
+  await fs.writeFile(path.join(from, 'old.json'), JSON.stringify(m.blankDesign('old', 'Old')));
+  await fs.writeFile(path.join(from, 'kept.json'), JSON.stringify(m.blankDesign('kept', 'From legacy')));
+  await fs.writeFile(path.join(to, 'kept.json'), JSON.stringify(m.blankDesign('kept', 'Already here')));
+  await fs.writeFile(path.join(from, 'notes.txt'), 'not a design');
+  assert.deepEqual(store.adoptLegacy(from, to), ['old']);
+  assert.equal(JSON.parse(await fs.readFile(path.join(to, 'kept.json'), 'utf8')).title, 'Already here');
+  await fs.rm(path.join(to, 'old.json'));
+  assert.deepEqual(store.adoptLegacy(from, to), [], 'a design deleted after the move does not come back');
+  assert.ok(await fs.stat(path.join(from, 'old.json')), 'the originals stay');
+
+  // Trash and restore.
+  await store.createDesign({ id: 'bin-me', title: 'Bin me' });
+  await store.trashDesign('bin-me');
+  await assert.rejects(store.readDesign('bin-me'), store.NotFoundError);
+  const [t] = (await store.listTrash()).filter((x) => x.id === 'bin-me');
+  assert.equal(t.title, 'Bin me');
+  await assert.rejects(store.restoreDesign('../escape.1'), /invalid id/);
+  await store.createDesign({ id: 'bin-me', title: 'Taken' });
+  await assert.rejects(store.restoreDesign(t.entry), store.ConflictError);
+  await store.trashDesign('bin-me');
+  assert.equal((await store.restoreDesign(t.entry)).title, 'Bin me');
+  assert.equal((await store.readDesign('bin-me')).title, 'Bin me');
+  assert.equal((await store.listTrash()).filter((x) => x.id === 'bin-me').length, 1, 'the other copy waits in the trash');
+
+  // A copy keeps the steps; a file comes in under a free id and is validated.
+  const src = await store.updateDesign('bin-me', (d) => void m.addComponent(d, { type: 'service', label: 'API' }));
+  const dup = await store.createDesign({ id: 'bin-me-copy', title: 'Bin me copy', from: 'bin-me' });
+  assert.deepEqual([dup.components.length, dup.steps.length, dup.rev], [src.components.length, src.steps.length, 0]);
+  assert.equal((await store.importDesign(src)).id, 'bin-me-2');
+  assert.equal((await store.importDesign(src)).id, 'bin-me-3');
+  await assert.rejects(store.importDesign({ id: 'x' }));
+  assert.ok((await store.listDesigns()).every((d) => typeof d.updated === 'number'));
+});

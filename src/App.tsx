@@ -22,7 +22,7 @@ import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
 import { lint } from '../core/lint.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
-import { ApiError, api, shared, type Summary } from './api.ts';
+import { ApiError, api, shared, type Summary, type Trashed } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
@@ -137,6 +137,8 @@ function Shell() {
   const [sketch, setSketch] = useState(loadStyle);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
+  const offeredList = useRef(false);
   // Show only parts with this tag (a view of the same model); null shows everything.
   const [tag, setTag] = useState<string | null>(null);
   const [diff, setDiff] = useState(false);
@@ -314,13 +316,22 @@ function Shell() {
     return () => es.close();
   }, [refreshLists, commit, leave]);
 
+  // Without a link, reopen the design last worked on; failing that, show the list once instead of guessing.
   useEffect(() => {
-    if (!id && designs.length) setId(designs[0].id);
+    if (id || !designs.length) return;
+    const last = localStorage.getItem('sd-last');
+    if (last && designs.some((d) => d.id === last)) setId(last);
+    else if (shared) setId(designs[0].id);
+    else if (!offeredList.current) {
+      offeredList.current = true;
+      setBrowsing(true);
+    }
   }, [id, designs]);
 
   useEffect(() => {
     if (!id) return;
     history.replaceState(null, '', `#${encodeURIComponent(id)}`);
+    if (!shared) localStorage.setItem('sd-last', id);
     let cancelled = false;
     api
       .get(id)
@@ -1039,7 +1050,7 @@ function Shell() {
             <span className="wordmark">
               system<span>/</span>design
             </span>
-            {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={(x) => (setTrail([]), setId(x))} meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined} />}
+            {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={(x) => (setTrail([]), setId(x))} onAll={shared ? undefined : () => setBrowsing(true)} meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined} />}
           </div>
           {design && (
             <FindBox design={design} visible={nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id))} onPick={findPick} inputRef={findRef} />
@@ -1210,10 +1221,29 @@ function Shell() {
               <button className="btn ink lg" onClick={() => setCreating(true)}>
                 New design
               </button>
+              {!shared && (
+                <button className="text-btn" onClick={() => setBrowsing(true)}>
+                  Restore a deleted design or add one from a file
+                </button>
+              )}
             </div>
           )
         )}
 
+        {browsing && (
+          <Designs
+            designs={designs}
+            current={id}
+            onClose={() => setBrowsing(false)}
+            onChanged={refreshLists}
+            onOpen={(x) => {
+              setBrowsing(false);
+              setTrail([]);
+              setId(x);
+              refreshLists();
+            }}
+          />
+        )}
         {creating && (
           <NewDesign
             templates={templates}
@@ -1473,7 +1503,7 @@ function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (kind: (t
   );
 }
 
-function DesignSwitcher({ designs, current, meta, onPick }: { designs: Summary[]; current: string | null; meta?: string; onPick: (id: string) => void }) {
+function DesignSwitcher({ designs, current, meta, onPick, onAll }: { designs: Summary[]; current: string | null; meta?: string; onPick: (id: string) => void; onAll?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -1507,8 +1537,179 @@ function DesignSwitcher({ designs, current, meta, onPick }: { designs: Summary[]
               {d.unseen ? <span className="new-count">{d.unseen} new</span> : <span className="menu-meta">{pad(d.steps)} steps</span>}
             </button>
           ))}
+          {onAll && (
+            <button
+              className="menu-item menu-all"
+              onClick={() => {
+                setOpen(false);
+                onAll();
+              }}
+            >
+              All designs, trash and files…
+            </button>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+const ago = (t?: number) => {
+  if (!t) return '';
+  const s = (Date.now() - t) / 1000;
+  return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : new Date(t).toLocaleDateString();
+};
+
+/** Every design on this machine: open, rename, copy, download, delete to the trash and restore, or add one from a file. */
+function Designs({ designs, current, onOpen, onClose, onChanged }: { designs: Summary[]; current: string | null; onOpen: (id: string) => void; onClose: () => void; onChanged: () => void }) {
+  const [query, setQuery] = useState('');
+  const [byName, setByName] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [trashed, setTrashed] = useState<Trashed[]>([]);
+  const [showTrash, setShowTrash] = useState(false);
+  const [dir, setDir] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  useDismiss(!renaming, onClose);
+  const loadTrash = useCallback(() => api.trashed().then(setTrashed).catch((e) => setErr(errorText(e))), []);
+  useEffect(() => {
+    loadTrash();
+    api.info().then((i) => setDir(i.dir)).catch(() => {});
+  }, [loadTrash, designs]);
+  // Each action reports its own error here, and refreshes the list the app keeps.
+  const run = async (f: () => Promise<unknown>) => {
+    setErr(null);
+    try {
+      await f();
+      onChanged();
+    } catch (e) {
+      setErr(errorText(e));
+    }
+  };
+  const rename = (id: string, title: string) =>
+    run(async () => {
+      setRenaming(null);
+      const d = await api.get(id);
+      if (title.trim() && title.trim() !== d.title) await api.save({ ...d, title: title.trim() });
+    });
+  const copy = (s: Summary) =>
+    run(async () => {
+      const title = `${s.title} copy`;
+      let id = m.slugify(title);
+      for (let n = 2; designs.some((x) => x.id === id); n++) id = `${m.slugify(title)}-${n}`;
+      await api.create({ id, title, from: s.id });
+    });
+  const download = (id: string) =>
+    run(async () => {
+      const d = await api.get(id);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }));
+      a.download = `${id}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  const upload = (f: File) =>
+    run(async () => {
+      if (f.size > MAX_IMPORT) throw new Error('That file is too big to be a design.');
+      let raw: unknown;
+      try {
+        raw = JSON.parse(await f.text());
+      } catch {
+        throw new Error(`${f.name} isn’t a design file (JSON exported from here).`);
+      }
+      onOpen((await api.importFile(raw)).id);
+    });
+  const q = query.trim().toLowerCase();
+  const shown = designs
+    .filter((d) => !q || `${d.title} ${d.description ?? ''}`.toLowerCase().includes(q))
+    .sort((a, b) => (byName ? a.title.localeCompare(b.title) : (b.updated ?? 0) - (a.updated ?? 0)));
+  return (
+    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="dialog wide" role="dialog" aria-modal="true" aria-labelledby="designs-title">
+        <header className="dialog-head">
+          <span className="tag" id="designs-title">
+            Designs · {designs.length}
+          </span>
+          <button type="button" className="text-btn" onClick={onClose}>
+            Close <kbd>Esc</kbd>
+          </button>
+        </header>
+        <div className="designs-tools">
+          <input className="find-input" autoFocus value={query} placeholder="Search designs" aria-label="Search designs" onChange={(e) => setQuery(e.target.value)} />
+          <button className="text-btn" onClick={() => setByName((x) => !x)} title="Change the order">
+            {byName ? 'A–Z' : 'Recent'}
+          </button>
+        </div>
+        {err && <em className="ed-error">{err}</em>}
+        <ul className="designs-list">
+          {shown.map((d) => (
+            <li key={d.id} className="designs-row" aria-current={d.id === current || undefined}>
+              {renaming === d.id ? (
+                <input
+                  className="find-input"
+                  autoFocus
+                  defaultValue={d.title}
+                  aria-label="New title"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') rename(d.id, e.currentTarget.value);
+                    if (e.key === 'Escape') setRenaming(null);
+                  }}
+                  onBlur={(e) => rename(d.id, e.currentTarget.value)}
+                />
+              ) : (
+                <button className="designs-open" onClick={() => onOpen(d.id)}>
+                  <span className="choice-main">
+                    <strong>{d.title}</strong>
+                    {d.description && <span>{d.description}</span>}
+                  </span>
+                  <span className="menu-meta">
+                    {d.unseen ? <span className="new-count">{d.unseen} new</span> : `${pad(d.steps)} steps`} · {ago(d.updated)}
+                  </span>
+                </button>
+              )}
+              <span className="designs-actions">
+                <button className="text-btn" onClick={() => setRenaming(d.id)}>Rename</button>
+                <button className="text-btn" onClick={() => copy(d)}>Copy</button>
+                <button className="text-btn" onClick={() => download(d.id)} title="Download as a .json file">Download</button>
+                <button className="text-btn danger" onClick={() => run(() => api.trash(d.id))} title="Move to the trash; it can be restored">Delete</button>
+              </span>
+            </li>
+          ))}
+          {!shown.length && <li className="designs-empty">{designs.length ? 'No design matches.' : 'No designs yet.'}</li>}
+        </ul>
+        {trashed.length > 0 && (
+          <>
+            <button className="text-btn" aria-expanded={showTrash} onClick={() => setShowTrash((x) => !x)}>
+              Recently deleted · {trashed.length}
+            </button>
+            {showTrash && (
+              <ul className="designs-list">
+                {trashed.map((t) => (
+                  <li key={t.entry} className="designs-row">
+                    <span className="choice-main">
+                      <strong>{t.title}</strong>
+                      <span>Deleted {ago(t.deleted)}</span>
+                    </span>
+                    <span className="designs-actions">
+                      <button className="text-btn" onClick={() => run(async () => (await api.restore(t.entry), loadTrash()))}>Restore</button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+        <footer className="dialog-foot designs-foot">
+          {dir && (
+            <span className="designs-dir" title="Every design is a JSON file in this folder">
+              Saved in <code>{dir}</code>
+              <button className="text-btn" onClick={() => navigator.clipboard?.writeText(dir)}>Copy path</button>
+            </span>
+          )}
+          <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => (e.target.files?.[0] && upload(e.target.files[0]), (e.target.value = ''))} />
+          <button className="btn" onClick={() => fileRef.current?.click()}>Add from file</button>
+        </footer>
+      </div>
     </div>
   );
 }

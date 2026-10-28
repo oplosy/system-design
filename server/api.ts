@@ -2,7 +2,20 @@ import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 import { ValidationError } from '../core/schema.ts';
-import { ConflictError, DESIGNS_DIR, NotFoundError, createDesign, listDesigns, listTemplates, readDesign, writeDesign } from '../core/store.ts';
+import {
+  ConflictError,
+  DESIGNS_DIR,
+  NotFoundError,
+  createDesign,
+  importDesign,
+  listDesigns,
+  listTemplates,
+  listTrash,
+  readDesign,
+  restoreDesign,
+  trashDesign,
+  writeDesign,
+} from '../core/store.ts';
 import { shareHtml } from './share.ts';
 
 const MAX_BODY = 5 * 1024 * 1024;
@@ -70,14 +83,27 @@ export function createApi() {
         return;
       }
       if (resource === 'templates' && req.method === 'GET') return send(res, 200, await listTemplates());
+      if (resource === 'info' && req.method === 'GET') return send(res, 200, { dir: DESIGNS_DIR });
+      if (resource === 'trash') {
+        if (!id && req.method === 'GET') return send(res, 200, await listTrash());
+        if (id && !sub && req.method === 'POST') return send(res, 200, await restoreDesign(id));
+      }
       if (resource === 'designs') {
         if (!id && req.method === 'GET') return send(res, 200, await listDesigns());
         if (!id && req.method === 'POST') {
-          const body = (await readBody(req)) as { id?: unknown; title?: unknown; template?: unknown };
-          if (typeof body.id !== 'string' || typeof body.title !== 'string' || (body.template !== undefined && typeof body.template !== 'string')) {
+          const body = (await readBody(req)) as { id?: unknown; title?: unknown; template?: unknown; from?: unknown; design?: unknown };
+          // A whole design (an exported file) comes in under a free id.
+          if (body.design !== undefined) return send(res, 201, await importDesign(body.design));
+          const optional = (x: unknown) => x === undefined || typeof x === 'string';
+          if (typeof body.id !== 'string' || typeof body.title !== 'string' || !optional(body.template) || !optional(body.from)) {
             throw new ValidationError('id and title must be strings');
           }
-          return send(res, 201, await createDesign({ id: body.id, title: body.title, template: body.template as string | undefined }));
+          return send(res, 201, await createDesign({ id: body.id, title: body.title, template: body.template as string | undefined, from: body.from as string | undefined }));
+        }
+        // DELETE needs a CORS preflight, so another site open in the browser can't trash designs.
+        if (id && !sub && req.method === 'DELETE') {
+          await trashDesign(id);
+          return send(res, 200, { trashed: id });
         }
         if (id && sub === 'share' && req.method === 'GET') {
           const html = await shareHtml(id);
