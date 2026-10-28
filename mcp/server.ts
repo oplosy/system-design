@@ -7,6 +7,7 @@ import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type Design } from '
 import { toDecisionRecord, toMermaid } from '../core/export.ts';
 import { infraDrift, syncInfra } from '../core/infra.ts';
 import { importAsStep, unpack } from '../core/importer.ts';
+import { importAdrsAsStep, loadAdrs, saveAdrs } from '../core/adr.ts';
 import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
 import { failureImpact, lint } from '../core/lint.ts';
 import * as m from '../core/mutations.ts';
@@ -250,6 +251,21 @@ server.registerTool(
     inputSchema: { id: design, format: z.enum(['mermaid', 'structurizr', 'plantuml', 'drawio', 'decisions']) },
   },
   async ({ id, format }) => ({ content: [{ type: 'text' as const, text: EXPORTERS[format](await readDesign(id)) }] }),
+);
+
+server.registerTool(
+  'sync_adrs',
+  {
+    description:
+      'Keep a repository’s architecture decision records (one Markdown file per decision, e.g. docs/adr) and a design’s decisions together. write: each decision becomes or updates its own record (files it wrote are found again by a marker). read: records the design lacks (Nygard or MADR shape) become decisions linked to the parts they name, as one new step for review; rejected, deprecated and superseded ones are left out.',
+    inputSchema: { design, dir: z.string().describe('Absolute path of the records folder'), direction: z.enum(['write', 'read']) },
+  },
+  async ({ design: id, dir, direction }) => {
+    const folder = path.resolve(dir);
+    if (direction === 'write') return ok({ written: await saveAdrs(await readDesign(id), folder) });
+    const files = await loadAdrs(folder);
+    return edit(id, (d) => importAdrsAsStep(d, files));
+  },
 );
 
 server.registerTool(

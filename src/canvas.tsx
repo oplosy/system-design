@@ -45,7 +45,7 @@ export type ComponentNode = Node<Common & { type: ComponentType; label: string; 
 export type NoteNode = Node<Common & { text: string }, 'note'>;
 export type DecisionNode = Node<Common & { title: string; why: string }, 'decision'>;
 export type BoundaryNode = Node<Common & { kind: BoundaryKind; label: string; detail?: string; w: number; h: number }, 'boundary'>;
-export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; relation?: ConnectionKind; route?: Route; bend?: number; qps?: number; latency?: number; unseen: boolean; faded: boolean; added?: boolean; hops?: number[]; hopOn?: boolean }, 'rough'>;
+export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; relation?: ConnectionKind; route?: Route; bend?: number; qps?: number; latency?: number; errors?: number; live?: boolean; unseen: boolean; faded: boolean; added?: boolean; hops?: number[]; hopOn?: boolean }, 'rough'>;
 
 function Paths({ paths, dashed }: { paths: PathInfo[]; dashed?: boolean }) {
   return paths.map((p, i) => (
@@ -222,11 +222,15 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
     return [toPaths(parts), toPaths(heads)];
   }, [geo?.d, sketch, id, link, rel, selected, data?.hopOn]);
   const named = data?.label ?? (rel === 'include' || rel === 'extend' ? `«${rel}»` : undefined);
-  const load = [data?.latency !== undefined && `${data.latency} ms`, data?.qps !== undefined && `${rate(data.qps)}/s`].filter(Boolean).join(' · ');
+  const load = [data?.latency !== undefined && `${data.latency} ms`, data?.qps !== undefined && `${rate(data.qps)}/s`, data?.errors && `${data.errors}% failed`]
+    .filter(Boolean)
+    .join(' · ');
+  // Live numbers with 5% or more failed calls turn the line red.
+  const failing = (data?.errors ?? 0) >= 5;
   const label = named || load ? (
     <>
       {named}
-      {load && <span className="edge-meta">{load}</span>}
+      {load && <span className={`edge-meta${data?.live ? ' live' : ''}${failing ? ' failing' : ''}`}>{load}</span>}
     </>
   ) : undefined;
   if (!geo) return null;
@@ -253,7 +257,7 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
   return (
     <>
       <BaseEdge id={id} path={geo.d} style={{ stroke: 'transparent' }} interactionWidth={18} />
-      <g className={`rough-edge${data?.faded ? ' faded' : ''}${selected ? ' selected' : ''}${data?.hops ? ' on-path' : ''}${data?.hopOn ? ' hop-on' : ''}`} style={{ color: link ? NOTE_COLOR : undefined }}>
+      <g className={`rough-edge${data?.faded ? ' faded' : ''}${selected ? ' selected' : ''}${data?.hops ? ' on-path' : ''}${data?.hopOn ? ' hop-on' : ''}${failing ? ' failing' : ''}`} style={{ color: link ? NOTE_COLOR : undefined }}>
         <Paths paths={line} dashed={dashed} />
         <Paths paths={ends} />
       </g>

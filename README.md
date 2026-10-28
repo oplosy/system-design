@@ -34,7 +34,7 @@ Without cloning (Node 24+; the first run downloads and builds it):
 npx -y github:oplosy/system-design
 ```
 
-`system-design help` lists the commands: `start` (the app), `mcp` (the MCP server), `drift`, `diff` and `share`.
+`system-design help` lists the commands: `start` (the app), `mcp` (the MCP server), `drift`, `diff`, `share`, `adr` and `svg`.
 
 From a clone:
 
@@ -89,7 +89,28 @@ jobs:
 
 A pull request with nothing to report gets no comment. Names from the files are shown as code and `@` mentions are defused, so a comment can't ping or link anyone. Pull requests from forks get a read-only token: the report still lands in the job summary, and the comment is skipped with a warning. Locally, `system-design drift <design> <file> --markdown` and `system-design diff <before.json> <after.json> --markdown` print the same report. [`examples/shop`](examples/shop) is a design that leaves out the compose file's cache on purpose; this repository's CI runs the action on it.
 
-Main tool: `add_step` adds one reviewable change (components, connections, notes, decisions) in a single write, and can carry flows. Smaller tools: `create_design`, `update_design`, `add_component`, `connect`, `add_boundary`, `place_in`, `add_note`, `add_decision`, `update_component`, `remove_item`, `add_flow`, `update_connection`, `pick_option`, `sync_infra`, `import_diagram`, `export_design`, `simulate_failure`, `get_feedback`, `resolve_feedback`, `lint`, `get_design`, `list_designs`, `list_templates`.
+Main tool: `add_step` adds one reviewable change (components, connections, notes, decisions) in a single write, and can carry flows. Smaller tools: `create_design`, `update_design`, `add_component`, `connect`, `add_boundary`, `place_in`, `add_note`, `add_decision`, `update_component`, `remove_item`, `add_flow`, `update_connection`, `pick_option`, `sync_infra`, `import_diagram`, `sync_adrs`, `export_design`, `simulate_failure`, `get_feedback`, `resolve_feedback`, `lint`, `get_design`, `list_designs`, `list_templates`.
+
+## Decision records
+
+`system-design adr <design> docs/adr` writes each decision as a Markdown record (`0001-use-postgresql.md`: status, the parts it affects, context, considered options, consequences), numbered after the folder's own. A marker in each file ties it to its decision, so running it again rewrites only what changed. `--read` goes the other way: the folder's other records (Nygard or MADR, status in a section, a list item or front matter) come in as decisions in one step for review, linked to the parts they name; rejected, deprecated and superseded ones are left out. Agents do the same with `sync_adrs`.
+
+## Live load
+
+Set `PROMETHEUS_URL` (Prometheus or anything with its query API: Mimir, Thanos, VictoriaMetrics) before `start`, and **Live** in the top bar replaces the designed numbers on the lines with measured ones every 15 seconds: requests per second, one-way latency (half the caller's median) and the share of failed calls; a line with 5% or more failures turns red. It reads the service graph metrics (`traces_service_graph_*`) that the OpenTelemetry collector's servicegraph connector and Tempo write. A service matches the part imported from its traces, else the part with its name; the button's tooltip lists the pairs no line matched.
+
+## Notifications
+
+Set `SYSTEM_DESIGN_WEBHOOK` to a Slack, Discord or Teams incoming webhook (or anything that takes a JSON POST) for the MCP server and the CLI, and each step an agent or a sync adds posts "New step in “Shop”: Add a cache. 2 waiting for review" with a link. `SYSTEM_DESIGN_URL` sets the link's address (default `http://127.0.0.1:5180`). Your own edits in the app post nothing, and a webhook that fails never fails the write.
+
+## Pictures for docs
+
+`system-design svg <design> docs/architecture.svg --badge docs/design-badge.svg` draws the design (boundaries, parts, lines and their load; light and dark) and a badge with its part count and steps waiting for review; with `--infra docker-compose.yml` the badge says whether the design matches that file. Run it in CI or a pre-commit hook and commit the files, so a README or wiki shows the current design:
+
+```markdown
+![design](docs/design-badge.svg)
+![architecture](docs/architecture.svg)
+```
 
 ## Layout
 
@@ -99,7 +120,7 @@ Main tool: `add_step` adds one reviewable change (components, connections, notes
 | `server/api.ts` | JSON API and change events, mounted in the Vite dev server |
 | `server/main.ts` | Production server: the built app from `dist/` plus the API |
 | `server/share.ts` | Builds the shared HTML file |
-| `cli/` | The `system-design` command (`main.ts`): drift check, design diff, shared HTML; built to `dist-cli/` |
+| `cli/` | The `system-design` command (`main.ts`): drift check, design diff, shared HTML, decision records, SVG and badge; built to `dist-cli/` |
 | `action.yml`, `action/` | GitHub Action for pull requests |
 | `examples/` | Example design and compose file the action is tested on |
 | `mcp/server.ts` | MCP server for agents |

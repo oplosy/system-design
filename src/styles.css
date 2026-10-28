@@ -2051,6 +2051,16 @@ select.ed option {
   text-align: center;
 }
 
+.edge-meta.live::before {
+  content: '● ';
+  color: #2f9e44;
+}
+
+.rough-edge.failing,
+.edge-meta.failing {
+  color: #e03131;
+}
+
 .num {
   display: flex;
   align-items: center;

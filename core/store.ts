@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { blankDesign } from './mutations.ts';
+import { notifyNewSteps } from './notify.ts';
 import { isId, parseDesign, type Design } from './schema.ts';
 
 // import.meta.url (not dirname) survives Vite bundling this file into its config.
@@ -184,13 +185,19 @@ export async function createDesign(input: { id: string; title: string; descripti
   );
 }
 
-/** Read, change and write a design, retrying if someone else wrote in between. */
+/**
+ * Read, change and write a design, retrying if someone else wrote in between. This is how agents and syncs write
+ * (the app saves with writeDesign), so new steps they add are announced to the webhook, if one is set.
+ */
 export async function updateDesign(id: string, change: (d: Design) => void): Promise<Design> {
   for (let attempt = 0; ; attempt++) {
-    const d = structuredClone(await readDesign(id));
+    const before = await readDesign(id);
+    const d = structuredClone(before);
     change(d);
     try {
-      return await writeDesign(d);
+      const written = await writeDesign(d);
+      await notifyNewSteps(before, written);
+      return written;
     } catch (e) {
       if (!(e instanceof ConflictError) || attempt >= 3) throw e;
     }

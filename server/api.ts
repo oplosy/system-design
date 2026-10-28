@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
+import { liveLines, queryPrometheus } from '../core/live.ts';
 import { ValidationError } from '../core/schema.ts';
 import {
   ConflictError,
@@ -109,6 +110,13 @@ export function createApi() {
           const html = await shareHtml(id);
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': `attachment; filename="${id}.html"` });
           return res.end(html);
+        }
+        if (id && sub === 'live' && req.method === 'GET') {
+          // The address comes from the environment only, never the request, so the page can't point the server elsewhere.
+          const prometheus = process.env.PROMETHEUS_URL;
+          if (!prometheus) return send(res, 404, { error: 'Set PROMETHEUS_URL to show live load.' });
+          const d = await readDesign(id);
+          return send(res, 200, liveLines(d, await queryPrometheus(prometheus)));
         }
         if (sub) return send(res, 404, { error: 'not found' });
         if (id && req.method === 'GET') return send(res, 200, await readDesign(id));

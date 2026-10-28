@@ -1,6 +1,8 @@
+import type { Live } from '../core/live.ts';
 import { parseDesign, type Design } from '../core/schema.ts';
 
 export type Summary = { id: string; title: string; description?: string; steps: number; unseen: number; updated?: number };
+export type LiveLoad = { lines: Record<string, Live>; unmatched: string[] };
 export type Trashed = { entry: string; id: string; title: string; deleted: number };
 
 export class ApiError extends Error {
@@ -54,6 +56,9 @@ function local(store: Map<string, Design>) {
     trashed: async () => [] as Trashed[],
     restore: async (_: string): Promise<Design> => readOnly(),
     info: async () => ({ dir: '' }),
+    live: async (_: string): Promise<LiveLoad> => {
+      throw new ApiError('A shared copy has no live data.', 404);
+    },
   };
 }
 
@@ -68,4 +73,5 @@ export const api = shared ? local(shared) : {
   trashed: () => call<Trashed[]>('GET', '/api/trash'),
   restore: (entry: string) => call<Design>('POST', `/api/trash/${entry}`),
   info: () => call<{ dir: string }>('GET', '/api/info'),
+  live: (id: string) => call<LiveLoad>('GET', `/api/designs/${id}/live`),
 };

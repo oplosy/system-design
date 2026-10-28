@@ -22,7 +22,7 @@ import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
 import { lint } from '../core/lint.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
-import { ApiError, api, shared, type Summary, type Trashed } from './api.ts';
+import { ApiError, api, shared, type LiveLoad, type Summary, type Trashed } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
@@ -141,6 +141,9 @@ function Shell() {
   const offeredList = useRef(false);
   // Show only parts with this tag (a view of the same model); null shows everything.
   const [tag, setTag] = useState<string | null>(null);
+  // Live load from Prometheus (server/api.ts), shown on the lines in place of the designed numbers while on.
+  const [live, setLive] = useState<LiveLoad | null>(null);
+  const [liveOn, setLiveOn] = useState(false);
   const [diff, setDiff] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const [flow, setFlow] = useState<FlowAt | null>(null);
@@ -488,14 +491,36 @@ function Shell() {
             target: c.to,
             type: 'rough',
             selected: c.id === selected,
-            data: { kind: 'flow', label: c.label, async: c.async, relation: c.kind, route: c.route, bend: c.bend, qps: c.qps, latency: c.latency, hops: hops.get(c.id), hopOn: c.id === hopOn, ...flags(c.step, c.id) },
+            data: { kind: 'flow', label: c.label, async: c.async, relation: c.kind, route: c.route, bend: c.bend, ...(live?.lines[c.id] ? { ...live.lines[c.id], live: true } : { qps: c.qps, latency: c.latency }), hops: hops.get(c.id), hopOn: c.id === hopOn, ...flags(c.step, c.id) },
           }),
         ),
       ...design.notes.filter((n) => n.attachTo && both(n.attachTo, n.id)).map((n) => link(`link-${n.id}`, n.attachTo!, n.id, n.step)),
       ...design.decisions.flatMap((x) => x.links.filter((l) => both(l, x.id)).map((l) => link(`link-${x.id}-${l}`, l, x.id, x.step))),
     ];
     return { nodes, edges, boxes };
-  }, [design, current, view, selected, diff, presenting, flow, recording, inOption, tag]);
+  }, [design, current, view, selected, diff, presenting, flow, recording, inOption, tag, live]);
+
+  const designId = design?.id;
+  useEffect(() => {
+    setLive(null);
+    if (!liveOn || !designId) return;
+    let stop = false;
+    const poll = () =>
+      api.live(designId).then(
+        (l) => !stop && setLive(l),
+        (e) => {
+          if (stop) return;
+          setLiveOn(false);
+          setError(`Live load: ${errorText(e)}`);
+        },
+      );
+    void poll();
+    const timer = setInterval(poll, 15000);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, [liveOn, designId]);
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const lastSelected = useRef(selected);
@@ -1064,6 +1089,16 @@ function Shell() {
             </button>
             <span className="vrule" />
             {design && <TagMenu design={design} tag={tag} onPick={setTag} />}
+            {design && !shared && (
+              <button
+                className="text-btn"
+                aria-pressed={liveOn}
+                onClick={() => setLiveOn((on) => !on)}
+                title={live?.unmatched.length ? `Live load from Prometheus. No line for: ${live.unmatched.join(', ')}` : 'Show live load and latency from Prometheus on the lines'}
+              >
+                Live
+              </button>
+            )}
             <LayoutMenu disabled={!design} selected={nodes.filter((n) => n.selected).length} onPick={arrange} />
             <ExportMenu disabled={!design} onPick={exportAs} />
             <button className="text-btn" disabled={!design} onClick={() => present(true)} title="Walk through the steps full screen">

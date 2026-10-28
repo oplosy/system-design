@@ -12,6 +12,11 @@ const HELP = `usage: system-design <command>
   diff <before.json> <after.json> [--markdown]
                                           What a change to a design file adds and removes, step by step
   share <design id> [out.html]            One read-only HTML file that opens anywhere
+  adr <design> <folder> [--read]          Write each decision as a record in a folder (docs/adr), or read the folder's
+                                          other records into the design as one step
+  svg <design> <out.svg> [--badge <badge.svg>] [--infra <file>]
+                                          Draw the design as an SVG for a README, with a status badge (drift against
+                                          the infrastructure file, or parts and steps waiting for review)
 
 Designs are kept in your data folder; set SYSTEM_DESIGN_DIR to use another.`;
 
@@ -21,6 +26,8 @@ const COMMANDS: Record<string, () => Promise<unknown>> = {
   drift: () => import('./drift.ts'),
   diff: () => import('./diff.ts'),
   share: () => import('./share.ts'),
+  adr: () => import('./adr.ts'),
+  svg: () => import('./svg.ts'),
 };
 
 const [command = 'start', ...rest] = process.argv.slice(2);

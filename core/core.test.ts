@@ -1298,3 +1298,113 @@ test('the command line reports drift and design changes as Markdown for pull req
   assert.match(diff.out, /- − `part web`/);
   assert.match((await run('cli/diff.ts', path.join(dir, 'none.json'), design, '--markdown')).out, /is new/);
 });
+
+test('decisions go out as decision records and records come back as decisions', async () => {
+  const { toAdrs, importAdrsAsStep, saveAdrs, loadAdrs } = await import('./adr.ts');
+  const d = m.blankDesign('adr', 'Shop');
+  const api = m.addComponent(d, { type: 'service', label: 'Orders API' });
+  const db = m.addComponent(d, { type: 'sql-db', label: 'Orders DB' });
+  m.addDecision(d, { title: 'Use PostgreSQL for orders', why: 'Orders need transactions.', alternatives: ['DynamoDB'], tradeoffs: 'One more server to run.', links: [db] });
+
+  // Written records are numbered after the folder's own and found again by their marker.
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sd-adr-'));
+  await fs.writeFile(path.join(dir, '0007-old-choice.md'), '# 7. Old choice\n\n## Status\n\nAccepted\n\n## Context\n\nLegacy.\n');
+  assert.deepEqual(await saveAdrs(d, dir), ['0008-use-postgresql-for-orders.md']);
+  const ours = await fs.readFile(path.join(dir, '0008-use-postgresql-for-orders.md'), 'utf8');
+  assert.match(ours, /- Affects: Orders DB\n/);
+  assert.match(ours, /## Considered options\n\n- Use PostgreSQL for orders \(chosen\)\n- DynamoDB\n/);
+  assert.deepEqual(await saveAdrs(d, dir), [], 'nothing changed, nothing written');
+  d.decisions[0].why = 'Orders need transactions and joins.';
+  assert.deepEqual(toAdrs(d, await loadAdrs(dir)).map((f) => f.name), ['0008-use-postgresql-for-orders.md'], 'an edit rewrites the same file');
+
+  // Reading: Nygard and MADR shapes, our own record skipped, rejected ones left out, parts linked by name.
+  await fs.writeFile(
+    path.join(dir, '0009-cache.md'),
+    '---\nstatus: accepted\n---\n# Cache order lookups\n\n## Context and Problem Statement\n\nThe Orders API is slow.\n\n## Considered Options\n\n* **Redis**\n* Nothing\n\n## Decision Outcome\n\nChosen option: Redis.\n\n### Consequences\n\n* Good: faster\n',
+  );
+  await fs.writeFile(path.join(dir, '0010-mongo.md'), '# 10. Use MongoDB\n\n## Status\n\nRejected\n\n## Context\n\nTried it.\n');
+  await fs.writeFile(path.join(dir, 'README.md'), '# Decisions\n');
+  const x = structuredClone(d);
+  const r = importAdrsAsStep(x, await loadAdrs(dir));
+  assert.deepEqual(r.added, ['Old choice', 'Cache order lookups']);
+  assert.deepEqual(r.leftOut, ['0010-mongo.md (rejected)']);
+  const cache = x.decisions.find((y) => y.title === 'Cache order lookups')!;
+  assert.deepEqual([cache.links, cache.alternatives, cache.tradeoffs], [[api], ['Redis', 'Nothing'], '* Good: faster']);
+  assert.equal(cache.why, 'The Orders API is slow.\n\nChosen option: Redis.');
+  assert.throws(() => importAdrsAsStep(x, [{ name: 'a.md', text: ours }]), /No decision records the design lacks/);
+});
+
+test('new steps for review are posted to a chat webhook, and a failing webhook never fails the write', async () => {
+  const { notifyNewSteps, newStepsMessage } = await import('./notify.ts');
+  const http = await import('node:http');
+  const before = m.blankDesign('notify', 'Shop');
+  const after = structuredClone(before);
+  m.addStep(after, { title: 'Add a cache' });
+  m.addStep(after, { title: 'Seen already', seen: true });
+  assert.equal(newStepsMessage(before, after, 'http://x/'), 'New step in “Shop”: Add a cache. 1 waiting for review: http://x/#notify');
+  assert.equal(newStepsMessage(after, after), undefined);
+
+  const got: unknown[] = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c)).on('end', () => (got.push(JSON.parse(body)), res.writeHead(req.url === '/down' ? 500 : 200).end()));
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  await notifyNewSteps(before, after, `${url}/hook`);
+  assert.equal((got[0] as { text: string }).text, (got[0] as { content: string }).content);
+  assert.match((got[0] as { text: string }).text, /^New step in “Shop”: Add a cache\./);
+  await notifyNewSteps(after, after, `${url}/hook`);
+  assert.equal(got.length, 1, 'nothing new, nothing sent');
+  const errors: string[] = [];
+  const log = console.error;
+  console.error = (s: string) => errors.push(s);
+  try {
+    await notifyNewSteps(before, after, `${url}/down`);
+    await notifyNewSteps(before, after, 'file:///etc/passwd');
+  } finally {
+    console.error = log;
+    server.close();
+  }
+  assert.deepEqual(errors, ['system-design: could not notify: the webhook answered 500', 'system-design: could not notify: SYSTEM_DESIGN_WEBHOOK must be an http(s) address']);
+});
+
+test('live load from Prometheus lands on the lines between the services it names', async () => {
+  const { queryPrometheus, liveLines } = await import('./live.ts');
+  const http = await import('node:http');
+  const d = m.blankDesign('live', 'Shop');
+  const web = m.addComponent(d, { type: 'service', label: 'Web' });
+  const orders = m.addComponent(d, { type: 'service', label: 'Orders API', source: 'otel:orders' });
+  const line = m.connect(d, { from: web, to: orders });
+
+  const series = (value: string, server = 'orders') => ({ status: 'success', data: { result: [{ metric: { client: 'web', server }, value: [0, value] }] } });
+  const server = http.createServer((req, res) => {
+    const q = new URL(req.url!, 'http://x').searchParams.get('query') ?? '';
+    const body = q.includes('failed') ? series('12') : q.includes('histogram_quantile') ? series('0.05') : { status: 'success', data: { result: [series('120').data.result[0], series('3', 'payments').data.result[0]] } };
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(body));
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const got = liveLines(d, await queryPrometheus(`http://127.0.0.1:${(server.address() as { port: number }).port}/`));
+    assert.deepEqual(got.lines[line], { qps: 120, latency: 25, errors: 10 });
+    assert.deepEqual(got.unmatched, ['web → payments']);
+  } finally {
+    server.close();
+  }
+  await assert.rejects(queryPrometheus('file:///x'), /http\(s\)/);
+});
+
+test('a design draws as an SVG for a README, unplaced parts laid out, and a badge says its state', async () => {
+  const { designSvg, badgeSvg } = await import('../cli/render.ts');
+  const d = m.blankDesign('pic', 'Shop <&>');
+  const vpc = m.addBoundary(d, { kind: 'vpc', label: 'Prod' });
+  const web = m.addComponent(d, { type: 'service', label: 'Web', tech: 'Node', boundary: vpc, position: { x: 0, y: 0 } });
+  const db = m.addComponent(d, { type: 'sql-db', label: 'Orders "DB"', boundary: vpc });
+  m.connect(d, { from: web, to: db, label: 'reads', qps: 40, latency: 3 });
+  const svg = await designSvg(d);
+  assert.match(svg, /^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" width="\d+" height="\d+" viewBox=/);
+  assert.match(svg, /<title>Shop &#60;&#38;&#62;<\/title>/);
+  for (const text of ['Prod', 'Web', 'Node', 'Orders &#34;DB&#34;', 'reads', '3 ms · 40/s']) assert.ok(svg.includes(`>${text}</text>`), text);
+  assert.ok(!svg.includes('NaN') && !svg.includes('undefined'));
+  assert.match(badgeSvg('design', 'in sync', '#2f9e44'), /aria-label="design: in sync"/);
+});
