@@ -13,7 +13,7 @@ inputs:
     required: false
     default: ''
   comment:
-    description: Comment on pull requests; the job needs `pull-requests: write`. One comment is kept up to date, not one per push
+    description: 'Comment on pull requests; the job needs `pull-requests: write`. One comment is kept up to date, not one per push'
     required: false
     default: 'true'
   fail-on-drift:
