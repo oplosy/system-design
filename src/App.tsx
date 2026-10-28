@@ -134,6 +134,8 @@ function Shell() {
   const [sketch, setSketch] = useState(loadStyle);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // Show only parts with this tag (a view of the same model); null shows everything.
+  const [tag, setTag] = useState<string | null>(null);
   const [diff, setDiff] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const [flow, setFlow] = useState<FlowAt | null>(null);
@@ -412,7 +414,20 @@ function Shell() {
       shown.add(id);
       return { id, type, position: position ?? { x: 0, y: 0 }, hidden: !position, selected: id === selected, data: { ...data, ...flags(step, id), comments: open.get(id), issues: issues.get(id) } };
     };
-    const boxes = boundaryBoxes(design, onSheet);
+    // A tag view hides untagged parts, notes on them and boxes left with nothing inside.
+    const hidden = new Set<string>();
+    if (tag) {
+      const parent = new Map(design.boundaries.map((b) => [b.id, b.parent]));
+      const occupied = new Set<string>();
+      for (const c of design.components) {
+        if (!c.tags?.includes(tag)) hidden.add(c.id);
+        else for (let b = c.boundary, i = 0; b && i <= design.boundaries.length; b = parent.get(b), i++) occupied.add(b);
+      }
+      for (const b of design.boundaries) if (!occupied.has(b.id)) hidden.add(b.id);
+      for (const n of design.notes) if (n.attachTo && hidden.has(n.attachTo)) hidden.add(n.id);
+    }
+    const show = (x: { step: string; option?: string; id?: string }) => onSheet(x) && !(x.id && hidden.has(x.id));
+    const boxes = boundaryBoxes(design, show);
     const nodes = [
       // Outer boxes first, so inner ones and every part draw on top of them.
       ...design.boundaries
@@ -432,8 +447,8 @@ function Shell() {
           };
         }),
       ...ghosts(diff ? current.removed ?? [] : [], design.components.filter(onSheet)),
-      ...design.components.filter(onSheet).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech, detail: c.detail, cost: costAt(design, c, current.id), currency: design.currency, code: codeUrl(design, c.code) }, c.step)),
-      ...design.notes.filter(onSheet).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
+      ...design.components.filter(show).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech, detail: c.detail, cost: costAt(design, c, current.id), currency: design.currency, code: codeUrl(design, c.code) }, c.step)),
+      ...design.notes.filter(show).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
       ...design.decisions.filter(onSheet).map((x) => node(x.id, 'decision', x.position, { title: x.title, why: x.why }, x.step)),
     ];
     const both = (a: string, b: string) => shown.has(a) && shown.has(b);
@@ -463,7 +478,7 @@ function Shell() {
       ...design.decisions.flatMap((x) => x.links.filter((l) => both(l, x.id)).map((l) => link(`link-${x.id}-${l}`, l, x.id, x.step))),
     ];
     return { nodes, edges, boxes };
-  }, [design, current, view, selected, diff, presenting, flow, recording, inOption]);
+  }, [design, current, view, selected, diff, presenting, flow, recording, inOption, tag]);
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const lastSelected = useRef(selected);
@@ -960,6 +975,7 @@ function Shell() {
               {icon('M10.5 3l3 3-3 3M13 6H6.5a4 4 0 0 0 0 8H9')}
             </button>
             <span className="vrule" />
+            {design && <TagMenu design={design} tag={tag} onPick={setTag} />}
             <LayoutMenu disabled={!design} selected={nodes.filter((n) => n.selected).length} onPick={arrange} />
             <ExportMenu disabled={!design} onPick={exportAs} />
             <button className="text-btn" disabled={!design} onClick={() => present(true)} title="Walk through the steps full screen">
@@ -1235,6 +1251,52 @@ function AppearanceMenu({
           <span className="field-label">Drawing style</span>
           <Seg label="Drawing style" value={sketch ? 'sketch' : 'clean'} options={STYLES} onPick={(v) => onSketch(v === 'sketch')} />
           <p className="menu-note">Sketch draws hand-made lines like a whiteboard; Clean draws crisp ones for docs.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Views of one model: everything, or only the parts with one tag. */
+function TagMenu({ design, tag, onPick }: { design: Design; tag: string | null; onPick: (tag: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, ref);
+  const counts = new Map<string, number>();
+  for (const c of design.components) for (const t of c.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+  // A tag that no part carries any more (renamed, removed, another design) falls back to everything.
+  useEffect(() => {
+    if (tag && !counts.has(tag)) onPick(null);
+  });
+  if (!counts.size) return null;
+  const pick = (t: string | null) => {
+    setOpen(false);
+    onPick(t);
+  };
+  return (
+    <div className="switcher" ref={ref}>
+      <button className="text-btn" aria-haspopup="menu" aria-expanded={open} aria-pressed={!!tag} onClick={() => setOpen((o) => !o)} title="Show only the parts with one tag">
+        {tag ? `View: ${tag}` : 'View'}
+      </button>
+      {open && (
+        <div className="menu menu-right" role="menu" aria-label="View">
+          <button role="menuitemradio" aria-checked={!tag} className="menu-item" onClick={() => pick(null)}>
+            <span className="menu-main">
+              <span className="menu-title">Everything</span>
+              <span className="menu-desc">Every part on the sheet</span>
+            </span>
+          </button>
+          {[...counts].sort(([a], [b]) => a.localeCompare(b)).map(([t, n]) => (
+            <button key={t} role="menuitemradio" aria-checked={tag === t} className="menu-item" onClick={() => pick(t)}>
+              <span className="menu-main">
+                <span className="menu-title">{t}</span>
+                <span className="menu-desc">
+                  {n} {n > 1 ? 'parts' : 'part'}
+                </span>
+              </span>
+            </button>
+          ))}
         </div>
       )}
     </div>

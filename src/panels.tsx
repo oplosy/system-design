@@ -758,6 +758,17 @@ export function Inspector({
                 />
               )}
             </Prop>
+            <Prop label="Tags">
+              <Ed
+                label="Tags"
+                placeholder="e.g. payments, pii"
+                value={component.tags?.join(', ')}
+                onCommit={(v) => {
+                  const tags = [...new Set((v ?? '').split(',').map((t) => t.trim()).filter(Boolean))];
+                  edit((d: Design) => d.components, { tags: tags.length ? tags : undefined });
+                }}
+              />
+            </Prop>
             <Prop label="Capacity">
               <Num label="Capacity" unit="req/s" value={component.capacity} onCommit={(v) => edit((d: Design) => d.components, { capacity: v })} />
               {(() => {

@@ -25,6 +25,7 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Put expected load (qps) and one-way latency (ms) on the lines that matter; a flow then shows its total time. Give parts that can saturate a capacity (req/s): lint flags them when their incoming qps nears or passes it, and simulate_failure shows what a part going down breaks.
 - Put a monthly cost on parts that cost real money (in the design's currency, USD unless set); each step then shows how much it moves the total.
 - Set code on parts whose code you know: a URL, or a path that opens against the design's repo.
+- Tag parts by concern ("payments", "pii", a team name) when a design is big; each tag becomes a view the reviewer can switch to.
 - When the project has docker-compose files, Kubernetes manifests or Terraform, run sync_infra with dry_run to see what the design is missing, and sync it as a step when the infrastructure is the truth.
 - After a step, run lint and fix what it finds or say in a note why it is fine.
 - Start from list_designs; call get_design before editing an existing one.
@@ -49,6 +50,7 @@ const componentFields = {
   code: z.string().optional().describe('Where its code lives: a repository URL, or a path in the repo such as "services/orders"'),
   cost: z.number().nonnegative().optional().describe("Expected running cost per month in the design's currency (USD unless set)"),
   capacity: z.number().nonnegative().optional().describe('Requests per second it can take; lint flags it when the qps on lines into it come near or over'),
+  tags: z.array(z.string().min(1)).optional().describe('Labels such as "payments", "pii" or a team name; the reviewer can show only the parts with one tag'),
 };
 const connectionFields = {
   from: z.string().describe('Component id'),
@@ -276,7 +278,7 @@ server.registerTool(
   'update_component',
   {
     description: 'Change a component. The change is recorded on the step (latest by default) for review, with its old values',
-    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), detail: componentFields.detail, code: componentFields.code, cost: componentFields.cost, capacity: componentFields.capacity, step },
+    inputSchema: { design, id: z.string(), type: Type.optional(), label: z.string().min(1).optional(), tech: z.string().optional(), description: z.string().optional(), detail: componentFields.detail, code: componentFields.code, cost: componentFields.cost, capacity: componentFields.capacity, tags: componentFields.tags, step },
   },
   async ({ design: designId, id, step, ...fields }) =>
     edit(designId, (d) => {

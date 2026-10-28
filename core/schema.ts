@@ -212,6 +212,8 @@ export const ComponentSchema = z.object({
   cost: z.number().nonnegative().optional(),
   /** Where an infrastructure import found it, as "<format>:<key>" (e.g. "terraform:aws_lb.public"); drift matches on it. */
   source: z.string().optional(),
+  /** Free labels ("payments", "pii", "team-checkout"); the canvas can show only the parts with one of them. */
+  tags: z.array(z.string().trim().min(1).max(40)).optional(),
   /** Requests per second it can take; lint compares it with the qps on lines into it. */
   capacity: z.number().nonnegative().optional(),
   position: Position.optional(),

@@ -692,3 +692,16 @@ test('exports Structurizr DSL, C4-PlantUML and draw.io', async () => {
   assert.ok(vx <= px && vy <= py && vx + vw >= px + pw && vy + vh >= py + ph);
   assert.ok(xml.indexOf('id="b-vpc"') < xml.indexOf('id="b-private"'), 'outer boxes draw first');
 });
+
+test('tags are kept once each and their edits are recorded on the step', () => {
+  const x = m.blankDesign('tags', 'Tags');
+  const api = m.addComponent(x, { type: 'service', label: 'API', tags: ['payments', 'payments', 'pii'] });
+  assert.deepEqual(x.components[0].tags, ['payments', 'pii']);
+  m.addComponent(x, { type: 'service', label: 'Bare', tags: [] });
+  assert.equal(x.components[1].tags, undefined);
+  const step = m.addStep(x, { title: 'Retag' });
+  m.updateTracked(x, api, { tags: ['payments'] }, step);
+  assert.deepEqual(x.steps.find((s) => s.id === step)!.changed, [{ id: api, field: 'tags', from: 'payments, pii', to: 'payments' }]);
+  assert.deepEqual(parseDesign(structuredClone(x)).components[0].tags, ['payments']);
+  assert.throws(() => parseDesign({ ...structuredClone(x), components: [{ ...x.components[0], tags: ['  '] }, x.components[1]] }));
+});
