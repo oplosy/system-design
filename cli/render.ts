@@ -1,7 +1,7 @@
 // Draws a design as a standalone SVG, and a small status badge, for READMEs and wikis that can't run the app.
 import type { Design } from '../core/schema.ts';
 import { BOUNDARY_SPECS, boundaryBoxes, type Box } from '../src/boundaries.ts';
-import { layout, placeNew } from '../src/layout.ts';
+import { placeMissing } from '../src/layout.ts';
 import { SHAPES, drawShape, hash } from '../src/shapes.ts';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -32,10 +32,7 @@ export async function designSvg(design: Design) {
   d.connections = d.connections.filter((c) => shown(c) && d.components.some((x) => x.id === c.from) && d.components.some((x) => x.id === c.to));
   d.notes = [];
   d.decisions = [];
-  if (d.components.some((c) => !c.position)) {
-    const at = placeNew(d, await layout(d));
-    for (const c of d.components) c.position ??= at.get(c.id);
-  }
+  await placeMissing(d);
   const part = new Map(d.components.map((c) => [c.id, { ...c.position!, w: SHAPES[c.type].w, h: SHAPES[c.type].h }]));
   const boxes = [...boundaryBoxes(d)].sort(([, a], [, b]) => a.depth - b.depth);
   // Room below shapes for labels drawn under them.

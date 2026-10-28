@@ -1,9 +1,12 @@
-import ELK, { type ElkExtendedEdge, type ElkNode } from 'elkjs/lib/elk.bundled.js';
+import type ELK from 'elkjs/lib/elk.bundled.js';
+import type { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk.bundled.js';
 import type { Design } from '../core/schema.ts';
 import { BOUNDARY_PAD, EMPTY_BOUNDARY, boundaryBoxes } from './boundaries.ts';
 import { DECISION_SIZE, NOTE_SIZE, SHAPES } from './shapes.ts';
 
-const elk = new ELK();
+// ELK is most of the app's code; it loads on the first layout instead of with the page.
+let elk: Promise<InstanceType<typeof ELK>> | undefined;
+const engine = () => (elk ??= import('elkjs/lib/elk.bundled.js').then((x) => new x.default()));
 const ROOT = '__root';
 
 export const LAYOUTS = [
@@ -167,9 +170,10 @@ export async function layout(d: Design, kind: LayoutKind = 'layered', only?: { i
     }
   }
 
-  let graph = await elk.layout({ ...nodes.get(ROOT)!, layoutOptions: rootOptions(kind) });
+  const e = await engine();
+  let graph = await e.layout({ ...nodes.get(ROOT)!, layoutOptions: rootOptions(kind) });
   // Radial sizes its rings by node count, not node size, so wide shapes can touch; push them apart afterwards.
-  if (kind === 'radial') graph = await elk.layout({ ...graph, layoutOptions: { 'elk.algorithm': 'sporeOverlap', 'elk.spacing.nodeNode': '30' } });
+  if (kind === 'radial') graph = await e.layout({ ...graph, layoutOptions: { 'elk.algorithm': 'sporeOverlap', 'elk.spacing.nodeNode': '30' } });
 
   const pos = new Map<string, Pos>();
   const walk = (n: ElkNode, ox: number, oy: number) => {
@@ -275,3 +279,12 @@ export function placeNew(d: Design, pos: Map<string, Pos>) {
   return out;
 }
 const STEP = 20;
+
+/** Gives every item without a position one, as the app does when it opens a design (for files made without the app). */
+export async function placeMissing(d: Design) {
+  const empty = d.boundaries.filter((b) => !d.components.some((c) => c.boundary === b.id) && !d.boundaries.some((x) => x.parent === b.id));
+  const items = [...d.components, ...d.notes, ...d.decisions, ...empty];
+  if (!items.some((x) => !x.position)) return;
+  const at = placeNew(d, await layout(d));
+  for (const x of items) x.position ??= at.get(x.id);
+}

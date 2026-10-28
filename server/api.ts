@@ -56,6 +56,25 @@ function statusOf(e: unknown) {
   return 500;
 }
 
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * Refuses what a web page elsewhere could make a browser send: a request whose Host isn't this machine (DNS rebinding:
+ * evil.example resolving to 127.0.0.1) and a write whose Origin is another site (a plain form POST needs no preflight).
+ * HOST set to a name or an address the server is bound to is allowed too; tools without a browser send no Origin.
+ */
+export function trusted(req: IncomingMessage, host = process.env.HOST) {
+  const name = (h: string) => new URL(`http://${h}`).hostname;
+  try {
+    const at = name(req.headers.host ?? '');
+    if (!LOOPBACK.has(at) && at !== (host && name(host)) && host !== '0.0.0.0' && host !== '::') return false;
+    if (req.method === 'GET' || req.method === 'HEAD' || !req.headers.origin) return true;
+    return new URL(req.headers.origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
+
 /** The designs folder as a small JSON API plus change events over SSE. `handle` takes paths with the /api prefix already removed. */
 export function createApi() {
   fs.mkdirSync(DESIGNS_DIR, { recursive: true });
@@ -75,6 +94,7 @@ export function createApi() {
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://local');
     const [, resource, id, sub] = url.pathname.split('/');
+    if (!trusted(req)) return send(res, 403, { error: 'Requests from other sites are refused.' });
     try {
       if (resource === 'events' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });

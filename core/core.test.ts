@@ -1408,3 +1408,55 @@ test('a design draws as an SVG for a README, unplaced parts laid out, and a badg
   assert.ok(!svg.includes('NaN') && !svg.includes('undefined'));
   assert.match(badgeSvg('design', 'in sync', '#2f9e44'), /aria-label="design: in sync"/);
 });
+
+test('a save that meets a newer file replays the edits onto it instead of dropping them', async () => {
+  const { mergeDesigns } = await import('./merge.ts');
+  const base = m.blankDesign('merge', 'Shop');
+  const api = m.addComponent(base, { type: 'service', label: 'API' });
+  const db = m.addComponent(base, { type: 'sql-db', label: 'DB' });
+  const old = m.addComponent(base, { type: 'cache', label: 'Old cache' });
+  const mine = structuredClone(base), theirs = structuredClone(base);
+  // Mine: rename the API, move the DB, delete the cache, add a note.
+  mine.components.find((c) => c.id === api)!.label = 'Orders API';
+  mine.components.find((c) => c.id === db)!.position = { x: 10, y: 20 };
+  mine.components = mine.components.filter((c) => c.id !== old);
+  m.addNote(mine, { text: 'Mine' });
+  // Theirs (an agent): a new step with a line, a tech on the API, and the DB renamed too.
+  m.addStep(theirs, { title: 'Agent step' });
+  m.connect(theirs, { from: api, to: db });
+  theirs.components.find((c) => c.id === api)!.tech = 'Go';
+  theirs.components.find((c) => c.id === db)!.label = 'Orders DB';
+  theirs.rev = 5;
+  const r = mergeDesigns(base, mine, theirs)!;
+  assert.equal(r.merged.rev, 5);
+  assert.deepEqual(r.clashes, []);
+  const byId = (id: string) => r.merged.components.find((c) => c.id === id);
+  assert.deepEqual([byId(api)?.label, byId(api)?.tech, byId(db)?.label, byId(db)?.position, byId(old)], ['Orders API', 'Go', 'Orders DB', { x: 10, y: 20 }, undefined]);
+  assert.equal(r.merged.connections.length, 1);
+  assert.equal(r.merged.notes[0].text, 'Mine');
+  assert.equal(r.merged.steps.at(-1)?.title, 'Agent step');
+
+  // Both renamed the API: mine wins and it is reported.
+  theirs.components.find((c) => c.id === api)!.label = 'Billing API';
+  assert.deepEqual(mergeDesigns(base, mine, theirs)!.clashes, [`${api}.label`]);
+  // A part mine deleted stays if theirs changed it; a new line of theirs to a part mine deleted can't be merged.
+  const gone = structuredClone(mine);
+  gone.components = gone.components.filter((c) => c.id !== db);
+  assert.ok(mergeDesigns(base, gone, theirs)!.merged.components.some((c) => c.id === db));
+  const toOld = structuredClone(base);
+  m.connect(toOld, { from: api, to: old });
+  assert.equal(mergeDesigns(base, mine, toOld), undefined);
+});
+
+test('the API refuses other sites and rebound host names, but not tools or this page', async () => {
+  const { trusted } = await import('../server/api.ts');
+  const req = (method: string, host: string, origin?: string) => ({ method, headers: { host, ...(origin && { origin }) } }) as never;
+  assert.ok(trusted(req('GET', '127.0.0.1:5180')));
+  assert.ok(trusted(req('PUT', '127.0.0.1:5180')), 'curl, the CLI: no Origin');
+  assert.ok(trusted(req('PUT', 'localhost:5180', 'http://localhost:5180')));
+  assert.ok(!trusted(req('POST', '127.0.0.1:5180', 'https://evil.example')));
+  assert.ok(!trusted(req('POST', '127.0.0.1:5180', 'null')), 'sandboxed frames and file pages');
+  assert.ok(!trusted(req('GET', 'evil.example:5180')), 'DNS rebinding');
+  assert.ok(trusted(req('GET', 'devbox:5180'), 'devbox'));
+  assert.ok(trusted(req('GET', '192.168.1.5:5180'), '0.0.0.0'));
+});

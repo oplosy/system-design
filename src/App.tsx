@@ -21,6 +21,7 @@ import { codeUrl, costAt, toDecisionRecord, toMermaid } from '../core/export.ts'
 import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
 import { lint } from '../core/lint.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
+import { mergeDesigns } from '../core/merge.ts';
 import * as m from '../core/mutations.ts';
 import { ApiError, api, shared, type LiveLoad, type Summary, type Trashed } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
@@ -197,10 +198,15 @@ function Shell() {
   const resizeDock = (k: keyof Docks, w: number) =>
     updateDocks((d) => ({ ...d, [k]: { ...d[k], w: Math.round(Math.min(Math.max(w, DOCK_LIMITS[k][0]), DOCK_LIMITS[k][1])) } }));
 
+  // The design as last loaded or saved: what local edits are replayed from when a save meets a newer file.
+  const baseRef = useRef<Design | null>(null);
   const commit = useCallback((d: Design | null, { fresh = false } = {}) => {
     designRef.current = d;
     setDesign(d);
-    if (fresh) hist.current = { past: [], future: [], at: 0 };
+    if (fresh) {
+      hist.current = { past: [], future: [], at: 0 };
+      baseRef.current = d;
+    }
   }, []);
 
   const flush = useCallback(async () => {
@@ -215,14 +221,25 @@ function Shell() {
     s.inFlight = true;
     try {
       const saved = await api.save(d);
+      baseRef.current = saved;
       if (designRef.current?.id === saved.id) commit({ ...designRef.current, rev: saved.rev });
       setError(null);
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        // shortcut: on a conflict the local edit is dropped, not merged; add a merge if agents and you edit at the same time often.
-        s.dirty = false;
-        commit(await api.get(d.id), { fresh: true });
-        setError('This design changed on disk (probably an agent), so it was reloaded. Your last edit was dropped.');
+        // Someone (usually an agent) wrote meanwhile: replay the edits since the last save onto their version.
+        const theirs = await api.get(d.id);
+        const base = baseRef.current;
+        const result = base?.id === d.id ? mergeDesigns(base, designRef.current?.id === d.id ? designRef.current : d, theirs) : undefined;
+        if (result) {
+          baseRef.current = theirs;
+          commit(result.merged);
+          s.dirty = true;
+          setError(result.clashes.length ? `This design changed on disk while you edited; your edits were kept on top (overrode: ${result.clashes.join(', ')}).` : null);
+        } else {
+          s.dirty = false;
+          commit(theirs, { fresh: true });
+          setError('This design changed on disk (probably an agent) in a way your last edit can’t be merged into, so it was reloaded and that edit dropped.');
+        }
       } else setError(errorText(e));
     } finally {
       s.inFlight = false;

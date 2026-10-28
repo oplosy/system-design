@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Design } from '../core/schema.ts';
 import { NotFoundError, readDesign } from '../core/store.ts';
+import { placeMissing } from '../src/layout.ts';
 
 export const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
 
@@ -25,6 +26,8 @@ async function withInsides(id: string) {
       if (next !== id && e instanceof NotFoundError) continue;
       throw e;
     }
+    // The layout engine loads as its own file, which a copy opened from disk can't fetch, so place everything here.
+    await placeMissing(d);
     out.set(next, d);
     for (const c of d.components) if (c.detail) queue.push(c.detail);
   }

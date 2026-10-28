@@ -43,7 +43,7 @@ npm install
 npm run dev
 ```
 
-Without Vite, build once and serve the built app and the API from one Node server (`PORT` and `HOST` override `5180` and `127.0.0.1`):
+Without Vite, build once and serve the built app and the API from one Node server (`PORT` and `HOST` override `5180` and `127.0.0.1`; the API answers only requests addressed to this machine or to `HOST`, and refuses writes from other sites):
 
 ```bash
 npm run build
@@ -51,6 +51,8 @@ npm start
 ```
 
 Open http://127.0.0.1:5180. Create a design from the **Twitter from scratch** or **Three-tier web app** template, start blank, or bring a diagram from another tool: a Mermaid flowchart's nodes, arrows and subgraphs become parts, lines and boundaries, a sequence diagram's participants and messages become parts, lines and a flow, and C4 diagrams (Mermaid's or C4-PlantUML) and architecture-beta bring their people, containers, stores and boundaries. A draw.io diagram keeps its arrangement: shapes become parts typed from their icon (the AWS, Azure, GCP and Kubernetes libraries) or shape (actor, cylinder), a shape that holds others (nested, or drawn around them) becomes a boundary, arrows become lines; compressed files are read too, and only the first page. A Structurizr workspace is read at the container level: a software system with containers becomes a system boundary around them, groups become boundaries, a component's relationships move to its container, and dynamic views become flows. Elsewhere part types come from shapes and names, head word first ("PostgreSQL" → SQL DB, "Kafka consumer" → worker). Whatever it leaves out is listed before anything is created; styling lines (`classDef`, `style`) are ignored. Or paste a docker-compose file or Kubernetes manifests: services and workloads become parts (typed from their image), `depends_on`, Ingress backends and environment values that address another service (a URL, `host:port`, a cluster DNS name, or a variable named like `DB_HOST` or `API_URL`) become lines, and more than one network or namespace becomes boundaries. Kinds that draw nothing (ConfigMap, Secret…) are listed before anything is created. Helm templates need rendering first (`helm template`). Terraform works from `terraform show -json` output (state, or a saved plan): known resources (EC2, Lambda, ECS, RDS, S3, SQS, load balancers… and their GCP and Azure counterparts) become parts, `depends_on` and, in a plan, configuration references become lines (also through undrawn resources: a load balancer reaches its services through listeners and target groups, a queue its consumer through the event source mapping), and more than one module becomes boundaries; IAM, security groups and other plumbing are listed as left out. A CloudFormation template (YAML with `!Ref`/`!GetAtt`/`!Sub`, or JSON, so `cdk synth` output too, where parts take their construct names) and a `pulumi stack export` (AWS, Google Cloud, Azure classic and the common azure-native types) are read the same way: each resource maps to its Terraform counterpart, references and dependencies become lines, and Pulumi component resources become boxes, nested, around what they hold. A Backstage catalog (`catalog-info.yaml`, one or many entities) brings Components and Resources as parts with their descriptions and source links, Systems as boundaries around them (inside their Domains and subdomains), `dependsOn` as lines, and an API one component provides and another consumes as a line between the two, named after the API. An OpenAPI document adds its service with the endpoints in its description (or fills in the description of the service already drawn under that name), plus the sign-in provider its OAuth / OpenID Connect schemes name and its webhooks; an AsyncAPI document (2.x or 3.x) adds its application and each channel as a queue, topic or stream (from the server protocol), with async lines for what it sends and receives. Recorded traces work too: OTLP JSON (the OpenTelemetry collector's file exporter, one object per line) or a Jaeger JSON download. Services become parts, client spans to databases, queues and outside hosts add those (typed from `db.system` and `messaging.system`), calls become lines with the measured rate (calls over the capture window) and one-way latency (half the caller's median), queue hops are async, and each kind of request becomes a flow walked from one sample trace.
+
+When you and an agent change the same design at once, your edits are replayed onto the agent's version instead of being dropped; where you both changed the same field, yours wins and the message says which.
 
 Edit by hand: drag shapes from the palette, drag between nodes to connect them (drag from a note or decision to a component to attach it), select an item to edit it on the right, and press Delete to remove it.
 
@@ -78,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: oplosy/system-design@main
+      - uses: oplosy/system-design@v1
         with:
           design: docs/architecture.json
           infra: |
