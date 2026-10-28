@@ -1810,11 +1810,11 @@ export function drawShape(type: ComponentType, sketch: boolean, seed: number) {
 export { gen };
 
 // Words too common across parts to say anything about the type.
-const GENERIC = new Set('api app apps server servers web data service services system the and for with main core new'.split(' '));
+const GENERIC = new Set('api app apps server servers web data service services system the and for with main core new application'.split(' '));
 const WORDS = Object.entries(SHAPES).map(([type, s]) => [type, new Set(`${s.name} ${s.keywords}`.toLowerCase().split(/\s+/))] as const);
 
 // Products listed under several parts, and the one they are usually drawn as.
-const PREFER: Record<string, ComponentType> = { redis: 'cache' };
+const PREFER: Record<string, ComponentType> = { redis: 'cache', database: 'sql-db', spring: 'service' };
 
 /**
  * Picks a part type from free text such as "PostgreSQL Orders DB" or "Kafka consumer Mailer", trying the last word first:

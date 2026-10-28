@@ -312,7 +312,7 @@ test('Mermaid flowcharts import, including our own export', async () => {
     ['a:client:', 'b:api-gateway:', 'c:service:', 'd:service:', 'e:sql-db:data', 'q:queue:'],
   );
   await store.writeDesign(x);
-  assert.throws(() => parseMermaid('sequenceDiagram\n  A->>B: hi'), /only Mermaid flowcharts/);
+  assert.throws(() => parseMermaid('pie title Pets'), /only Mermaid flowcharts, sequence/);
   const { guessType } = await import('../src/shapes.ts');
   const real = m.blankDesign('mermaid-real', 'Real');
   importMermaid(real, 'flowchart LR\n  m[Mailer (Kafka consumer)] --> r[Sessions (Redis)]\n  r --> o[Orders API]\n  o --> p[Orders DB (PostgreSQL)]', { guess: guessType });
@@ -775,4 +775,121 @@ test('imports OpenTelemetry and Jaeger traces with measured load, latency and fl
   assert.deepEqual(j.parts.map((p) => `${p.label}:${p.type}`), ['web:service', 'api:service', 'redis:cache']);
   assert.deepEqual(j.links.map((l) => `${l.from}>${l.to}:${l.latency}`), ['svc:web>svc:api:10', 'svc:api>db:redis::1']);
   assert.throws(() => readInfra('{"resourceSpans": []}'), /no spans/);
+});
+
+test('imports Mermaid sequence, C4 and architecture diagrams, and pastes any format as a step', async () => {
+  const { importMermaid, parseMermaid, mermaidKind } = await import('./mermaid.ts');
+  const { importAsStep, formatOf } = await import('./importer.ts');
+  const { toMermaidSequence } = await import('./export.ts');
+  const { toPlantUml } = await import('./interop.ts');
+  const { guessType } = await import('../src/shapes.ts');
+  const labels = (d: { components: { id: string; label: string }[] }, ids: string[]) => ids.map((id) => d.components.find((c) => c.id === id)!.label).join(' > ');
+
+  // A flow exported as a sequence diagram comes back as the same parts, lines and flow.
+  const src = m.blankDesign('seq-src', 'Src');
+  const user = m.addComponent(src, { type: 'user', label: 'User' });
+  const api = m.addComponent(src, { type: 'service', label: 'Orders API' });
+  const db = m.addComponent(src, { type: 'sql-db', label: 'Orders DB' });
+  m.connect(src, { from: user, to: api });
+  m.connect(src, { from: api, to: db });
+  m.addFlow(src, { title: 'Place order', path: [user, api, db, api, user] });
+  const back = m.blankDesign('seq-back', 'Back');
+  const got = importMermaid(back, toMermaidSequence(src, src.flows[0]));
+  assert.deepEqual([got.components, got.connections.length, got.flows], [['User', 'Orders API', 'Orders DB'], 2, ['Place order']]);
+  assert.equal(labels(back, back.flows[0].path), 'User > Orders API > Orders DB > Orders API > User');
+
+  // Hand-written: actors, async calls, blocks and notes; a call back from an earlier participant walks the same line.
+  const hand = [
+    '---',
+    'title: ignored front matter',
+    '---',
+    'sequenceDiagram',
+    '  actor C as Customer',
+    '  participant W as Web',
+    '  C->>+W: Checkout',
+    '  W-)Q: order placed',
+    '  Note over W,Q: fire and forget',
+    '  loop retry',
+    '    W->>P: charge',
+    '  end',
+    '  P-->>W: ok',
+    '  W-->>-C: done',
+    '  this is not a message',
+  ].join('\n');
+  assert.equal(mermaidKind(hand), 'sequence');
+  const p = parseMermaid(hand);
+  assert.deepEqual(p.skipped, [15]);
+  assert.deepEqual(p.edges.map((e) => `${e.from}>${e.to}:${e.label ?? ''}:${e.async}`), ['C>W:Checkout:false', 'W>Q:order placed:true', 'W>P:charge:false']);
+  assert.deepEqual(p.flows, [{ title: 'Sequence diagram', path: ['C', 'W', 'Q', 'W', 'P', 'W', 'C'] }]);
+
+  // Pasting into a design that has some of the parts reuses them, by name, and adds the rest as one new step.
+  const shop = m.blankDesign('seq-shop', 'Shop');
+  const web = m.addComponent(shop, { type: 'client', label: 'web' });
+  const step = importAsStep(shop, hand, { guess: guessType });
+  const last = shop.steps.at(-1)!;
+  assert.deepEqual([last.id, last.title, last.summary, last.seen], [step, 'Import Mermaid sequence diagram', 'From a Mermaid sequence diagram: 3 parts, 3 lines, 1 flow.', false]);
+  assert.equal(shop.components.filter((c) => c.label.toLowerCase() === 'web').length, 1);
+  assert.ok(shop.connections.some((c) => c.from === web && c.step === step));
+  assert.throws(() => importAsStep(structuredClone(shop), hand), /already on the sheet/);
+
+  // C4 in Mermaid's own syntax, with boundaries, stores, external systems and Rel_Back.
+  const c4 = [
+    'C4Container',
+    '  title Internet banking',
+    '  Person(customer, "Customer", "A bank customer")',
+    '  System_Boundary(bank, "Internet Banking") {',
+    '    Container(spa, "Single-Page App", "Angular", "Banking in the browser")',
+    '    Container(api, "API Application", "Java, Spring")',
+    '    ContainerDb(db, "Database", "MongoDB", $tags="v1")',
+    '    ContainerQueue(events, "Events", "Kafka")',
+    '  }',
+    '  System_Ext(mail, "E-mail system")',
+    '  Rel(customer, spa, "Uses", "HTTPS")',
+    '  Rel(spa, api, "Calls", "JSON/HTTPS")',
+    '  Rel_Back(db, api, "Reads from and writes to")',
+    '  Rel(api, events, "async")',
+    '  Rel(api, mail, "Sends e-mail using")',
+    '  UpdateRelStyle(customer, spa, $offsetY="-40")',
+  ].join('\n');
+  const x = m.blankDesign('c4', 'C4');
+  importMermaid(x, c4, { guess: guessType });
+  assert.deepEqual(
+    x.components.map((c) => `${c.label}:${c.type}:${c.tech ?? ''}:${c.boundary ?? ''}`),
+    ['Customer:user::', 'Single-Page App:ui:Angular:bank', 'API Application:service:Java, Spring:bank', 'Database:nosql-db:MongoDB:bank', 'Events:stream:Kafka:bank', 'E-mail system:external::'],
+    'a C4 database narrows to its technology',
+  );
+  assert.deepEqual([x.boundaries[0].kind, x.components[1].description], ['system', 'Banking in the browser']);
+  assert.deepEqual(x.connections.map((c) => `${c.from}>${c.to}:${c.label ?? ''}:${!!c.async}`), ['customer>spa::false', 'spa>api:Calls:false', 'api>db:Reads from and writes to:false', 'api>events::true', 'api>mail:Sends e-mail using:false']);
+
+  // Our own C4-PlantUML export reads back, boundary kinds included.
+  const puml = m.blankDesign('puml', 'Puml');
+  importMermaid(puml, toPlantUml(x), { guess: guessType });
+  assert.equal(formatOf(toPlantUml(x)), 'C4 diagram');
+  assert.deepEqual(puml.components.map((c) => `${c.label}:${c.type}`).sort(), x.components.map((c) => `${c.label}:${c.type}`).sort());
+  assert.deepEqual([puml.boundaries[0].kind, puml.connections.length, puml.connections.filter((c) => c.async).length], ['system', 5, 1]);
+
+  // architecture-beta: groups nest, icons type the parts, arrows give direction; lines through junctions are reported.
+  const arch = [
+    'architecture-beta',
+    '  group cloud(cloud)[Cloud]',
+    '  group net(cloud)[Private net] in cloud',
+    '  service gw(internet)[Gateway] in cloud',
+    '  service app(server)[App] in net',
+    '  service db(database)[Database] in net',
+    '  service fn(logos:aws-lambda)[Resize]',
+    '  junction j1 in cloud',
+    '  gw:R --> L:app',
+    '  db:L <-- R:app',
+    '  app:B -- T:fn',
+    '  app:T -- B:j1',
+  ].join('\n');
+  assert.deepEqual(parseMermaid(arch).skipped, [12]);
+  const y = m.blankDesign('arch', 'Arch');
+  importMermaid(y, arch, { guess: guessType });
+  assert.deepEqual(y.components.map((c) => `${c.id}:${c.type}:${c.boundary ?? ''}`), ['gw:internet:cloud', 'app:service:net', 'db:sql-db:net', 'fn:function:']);
+  assert.deepEqual(y.boundaries.map((b) => `${b.id}:${b.parent ?? ''}`), ['cloud:', 'net:cloud']);
+  assert.deepEqual(y.connections.map((c) => `${c.from}>${c.to}`), ['gw>app', 'app>db', 'app>fn']);
+
+  assert.deepEqual([formatOf('just some words'), formatOf('services:\n  api:\n    image: nginx'), formatOf('flowchart LR\n  a --> b')], [undefined, 'docker-compose file', 'Mermaid flowchart']);
+  assert.throws(() => importAsStep(m.blankDesign('none', 'None'), 'hello'), /Paste a Mermaid flowchart/);
 });

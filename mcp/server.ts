@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type Design } from '../core/schema.ts';
 import { toDecisionRecord, toMermaid } from '../core/export.ts';
 import { infraDrift, syncInfra } from '../core/infra.ts';
+import { importAsStep } from '../core/importer.ts';
 import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
 import { failureImpact, lint } from '../core/lint.ts';
 import * as m from '../core/mutations.ts';
@@ -27,6 +28,7 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Set code on parts whose code you know: a URL, or a path that opens against the design's repo.
 - Tag parts by concern ("payments", "pii", a team name) when a design is big; each tag becomes a view the reviewer can switch to.
 - When the project has docker-compose files, Kubernetes manifests or Terraform, run sync_infra with dry_run to see what the design is missing, and sync it as a step when the infrastructure is the truth.
+- When the project already has diagrams (Mermaid, C4, PlantUML in docs or READMEs), bring them in with import_diagram instead of redrawing them.
 - After a step, run lint and fix what it finds or say in a note why it is fine.
 - Start from list_designs; call get_design before editing an existing one.
 - The reviewer can send steps back with comments. Before continuing a design, call get_feedback; fix what it asks (in that step, or in a new step), then resolve_feedback with a short reply. Resolving hands the step back for review.`;
@@ -336,6 +338,25 @@ server.registerTool(
     const text = await fs.readFile(path.resolve(file), 'utf8');
     if (dry_run) return ok(infraDrift(await readDesign(id), text, guessType));
     return edit(id, (d) => syncInfra(d, text, title ?? `Sync with ${path.basename(file)}`, guessType) ?? 'nothing missing; no step added');
+  },
+);
+
+server.registerTool(
+  'import_diagram',
+  {
+    description:
+      'Add an existing diagram to a design as one new step for review: a Mermaid flowchart, sequence diagram (becomes a flow), C4 or architecture-beta diagram, C4-PlantUML, docker-compose, Kubernetes YAML, `terraform show -json` output or OTLP / Jaeger traces. Parts the design already has (same name) are reused, so it extends a design rather than copying one. Give the text, or the path of a file holding it.',
+    inputSchema: {
+      design,
+      text: z.string().optional().describe('The diagram or file content'),
+      path: z.string().optional().describe('Absolute path of a file holding it, instead of text'),
+      title: z.string().optional().describe('Step title; defaults to "Import <format>"'),
+    },
+  },
+  async ({ design: id, text, path: file, title }) => {
+    if (!text === !file) throw new Error('Give either text or path.');
+    const source = text ?? (await fs.readFile(path.resolve(file!), 'utf8'));
+    return edit(id, (d) => importAsStep(d, source, { title, guess: guessType }));
   },
 );
 

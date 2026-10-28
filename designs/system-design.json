@@ -3,7 +3,7 @@
   "title": "System design – local design canvas",
   "description": "Local canvas where agents add architecture steps over MCP and a reviewer walks them in the browser. Designs are JSON files on disk.",
   "repo": "https://github.com/oplosy/system-design/tree/main",
-  "rev": 8,
+  "rev": 9,
   "steps": [
     {
       "id": "start",
@@ -56,6 +56,12 @@
       "id": "import-opentelemetry-and-jaeger-traces",
       "title": "Import OpenTelemetry and Jaeger traces",
       "summary": "The infra reader also accepts recorded traces (OTLP JSON or a Jaeger download). Services, databases, queues and outside hosts become parts. Calls become lines with measured qps and one-way latency. Each kind of request becomes a flow. Drift reports lines whose numbers are off by more than a quarter.",
+      "seen": false
+    },
+    {
+      "id": "paste-any-diagram-as-a-step",
+      "title": "Paste any diagram as a step",
+      "summary": "There is now a single importer that recognises the format. It reads Mermaid (flowchart, sequence, C4, architecture-beta), C4-PlantUML, compose, Kubernetes, Terraform and traces. It is reached by pasting on the canvas or through the MCP import_diagram tool. Each import becomes a new step and reuses parts by name. Copying parts writes a Mermaid flowchart to the clipboard.",
       "seen": false
     }
   ],
@@ -209,6 +215,21 @@
       "label": "OTLP / Jaeger trace JSON",
       "description": "Collector file-exporter output or a Jaeger JSON download",
       "step": "import-opentelemetry-and-jaeger-traces"
+    },
+    {
+      "id": "importer",
+      "type": "module",
+      "label": "Importer (format detection)",
+      "description": "Detects the pasted format and adds it as one new step",
+      "code": "core/importer.ts",
+      "step": "paste-any-diagram-as-a-step"
+    },
+    {
+      "id": "diagram-text",
+      "type": "external",
+      "label": "Mermaid / C4-PlantUML text",
+      "description": "Diagrams from docs, READMEs or other tools",
+      "step": "paste-any-diagram-as-a-step"
     }
   ],
   "connections": [
@@ -407,6 +428,34 @@
       "to": "infra-reader",
       "label": "spans",
       "step": "import-opentelemetry-and-jaeger-traces"
+    },
+    {
+      "id": "browser-app-to-importer",
+      "from": "browser-app",
+      "to": "importer",
+      "label": "paste",
+      "step": "paste-any-diagram-as-a-step"
+    },
+    {
+      "id": "mcp-server-to-importer",
+      "from": "mcp-server",
+      "to": "importer",
+      "label": "import_diagram",
+      "step": "paste-any-diagram-as-a-step"
+    },
+    {
+      "id": "diagram-text-to-importer",
+      "from": "diagram-text",
+      "to": "importer",
+      "label": "text",
+      "step": "paste-any-diagram-as-a-step"
+    },
+    {
+      "id": "importer-to-infra-reader",
+      "from": "importer",
+      "to": "infra-reader",
+      "label": "compose / k8s / tf / traces",
+      "step": "paste-any-diagram-as-a-step"
     }
   ],
   "notes": [
@@ -587,6 +636,23 @@
         "drift-cli"
       ],
       "step": "import-opentelemetry-and-jaeger-traces"
+    },
+    {
+      "id": "decision-one-importer-merged-into-the-op",
+      "title": "One importer, merged into the open design as a new step",
+      "why": "Pasting is the cheapest way to bring diagrams in from other tools. Adding each paste as a new step keeps it reviewable and lets it be undone. Reusing parts by name lets a paste extend a design instead of duplicating it. The UI paste and the MCP tool share one code path, so they behave the same.",
+      "alternatives": [
+        "Separate import buttons per format",
+        "Import only into new designs (as before)",
+        "Match parts by Mermaid node id"
+      ],
+      "tradeoffs": "Matching by name can join two different parts that share a name. Node ids are not used for matching, because hand-written diagrams use A, B, C. New parts take positions from a fresh full layout, so they can overlap parts placed by hand until Layout runs. Lines through architecture-beta junctions are reported, not resolved.",
+      "links": [
+        "importer",
+        "browser-app",
+        "mcp-server"
+      ],
+      "step": "paste-any-diagram-as-a-step"
     }
   ],
   "boundaries": [],

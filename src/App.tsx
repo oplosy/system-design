@@ -45,6 +45,8 @@ const DOCKS: Docks = { left: { open: true, w: 248 }, right: { open: true, w: 352
 const DOCK_LIMITS = { left: [200, 420], right: [280, 600] } as const;
 /** Gap between a floating panel and the window edge. */
 const GAP = 12;
+/** Marks clipboard content copied from this sheet. */
+const CLIP_MIME = 'application/x-system-design';
 
 type Editing = { id: string; at: Pt; value: string; multiline: boolean };
 
@@ -155,6 +157,8 @@ function Shell() {
   // Undo history of whole designs. It restarts whenever the design is replaced from disk.
   const hist = useRef({ past: [] as Design[], future: [] as Design[], at: 0 });
   const clip = useRef<{ items: m.Clip; pastes: number } | null>(null);
+  /** A copy, cut or paste key still waiting for its clipboard event. */
+  const clipKey = useRef<string | null>(null);
   const pendingSelect = useRef<Set<string> | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const findRef = useRef<HTMLInputElement>(null);
@@ -906,11 +910,21 @@ function Shell() {
         if (key === 'z') undo(!e.shiftKey);
         else if (key === 'y') undo(false);
         else if (key === 'd') duplicate();
-        else if (key === 'v' && clip.current) pasteClip(clip.current);
-        else if (key === 'x' && copy()) {
-          remove(selectedIds());
-          setSelected(null);
-        } else if (!(key === 'c' && copy())) return;
+        else if (key === 'c' || key === 'x' || key === 'v') {
+          // The browser follows with a clipboard event (handled below, so text travels to and from other apps);
+          // where none comes, the key acts on the sheet's own clipboard.
+          clipKey.current = key;
+          setTimeout(() => {
+            if (clipKey.current !== key) return;
+            clipKey.current = null;
+            if (key === 'v') return void (clip.current && pasteClip(clip.current));
+            if (copy() && key === 'x') {
+              remove(selectedIds());
+              setSelected(null);
+            }
+          });
+          return;
+        } else return;
         e.preventDefault();
         return;
       }
@@ -931,6 +945,56 @@ function Shell() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  });
+
+  // Copied parts go to the clipboard as a Mermaid flowchart for other apps, marked so a paste here keeps every detail.
+  // A pasted diagram or infrastructure file (Mermaid, C4-PlantUML, compose, Kubernetes, Terraform, traces) becomes a new step.
+  useEffect(() => {
+    const ignore = (e: ClipboardEvent) => creating || presenting || !design || !!(e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]');
+    const onCopy = (e: ClipboardEvent) => {
+      clipKey.current = null;
+      if (ignore(e) || window.getSelection()?.toString() || !copy()) return;
+      const c = clip.current!.items, inside = new Set(c.boundaries.map((b) => b.id));
+      const text = toMermaid({
+        ...design!,
+        ...c,
+        components: c.components.map((x) => (x.boundary && inside.has(x.boundary) ? x : { ...x, boundary: undefined })),
+        boundaries: c.boundaries.map((b) => (b.parent && inside.has(b.parent) ? b : { ...b, parent: undefined })),
+      });
+      e.clipboardData?.setData('text/plain', text);
+      e.clipboardData?.setData(CLIP_MIME, '1');
+      e.preventDefault();
+      if (e.type === 'cut') {
+        remove(selectedIds());
+        setSelected(null);
+      }
+    };
+    const onPaste = async (e: ClipboardEvent) => {
+      clipKey.current = null;
+      if (ignore(e) || !current) return;
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      const ours = e.clipboardData?.types.includes(CLIP_MIME);
+      e.preventDefault();
+      if (ours || !text.trim()) return void (clip.current && pasteClip(clip.current));
+      // Loaded only here, so the YAML parser stays out of the main bundle.
+      const { formatOf, importAsStep } = await import('../core/importer.ts');
+      if (!formatOf(text)) return setError('That paste isn’t a diagram or infrastructure file this can read.');
+      const before = designRef.current?.steps.length ?? 0;
+      change((d) => void importAsStep(d, text, { seen: true, guess: guessType }));
+      const after = designRef.current?.steps.length ?? 0;
+      if (after > before) {
+        setSelected(null);
+        setViewIndex(after - 1);
+      }
+    };
+    document.addEventListener('copy', onCopy);
+    document.addEventListener('cut', onCopy);
+    document.addEventListener('paste', onPaste);
+    return () => {
+      document.removeEventListener('copy', onCopy);
+      document.removeEventListener('cut', onCopy);
+      document.removeEventListener('paste', onPaste);
+    };
   });
 
   const icon = (d: string) => (
@@ -1489,7 +1553,7 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
   };
   const options = [
     { id: '', title: 'Blank sheet', description: 'Nothing on it yet. Build it yourself or let an agent fill it in.', steps: 1, unseen: 0 },
-    { id: MERMAID, title: 'Mermaid flowchart', description: 'Paste a flowchart; its boxes, arrows and subgraphs become parts, lines and boundaries.', steps: 1, unseen: 0 },
+    { id: MERMAID, title: 'Mermaid or C4 diagram', description: 'Paste a flowchart, sequence, C4 or architecture diagram (or C4-PlantUML); its boxes, arrows and groups become parts, lines and boundaries, a sequence a flow.', steps: 1, unseen: 0 },
     { id: INFRA, title: 'Compose, Kubernetes, Terraform or traces', description: 'Paste a compose file, manifests, "terraform show -json" output, or OpenTelemetry / Jaeger traces; services, workloads and resources become parts, dependencies and calls become lines (traces add measured load, latency and flows).', steps: 1, unseen: 0 },
     ...templates,
   ];
@@ -1540,7 +1604,7 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
                 ? 'flowchart LR\n  user((User)) --> api[Orders API]\n  api --> db[(Orders DB)]'
                 : 'services:\n  api:\n    build: .\n    depends_on: [db]\n  db:\n    image: postgres:16'
             }
-            aria-label={template === MERMAID ? 'Mermaid flowchart' : 'docker-compose, Kubernetes YAML, Terraform JSON or trace JSON'}
+            aria-label={template === MERMAID ? 'Mermaid or C4 diagram' : 'docker-compose, Kubernetes YAML, Terraform JSON or trace JSON'}
             spellCheck={false}
             onChange={(e) => {
               setSource(e.target.value);

@@ -6,11 +6,11 @@ import type { Component, ComponentType, Design } from './schema.ts';
 
 const PEOPLE = new Set<ComponentType>(['user', 'admin']);
 const EXTERNAL = new Set<ComponentType>(['external', 'payment', 'sms', 'maps', 'crm', 'cloud-provider', 'internet']);
-const DATASTORE = new Set<ComponentType>([
+export const DATASTORE = new Set<ComponentType>([
   'sql-db', 'nosql-db', 'key-value', 'cache', 'graph-db', 'time-series', 'vector-db', 'search', 'object-storage', 'file-storage',
   'warehouse', 'data-lake', 'olap', 'block-storage', 'local-db', 'backup', 'ledger', 'nas',
 ]);
-const QUEUE = new Set<ComponentType>(['queue', 'pubsub', 'stream', 'event-bus', 'mqtt']);
+export const QUEUE = new Set<ComponentType>(['queue', 'pubsub', 'stream', 'event-bus', 'mqtt']);
 const role = (c: Component) => (PEOPLE.has(c.type) ? 'person' : EXTERNAL.has(c.type) ? 'external' : DATASTORE.has(c.type) ? 'db' : QUEUE.has(c.type) ? 'queue' : 'container');
 
 /** Ids are lowercase-dashed; both tools want letters, digits and underscores, and not a leading digit. */
