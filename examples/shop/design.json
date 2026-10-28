@@ -14,6 +14,12 @@
       "title": "Services from compose",
       "summary": "Web, API and database from docker-compose.yml.",
       "seen": false
+    },
+    {
+      "id": "add-search",
+      "title": "Add search",
+      "summary": "Product search for the storefront.",
+      "seen": false
     }
   ],
   "components": [
@@ -40,6 +46,13 @@
       "tech": "postgres:16",
       "source": "compose:db",
       "step": "services-from-compose"
+    },
+    {
+      "id": "search",
+      "type": "search",
+      "label": "search",
+      "tech": "OpenSearch",
+      "step": "add-search"
     }
   ],
   "connections": [
@@ -54,6 +67,12 @@
       "from": "api",
       "to": "db",
       "step": "services-from-compose"
+    },
+    {
+      "id": "api-search",
+      "from": "api",
+      "to": "search",
+      "step": "add-search"
     }
   ],
   "notes": [],
