@@ -1,6 +1,6 @@
 import ELK, { type ElkExtendedEdge, type ElkNode } from 'elkjs/lib/elk.bundled.js';
 import type { Design } from '../core/schema.ts';
-import { BOUNDARY_PAD, EMPTY_BOUNDARY } from './boundaries.ts';
+import { BOUNDARY_PAD, EMPTY_BOUNDARY, boundaryBoxes } from './boundaries.ts';
 import { DECISION_SIZE, NOTE_SIZE, SHAPES } from './shapes.ts';
 
 const elk = new ELK();
@@ -221,3 +221,57 @@ export async function layout(d: Design, kind: LayoutKind = 'layered', only?: { i
 
 type Box = { x: number; y: number; right: number; bottom: number };
 const GAP = 40;
+
+/**
+ * Positions for the items that have none (an agent's step, a paste) on a sheet that is already laid out. Each goes
+ * where the full layout `pos` puts it, moved by how far the placed items sit from their own layout spots (so it lands
+ * beside its neighbours), then to the nearest spot that covers no placed item and no box it isn't in.
+ * Nothing already placed moves.
+ */
+export function placeNew(d: Design, pos: Map<string, Pos>) {
+  const empty = d.boundaries.filter((b) => !d.components.some((c) => c.boundary === b.id) && !d.boundaries.some((x) => x.parent === b.id));
+  // `inside`: the innermost box an item may sit in; an empty boundary is its own box.
+  const items = [
+    ...d.components.map((c) => ({ id: c.id, ...SHAPES[c.type], position: c.position, inside: c.boundary })),
+    ...d.notes.map((n) => ({ id: n.id, ...NOTE_SIZE, position: n.position, inside: undefined })),
+    ...d.decisions.map((x) => ({ id: x.id, ...DECISION_SIZE, position: x.position, inside: undefined })),
+    ...empty.map((b) => ({ id: b.id, ...(b.size ?? EMPTY_BOUNDARY), position: b.position, inside: b.id })),
+  ];
+  const fresh = items.filter((i) => !i.position && pos.has(i.id));
+  const placed = items.filter((i) => i.position);
+  if (!placed.length) return new Map(fresh.map((i) => [i.id, pos.get(i.id)!]));
+
+  const median = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0);
+  const known = placed.filter((i) => pos.has(i.id));
+  const dx = median(known.map((i) => i.position!.x - pos.get(i.id)!.x));
+  const dy = median(known.map((i) => i.position!.y - pos.get(i.id)!.y));
+  const freshIds = new Set(fresh.map((i) => i.id));
+  const boxes = [...boundaryBoxes(d)].filter(([id]) => !freshIds.has(id));
+  const taken = placed.map((i) => ({ ...i.position!, w: i.w, h: i.h }));
+  const out = new Map<string, Pos>();
+  for (const i of fresh) {
+    const own = new Set<string>();
+    for (let b = i.inside; b && !own.has(b); b = d.boundaries.find((x) => x.id === b)?.parent) own.add(b);
+    const walls = [...taken, ...boxes.filter(([id]) => !own.has(id)).map(([, b]) => b)];
+    const free = (p: Pos) => walls.every((b) => p.x >= b.x + b.w + GAP || b.x >= p.x + i.w + GAP || p.y >= b.y + b.h + GAP || b.y >= p.y + i.h + GAP);
+    const want = { x: pos.get(i.id)!.x + dx, y: pos.get(i.id)!.y + dy };
+    let at = want;
+    // Rings of grid points ever further out; the closest free one wins.
+    for (let r = 0; r <= 4000; r += STEP) {
+      const ring: Pos[] = [];
+      for (let a = -r; a <= r; a += STEP) {
+        ring.push({ x: want.x + a, y: want.y - r }, { x: want.x + a, y: want.y + r });
+        if (Math.abs(a) < r) ring.push({ x: want.x - r, y: want.y + a }, { x: want.x + r, y: want.y + a });
+      }
+      const hit = ring.filter(free).sort((p, q) => Math.hypot(p.x - want.x, p.y - want.y) - Math.hypot(q.x - want.x, q.y - want.y))[0];
+      if (hit) {
+        at = hit;
+        break;
+      }
+    }
+    out.set(i.id, { x: Math.round(at.x), y: Math.round(at.y) });
+    taken.push({ ...at, w: i.w, h: i.h });
+  }
+  return out;
+}
+const STEP = 20;

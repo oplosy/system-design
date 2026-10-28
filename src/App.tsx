@@ -27,7 +27,7 @@ import { ApiError, api, shared, type Summary } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
-import { LAYOUTS, layout, type LayoutKind } from './layout.ts';
+import { LAYOUTS, layout, placeNew, type LayoutKind } from './layout.ts';
 import { SequenceView } from './sequence.tsx';
 import { DRAG_MIME, Dock, FindBox, Inspector, type FlowAt, Palette, PresentBar, ReviewBar, ShapePreview, type AddKind } from './panels.tsx';
 import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES, guessType } from './shapes.ts';
@@ -342,7 +342,7 @@ function Shell() {
     };
   }, [id, commit, leave]);
 
-  // New items (from agents or templates) arrive without positions: lay them out once.
+  // New items (from agents, templates or a paste) arrive without positions: lay them out once, clear of what is placed.
   useEffect(() => {
     if (!design) return;
     const items = [...design.components, ...design.notes, ...design.decisions, ...emptyBoundaries(design)];
@@ -353,7 +353,8 @@ function Shell() {
         if (cancelled) return;
         change(
           (d) => {
-            for (const x of [...d.components, ...d.notes, ...d.decisions, ...emptyBoundaries(d)]) if (!x.position) x.position = pos.get(x.id);
+            const at = placeNew(d, pos);
+            for (const x of [...d.components, ...d.notes, ...d.decisions, ...emptyBoundaries(d)]) if (!x.position) x.position = at.get(x.id);
           },
           { record: false },
         );

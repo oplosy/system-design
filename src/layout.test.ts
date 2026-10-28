@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseDesign } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
-import { LAYOUTS, layout } from './layout.ts';
+import { LAYOUTS, layout, placeNew } from './layout.ts';
 import { DECISION_SIZE, NOTE_SIZE, SHAPES } from './shapes.ts';
 
 function sample() {
@@ -71,4 +71,33 @@ test('a selection moves alone and keeps its corner', async () => {
   assert.deepEqual([...pos.keys()].sort(), [...ids].sort());
   assert.equal(Math.min(...[...pos.values()].map((p) => p.x)), 500);
   assert.equal(Math.min(...[...pos.values()].map((p) => p.y)), 300);
+});
+
+test('new items land beside their neighbours, clear of everything placed by hand', async () => {
+  const d = sample();
+  const pos = await layout(d);
+  // The sheet was laid out, then shifted and rearranged by hand; three parts arrive later without positions.
+  for (const x of [...d.components, ...d.notes, ...d.decisions]) x.position = { x: pos.get(x.id)!.x + 500, y: pos.get(x.id)!.y + 300 };
+  const [a, b, c] = d.components.slice(0, 3);
+  const moved = d.components[3];
+  // Moved by hand onto the spot the layout keeps for `a`.
+  moved.position = { ...a.position! };
+  for (const x of [a, b, c]) x.position = undefined;
+  const before = JSON.stringify(d);
+  const at = placeNew(d, pos);
+  assert.equal(JSON.stringify(d), before, 'nothing placed moves');
+  assert.deepEqual([...at.keys()], [a.id, b.id, c.id]);
+  assert.deepEqual(at.get(b.id), { x: pos.get(b.id)!.x + 500, y: pos.get(b.id)!.y + 300 }, 'a free spot keeps the layout, shifted like the rest');
+  const placedBoxes = [...d.components, ...d.notes, ...d.decisions]
+    .filter((x) => x.position)
+    .map((x) => ({ ...x.position!, ...('type' in x ? SHAPES[x.type] : 'text' in x ? NOTE_SIZE : DECISION_SIZE) }));
+  for (const x of [a, b, c]) {
+    const p = { ...at.get(x.id)!, ...SHAPES[x.type] };
+    for (const q of placedBoxes) assert.ok(p.x >= q.x + q.w || q.x >= p.x + p.w || p.y >= q.y + q.h || q.y >= p.y + p.h, `${x.id} covers a placed item`);
+  }
+  const p = at.get(a.id)!;
+  assert.ok(Math.hypot(p.x - moved.position!.x, p.y - moved.position!.y) < 400, 'pushed only as far as needed');
+  // With nothing placed yet, the layout is used as it is.
+  const blank = sample();
+  assert.deepEqual(placeNew(blank, pos), new Map([...blank.components, ...blank.notes, ...blank.decisions].map((x) => [x.id, pos.get(x.id)!])));
 });
