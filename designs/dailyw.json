@@ -3,7 +3,7 @@
   "version": 1,
   "title": "dailyw – daily checklist and word list",
   "description": "Hotkey-toggled desktop panel for daily tasks and English words with Turkish meanings. Windows (PowerShell/WPF) and macOS (Swift) builds.",
-  "rev": 4,
+  "rev": 2,
   "steps": [
     {
       "id": "start",
@@ -15,42 +15,6 @@
       "title": "Add native macOS client alongside the Windows one",
       "summary": "The existing app is PowerShell + WPF (Windows only). A separate single-file Swift (AppKit + SwiftUI) menu bar app reproduces it on macOS, keeping its own JSON data.",
       "seen": false
-    },
-    {
-      "id": "import-docker-compose-file",
-      "title": "Import docker-compose file",
-      "summary": "From a docker-compose file: 1 part.",
-      "seen": true
-    },
-    {
-      "id": "import-openapi-document",
-      "title": "Import OpenAPI document",
-      "summary": "From a OpenAPI document: 1 part, 1 line, 1 description.",
-      "seen": true,
-      "changed": [
-        {
-          "id": "orders-api",
-          "field": "description",
-          "to": "Endpoints: GET /orders, POST /orders"
-        }
-      ],
-      "before": [
-        {
-          "kind": "components",
-          "item": {
-            "id": "orders-api",
-            "type": "service",
-            "label": "orders-api",
-            "tech": "node:22",
-            "source": "compose:orders-api",
-            "position": {
-              "x": 45,
-              "y": -92
-            },
-            "step": "import-docker-compose-file"
-          }
-        }
-      ]
     }
   ],
   "components": [
@@ -122,31 +86,6 @@
         "y": 320
       },
       "step": "add-native-macos-client-alongside-the-wi"
-    },
-    {
-      "id": "orders-api",
-      "type": "service",
-      "label": "orders-api",
-      "tech": "node:22",
-      "description": "Endpoints: GET /orders, POST /orders",
-      "source": "compose:orders-api",
-      "position": {
-        "x": 45,
-        "y": -92
-      },
-      "step": "import-docker-compose-file"
-    },
-    {
-      "id": "auth-acme-com",
-      "type": "identity",
-      "label": "auth.acme.com",
-      "tech": "OpenID Connect",
-      "source": "openapi:idp:auth.acme.com",
-      "position": {
-        "x": -120,
-        "y": 70
-      },
-      "step": "import-openapi-document"
     }
   ],
   "connections": [
@@ -193,13 +132,6 @@
       "label": "HTTPS lookup",
       "async": true,
       "step": "add-native-macos-client-alongside-the-wi"
-    },
-    {
-      "id": "orders-api-to-auth-acme-com",
-      "from": "orders-api",
-      "to": "auth-acme-com",
-      "label": "verifies tokens",
-      "step": "import-openapi-document"
     }
   ],
   "notes": [],
