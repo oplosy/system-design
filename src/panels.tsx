@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
-import { api, type McpPart, type McpQuery } from './api.ts';
+import { api, type McpPart, type McpQuery, type Me } from './api.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, REF_KINDS, RefSchema, type BoundaryKind, type ComponentType, type ConnectionKind, type Design, type Ref, type RefKind } from '../core/schema.ts';
 import { codeUrl, costAt, flowLatency, money, stepCostChange } from '../core/export.ts';
 import { failureImpact, loadOf } from '../core/lint.ts';
@@ -1377,11 +1377,13 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: '
 /** Review comments on a step (`target` unset) or on one item, plus a box to add one for the agent. */
 function Comments({ design, step, target, change, onSelect }: { design: Design; step: string; target?: string; change: Change; onSelect: (id: string) => void }) {
   const [text, setText] = useState('');
+  const [me, setMe] = useState<Me>(null);
+  useEffect(() => void api.me().then(setMe, () => undefined), []);
   const list = design.comments.filter((c) => (target ? c.target === target : c.step === step));
   const label = (id: string) => [...design.components, ...design.boundaries].find((x) => x.id === id)?.label ?? design.decisions.find((x) => x.id === id)?.title ?? id;
   const send = () => {
     if (!text.trim()) return;
-    change((d) => m.addComment(d, { step: target ? undefined : step, target, text, by: 'reviewer' }));
+    change((d) => m.addComment(d, { step: target ? undefined : step, target, text, by: 'reviewer', author: me?.name }));
     setText('');
   };
   const toggle = (id: string) =>
@@ -1398,7 +1400,7 @@ function Comments({ design, step, target, change, onSelect }: { design: Design; 
       {list.map((c) => (
         <div key={c.id} className={`comment${c.resolved ? ' resolved' : ''}${c.by === 'agent' ? ' agent' : ''}`}>
           <div className="comment-meta">
-            <span className="comment-by">{c.by === 'agent' ? 'Agent' : 'You'}</span>
+            <span className="comment-by">{c.by === 'agent' ? 'Agent' : (c.author ?? 'You')}</span>
             {!target && c.target && (
               <button className="ref" onClick={() => onSelect(c.target!)}>
                 {label(c.target)}

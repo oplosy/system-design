@@ -84,6 +84,7 @@ export function openApi(version: string) {
         parameters: [id, { name: 'exporter', in: 'path', required: true, schema: { type: 'string' }, description: 'Key from /plugins: <plugin>.<exporter>' }],
         get: { summary: 'The design as text from an exporter plugin', responses: { '200': { description: 'The file', content: { 'text/plain': { schema: { type: 'string' } } } }, ...errors } },
       },
+      '/me': { get: { summary: 'Who is signed in to a hub; null without sign-in', responses: { '200': ok('The person, or null', { oneOf: [{ type: 'null' }, { type: 'object', properties: { email: { type: 'string' }, name: { type: 'string' } } }] }), '401': { description: 'Hub only: not signed in' } } } },
       '/mcp': {
         get: {
           summary: 'MCP servers from mcp-servers.json (edited on disk only, never here); commands, addresses and headers are not shown',

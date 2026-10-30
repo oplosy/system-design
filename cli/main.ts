@@ -14,6 +14,7 @@ const HELP = `usage: system-design <command>
   share <design id> [out.html]            One read-only HTML file that opens anywhere
   adr <design> <folder> [--read]          Write each decision as a record in a folder (docs/adr), or read the folder's
                                           other records into the design as one step
+  merge <base> <ours> <theirs>            Git merge driver for design files; see the README
   svg <design> <out.svg> [--badge <badge.svg>] [--infra <file>]
                                           Draw the design as an SVG for a README, with a status badge (drift against
                                           the infrastructure file, or parts and steps waiting for review)
@@ -27,6 +28,7 @@ const COMMANDS: Record<string, () => Promise<unknown>> = {
   diff: () => import('./diff.ts'),
   share: () => import('./share.ts'),
   adr: () => import('./adr.ts'),
+  merge: () => import('./merge.ts'),
   svg: () => import('./svg.ts'),
 };
 

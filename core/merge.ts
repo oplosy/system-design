@@ -55,3 +55,12 @@ export function mergeDesigns(base: Design, mine: Design, theirs: Design): { merg
     return undefined;
   }
 }
+
+/** Merges three design files as text, for git. Throws when they don't merge into a valid design. */
+export function mergeFiles(base: string, ours: string, theirs: string) {
+  const [b, o, t] = [base, ours, theirs].map((x) => parseDesign(JSON.parse(x)));
+  const result = mergeDesigns(b, o, t);
+  if (!result) throw new Error('the two sides do not merge into a valid design');
+  const merged = { ...result.merged, rev: Math.max(o.rev, t.rev) + 1 };
+  return { text: JSON.stringify(merged, null, 2) + '\n', clashes: result.clashes };
+}

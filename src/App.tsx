@@ -23,7 +23,7 @@ import { lint } from '../core/lint.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import { mergeDesigns } from '../core/merge.ts';
 import * as m from '../core/mutations.ts';
-import { ApiError, api, shared, type Hook, type LiveLoad, type McpServers, type PluginRead, type Plugins, type Summary, type Trashed } from './api.ts';
+import { ApiError, api, shared, type Hook, type LiveLoad, type McpServers, type Me, type PluginRead, type Plugins, type Summary, type Trashed } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
@@ -149,6 +149,8 @@ function Shell() {
   const [browsing, setBrowsing] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [plugins, setPlugins] = useState<Plugins | null>(null);
+  const [me, setMe] = useState<Me>(null);
+  useEffect(() => void api.me().then(setMe, () => undefined), []);
   useEffect(() => void api.plugins().then(setPlugins, () => undefined), []);
   const pluginExports = useMemo(() => (plugins?.plugins ?? []).flatMap((p) => p.exporters.map((x) => ({ ...x, kind: `plugin:${x.key}` }))), [plugins]);
   const offeredList = useRef(false);
@@ -1143,7 +1145,7 @@ function Shell() {
             <span className="wordmark">
               system<span>/</span>design
             </span>
-            {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={(x) => (setTrail([]), setId(x))} onAll={shared ? undefined : () => setBrowsing(true)} onConnections={shared ? undefined : () => setConnecting(true)} meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined} />}
+            {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={(x) => (setTrail([]), setId(x))} onAll={shared ? undefined : () => setBrowsing(true)} onConnections={shared || me ? undefined : () => setConnecting(true)} user={me} meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined} />}
           </div>
           {design && (
             <FindBox design={design} visible={nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id))} onPick={findPick} inputRef={findRef} />
@@ -1609,7 +1611,7 @@ function ExportMenu({ disabled, extra, onPick }: { disabled: boolean; extra: { k
   );
 }
 
-function DesignSwitcher({ designs, current, meta, onPick, onAll, onConnections }: { designs: Summary[]; current: string | null; meta?: string; onPick: (id: string) => void; onAll?: () => void; onConnections?: () => void }) {
+function DesignSwitcher({ designs, current, meta, onPick, onAll, onConnections, user }: { designs: Summary[]; current: string | null; meta?: string; onPick: (id: string) => void; onAll?: () => void; onConnections?: () => void; user: Me }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -1653,6 +1655,11 @@ function DesignSwitcher({ designs, current, meta, onPick, onAll, onConnections }
             >
               All designs, trash and files…
             </button>
+          )}
+          {user && (
+            <a className="menu-item menu-all" href="/auth/logout">
+              Sign out {user.email}
+            </a>
           )}
           {onConnections && (
             <button

@@ -315,6 +315,8 @@ export const CommentSchema = z.object({
   target: Id.optional(),
   text: z.string().min(1),
   by: z.enum(['reviewer', 'agent']),
+  /** Who wrote it, on a hub where several people review. */
+  author: z.string().max(200).optional(),
   at: z.string(),
   resolved: z.boolean().optional(),
 });

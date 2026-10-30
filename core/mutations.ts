@@ -372,14 +372,14 @@ function labelOf(d: Design, id: string) {
 }
 
 /** Adds review feedback to a step, or to one item (then the step defaults to the item's). */
-export function addComment(d: Design, input: { step?: string; target?: string; text: string; by: Comment['by']; resolved?: boolean }) {
+export function addComment(d: Design, input: { step?: string; target?: string; text: string; by: Comment['by']; author?: string; resolved?: boolean }) {
   const target = input.target ? items(d).find((x) => x.id === input.target) : undefined;
   if (input.target && !target) throw new Error(`unknown item "${input.target}"`);
   if (!input.text.trim()) throw new Error('A comment needs text.');
   const step = input.step ?? target?.step ?? d.steps.at(-1)!.id;
   if (!d.steps.some((s) => s.id === step)) throw new Error(`unknown step "${step}"`);
   const id = uniqueId(d, 'comment');
-  d.comments.push({ id, step, target: input.target, text: input.text.trim(), by: input.by, at: new Date().toISOString(), resolved: input.resolved });
+  d.comments.push({ id, step, target: input.target, text: input.text.trim(), by: input.by, author: input.author, at: new Date().toISOString(), resolved: input.resolved });
   return id;
 }
 

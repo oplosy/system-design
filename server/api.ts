@@ -144,6 +144,8 @@ export function createApi() {
         }
         if (id === 'links' && !sub && req.method === 'POST') return send(res, 200, await pluginLinks(z.array(RefSchema).max(500).parse(await readBody(req))));
       }
+      // The hub answers this for a signed-in person; on one's own machine nobody signs in.
+      if (resource === 'me' && req.method === 'GET') return send(res, 200, null);
       if (resource === 'info' && req.method === 'GET') return send(res, 200, { dir: DESIGNS_DIR });
       if (resource === 'trash') {
         if (!id && req.method === 'GET') return send(res, 200, await listTrash());

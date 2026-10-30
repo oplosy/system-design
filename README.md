@@ -113,6 +113,31 @@ The API is versioned under `/api/v1` (`/api` stays as an alias). `/api/v1/openap
 
 Webhooks get every change, whether made in the app, by an agent or by a command: one POST per write, as a JSON array of [CloudEvents](https://cloudevents.io) (`application/cloudevents-batch+json`) of the types `system-design.design.*`, `step.*`, `part.*`, `line.*`, `boundary.*`, `note.*`, `decision.*`, `flow.*` and `comment.*`, each with `actor` (`app` or `agent`), a link to the item and the item itself. Moving things on the canvas sends nothing. A hook can be limited to event groups and designs; with a secret it carries `X-System-Design-Signature: sha256=<HMAC-SHA256 of the body>`. Network errors, 429 and 5xx are retried twice, and a webhook that fails never fails the write. The **chat** format posts "New step in “Shop”: Add a cache. 2 waiting for review" to Slack, Discord or Teams when an agent or a sync adds steps. Hooks live in `hooks.json` in the user's app folder (`SYSTEM_DESIGN_HOOKS` moves it), never next to the designs, so secrets stay out of git; manage them in the dialog or at `/api/v1/hooks`. `SYSTEM_DESIGN_WEBHOOK` still works as a chat hook for new steps, and `SYSTEM_DESIGN_URL` sets the links' address (default `http://127.0.0.1:5180`).
 
+## Working as a team
+
+**In git.** Keep design files in the repository, and the [action](#pull-requests-github-action) reports each pull request's changes. Every save moves `rev`, so two branches that change a design would always clash; this merge driver merges them item by item instead, and leaves a real clash (both sides changed the same field) as a normal git conflict. Each clone runs:
+
+```bash
+git config merge.system-design.driver "npx -y github:oplosy/system-design merge %O %A %B"
+```
+
+and the repository's `.gitattributes` names the files:
+
+```
+docs/architecture.json merge=system-design
+```
+
+**On a shared server (hub).** Point one server at the team's OpenID Connect provider (Google, Okta, Entra ID, Keycloak…) and everyone reviews the same designs in the browser, with live updates, concurrent edits merged and their name on each comment. Register `<SYSTEM_DESIGN_URL>/auth/callback` as the redirect address, then set these before `start`:
+
+| Variable | Value |
+|---|---|
+| `SYSTEM_DESIGN_OIDC_ISSUER` | The provider's issuer URL |
+| `SYSTEM_DESIGN_OIDC_CLIENT_ID`, `SYSTEM_DESIGN_OIDC_CLIENT_SECRET` | From registering the app with the provider |
+| `SYSTEM_DESIGN_URL` | The hub's public address, `https` unless it is local |
+| `SYSTEM_DESIGN_ALLOWED` | Who gets in, comma-separated: `ann@example.com, @example.com` |
+
+Start it with `HOST=0.0.0.0` behind a TLS proxy that keeps the `Host` header, since the API refuses writes whose origin doesn't match it. Everyone allowed can read and edit; there are no read-only roles yet. Webhooks and MCP servers stay out of reach on a hub, since they hold the host's secrets, and plugins run on the server for everyone. Sessions last 12 hours and end when the server restarts; one server only. Without these variables nothing changes, and a server started with a non-local `HOST` warns that it has no sign-in. Comment names are set by the app, so they aren't proof against a signed-in person who edits the request.
+
 ## MCP servers
 
 The app can ask the MCP servers you already run (GitHub, Jira, Datadog and so on) about a part, right in its panel. List them in `mcp-servers.json` in the user's app folder (`SYSTEM_DESIGN_MCP` moves it). It takes the usual `mcpServers` shape, so entries can be copied from another client, plus `queries`:

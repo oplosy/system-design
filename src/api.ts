@@ -16,6 +16,7 @@ export type McpServers = { file: string; error?: string; servers: { name: string
 export type McpTest = { ok: boolean; tools?: number; readOnly?: number; error?: string };
 export type McpQuery = { server: string; title: string };
 export type McpPart = { id: string; label: string; tech?: string; tags?: string[]; refs?: { kind: string; value: string }[] };
+export type Me = { email: string; name: string } | null;
 export type Trashed = { entry: string; id: string; title: string; deleted: number };
 
 export class ApiError extends Error {
@@ -79,6 +80,7 @@ function local(store: Map<string, Design>) {
     mcpQueries: async (_: McpPart) => [] as McpQuery[],
     mcpRun: async (_: McpQuery, __: McpPart): Promise<{ text: string }> => readOnly(),
     mcpTest: async (_: string): Promise<McpTest> => readOnly(),
+    me: async (): Promise<Me> => null,
     hooks: async () => [] as Hook[],
     addHook: async (_: HookInput): Promise<Hook> => readOnly(),
     removeHook: async (_: string): Promise<unknown> => readOnly(),
@@ -106,6 +108,7 @@ export const api = shared ? local(shared) : {
   mcpQueries: (part: McpPart) => call<McpQuery[]>('POST', '/api/v1/mcp/queries', part),
   mcpRun: (q: McpQuery, part: McpPart) => call<{ text: string }>('POST', '/api/v1/mcp/run', { server: q.server, query: q.title, part }),
   mcpTest: (name: string) => call<McpTest>('POST', `/api/v1/mcp/${encodeURIComponent(name)}/test`),
+  me: () => call<Me>('GET', '/api/v1/me'),
   hooks: () => call<Hook[]>('GET', '/api/v1/hooks'),
   addHook: (input: HookInput) => call<Hook>('POST', '/api/v1/hooks', input),
   removeHook: (id: string) => call<unknown>('DELETE', `/api/v1/hooks/${encodeURIComponent(id)}`),

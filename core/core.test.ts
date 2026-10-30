@@ -1721,3 +1721,103 @@ test('the MCP client calls read-only tools over stdio and HTTP, refuses others a
     remote.close();
   }
 });
+
+test('git merges two branches of a design item by item, and leaves a real clash to a person', async () => {
+  const { mergeFiles } = await import('./merge.ts');
+  const text = (d: unknown) => JSON.stringify(d, null, 2) + '\n';
+  const base = m.blankDesign('git', 'Git');
+  m.addComponent(base, { type: 'service', label: 'API' });
+  const ours = structuredClone(base), theirs = structuredClone(base);
+  m.addComponent(ours, { type: 'cache', label: 'Cache' });
+  ours.rev = 3;
+  m.addComponent(theirs, { type: 'queue', label: 'Queue' });
+  theirs.rev = 5;
+
+  const clean = mergeFiles(text(base), text(ours), text(theirs));
+  assert.deepEqual(clean.clashes, []);
+  const merged = JSON.parse(clean.text);
+  assert.deepEqual(merged.components.map((c: { id: string }) => c.id).sort(), ['api', 'cache', 'queue']);
+  assert.equal(merged.rev, 6);
+
+  const left = structuredClone(base), right = structuredClone(base);
+  left.title = 'Left';
+  right.title = 'Right';
+  assert.deepEqual(mergeFiles(text(base), text(left), text(right)).clashes, ['title']);
+  assert.throws(() => mergeFiles('', text(left), text(right)));
+});
+
+test('hub mode: sign-in, the allow list, and what stays out of reach', async () => {
+  const http = await import('node:http');
+  const { createHub, hubConfig } = await import('../server/auth.ts');
+  assert.equal(hubConfig({}), undefined);
+  assert.throws(() => hubConfig({ SYSTEM_DESIGN_OIDC_ISSUER: 'https://id.example' }), /SYSTEM_DESIGN_ALLOWED/);
+  const env = { SYSTEM_DESIGN_OIDC_CLIENT_ID: 'app', SYSTEM_DESIGN_OIDC_CLIENT_SECRET: 's', SYSTEM_DESIGN_ALLOWED: 'Boss@Other.example, @team.example', SYSTEM_DESIGN_URL: 'https://hub.example/' };
+  assert.throws(() => hubConfig({ ...env, SYSTEM_DESIGN_OIDC_ISSUER: 'http://id.example' }), /must be https/);
+
+  // A provider that signs in whoever `claims` says.
+  let claims: Record<string, unknown> = {};
+  let tokenBody = '';
+  const idp = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url!.startsWith('/.well-known')) return res.end(JSON.stringify({ issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token` }));
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      tokenBody = body;
+      res.end(JSON.stringify({ id_token: `x.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.x` }));
+    });
+  });
+  await new Promise<void>((r) => idp.listen(0, '127.0.0.1', r));
+  const issuer = `http://127.0.0.1:${(idp.address() as { port: number }).port}`;
+  const gate = createHub(hubConfig({ ...env, SYSTEM_DESIGN_OIDC_ISSUER: issuer, SYSTEM_DESIGN_URL: 'http://127.0.0.1' })!);
+  const app = http.createServer(async (req, res) => {
+    if (!(await gate(req, res))) res.end('app');
+  });
+  await new Promise<void>((r) => app.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${(app.address() as { port: number }).port}`;
+  const get = (p: string, cookie = '') => fetch(base + p, { redirect: 'manual', headers: { cookie } });
+  const jar = (r: Response) => r.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+
+  async function signIn(who: Record<string, unknown>, change: (u: URL) => void = () => undefined) {
+    const start = await get('/auth/login');
+    const to = new URL(start.headers.get('location')!);
+    assert.equal(to.searchParams.get('code_challenge_method'), 'S256');
+    claims = { iss: issuer, aud: 'app', exp: Date.now() / 1000 + 60, nonce: to.searchParams.get('nonce'), ...who };
+    const back = new URL(`${base}/auth/callback?code=c&state=${to.searchParams.get('state')}`);
+    change(back);
+    return get(back.pathname + back.search, jar(start));
+  }
+
+  try {
+    assert.equal((await get('/api/designs')).status, 401);
+    assert.equal((await get('/api/v1/designs')).status, 401);
+    assert.equal((await get('/')).headers.get('location'), '/auth/login');
+
+    const ok = await signIn({ email: 'ann@team.example', name: 'Ann' });
+    assert.equal(ok.status, 302);
+    assert.match(tokenBody, /code_verifier=/);
+    const session = jar(ok).split('; ').find((c) => c.startsWith('sd_session=') && c.length > 12)!;
+    assert.match(ok.headers.getSetCookie().join(), /HttpOnly; SameSite=Lax/);
+    assert.deepEqual(await (await get('/api/v1/me', session)).json(), { email: 'ann@team.example', name: 'Ann' });
+    assert.equal(await (await get('/api/designs', session)).text(), 'app');
+    for (const p of ['/api/hooks', '/api/v1/hooks/x/test', '/api/v1/mcp', '/api/mcp/run']) assert.equal((await get(p, session)).status, 403, p);
+    assert.equal((await get('/api/designs', `${session}x`)).status, 401);
+    assert.equal((await get('/api/designs', `sd_session=e30.${session.split('.')[1]}`)).status, 401);
+    assert.equal((await get('/auth/logout', session)).headers.getSetCookie()[0].includes('Max-Age=0'), true);
+
+    assert.equal((await signIn({ email: 'BOSS@other.example' })).status, 302);
+    assert.equal((await signIn({ email: 'eve@evil.example' })).status, 403);
+    assert.equal((await signIn({ email: 'x@team.example.evil.example' })).status, 403);
+    assert.equal((await signIn({ email: 'ann@team.example', email_verified: false })).status, 403);
+    assert.equal((await signIn({})).status, 403);
+    assert.equal((await signIn({ email: 'ann@team.example', nonce: 'other' })).status, 400);
+    assert.equal((await signIn({ email: 'ann@team.example', aud: 'other' })).status, 400);
+    assert.equal((await signIn({ email: 'ann@team.example', iss: 'https://other' })).status, 400);
+    assert.equal((await signIn({ email: 'ann@team.example', exp: 1 })).status, 400);
+    assert.equal((await signIn({ email: 'ann@team.example' }, (u) => u.searchParams.set('state', 'forged'))).status, 400);
+    assert.equal((await get('/auth/callback?code=c&state=s')).status, 400);
+  } finally {
+    app.close();
+    idp.close();
+  }
+});

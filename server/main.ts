@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { createApi } from './api.ts';
+import { createHub, hubConfig } from './auth.ts';
 import { DIST } from './share.ts';
 
 const PORT = Number(process.env.PORT ?? 5180);
@@ -25,6 +26,16 @@ try {
   process.exit(1);
 }
 
+let gate: ReturnType<typeof createHub> | undefined;
+try {
+  const hub = hubConfig();
+  gate = hub && createHub(hub);
+} catch (e) {
+  console.error(e instanceof Error ? e.message : e);
+  process.exit(1);
+}
+if (!gate && !['127.0.0.1', 'localhost', '::1'].includes(HOST)) console.warn(`Warning: anyone who can reach ${HOST} can read and change these designs. Set up sign-in (see the README) to share them.`);
+
 const api = createApi();
 
 async function serveFile(pathname: string, res: http.ServerResponse) {
@@ -41,6 +52,13 @@ async function serveFile(pathname: string, res: http.ServerResponse) {
 
 const server = http.createServer(async (req, res) => {
   const { pathname } = new URL(req.url ?? '/', 'http://local');
+  try {
+    if (await gate?.(req, res)) return;
+  } catch (e) {
+    console.error(e);
+    if (!res.headersSent) res.writeHead(502).end('Sign-in is not available right now.');
+    return;
+  }
   if (pathname === '/api' || pathname.startsWith('/api/')) {
     req.url = req.url!.slice(4) || '/';
     return api.handle(req, res);
