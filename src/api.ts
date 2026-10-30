@@ -4,8 +4,9 @@ import { parseDesign, type Design } from '../core/schema.ts';
 
 export type Summary = { id: string; title: string; description?: string; steps: number; unseen: number; updated?: number };
 export type LiveLoad = { lines: Record<string, Live>; unmatched: string[] };
-export type Hook = { id: string; url: string; format: 'cloudevents' | 'chat'; events?: string[]; designs?: string[]; signed: boolean };
-export type HookInput = { url: string; format: 'cloudevents' | 'chat'; events?: string[]; designs?: string[]; secret?: string };
+export type HookFormat = 'cloudevents' | 'chat' | 'slack';
+export type Hook = { id: string; url: string; format: HookFormat; events?: string[]; designs?: string[]; signed: boolean };
+export type HookInput = { url: string; format: HookFormat; events?: string[]; designs?: string[]; secret?: string };
 export type Plugins = {
   dir: string;
   plugins: { name: string; importers: string[]; exporters: { key: string; name: string; extension: string }[]; metrics: string[]; links: string[] }[];
@@ -16,7 +17,7 @@ export type McpServers = { file: string; error?: string; servers: { name: string
 export type McpTest = { ok: boolean; tools?: number; readOnly?: number; error?: string };
 export type McpQuery = { server: string; title: string };
 export type McpPart = { id: string; label: string; tech?: string; tags?: string[]; refs?: { kind: string; value: string }[] };
-export type Me = { email: string; name: string } | null;
+export type Me = { email: string; name: string; canEdit: boolean } | null;
 export type Trashed = { entry: string; id: string; title: string; deleted: number };
 
 export class ApiError extends Error {
@@ -26,6 +27,8 @@ export class ApiError extends Error {
     this.status = status;
   }
 }
+
+let viewing = false;
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
@@ -92,7 +95,8 @@ export const api = shared ? local(shared) : {
   designs: () => call<Summary[]>('GET', '/api/designs'),
   templates: () => call<Summary[]>('GET', '/api/templates'),
   get: (id: string) => call<Design>('GET', `/api/designs/${id}`),
-  save: (d: Design) => call<Design>('PUT', `/api/designs/${d.id}`, d),
+  // A viewer on a hub can try changes on the sheet, as in a shared copy; nothing is sent.
+  save: async (d: Design) => (viewing ? { ...d, rev: d.rev + 1 } : call<Design>('PUT', `/api/designs/${d.id}`, d)),
   create: (input: { id: string; title: string; template?: string; from?: string }) => call<Design>('POST', '/api/designs', input),
   importFile: (design: unknown) => call<Design>('POST', '/api/designs', { design }),
   trash: (id: string) => call<unknown>('DELETE', `/api/designs/${id}`),
@@ -108,7 +112,11 @@ export const api = shared ? local(shared) : {
   mcpQueries: (part: McpPart) => call<McpQuery[]>('POST', '/api/v1/mcp/queries', part),
   mcpRun: (q: McpQuery, part: McpPart) => call<{ text: string }>('POST', '/api/v1/mcp/run', { server: q.server, query: q.title, part }),
   mcpTest: (name: string) => call<McpTest>('POST', `/api/v1/mcp/${encodeURIComponent(name)}/test`),
-  me: () => call<Me>('GET', '/api/v1/me'),
+  me: async () => {
+    const me = await call<Me>('GET', '/api/v1/me');
+    viewing = me?.canEdit === false;
+    return me;
+  },
   hooks: () => call<Hook[]>('GET', '/api/v1/hooks'),
   addHook: (input: HookInput) => call<Hook>('POST', '/api/v1/hooks', input),
   removeHook: (id: string) => call<unknown>('DELETE', `/api/v1/hooks/${encodeURIComponent(id)}`),

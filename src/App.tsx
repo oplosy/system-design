@@ -23,7 +23,7 @@ import { lint } from '../core/lint.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import { mergeDesigns } from '../core/merge.ts';
 import * as m from '../core/mutations.ts';
-import { ApiError, api, shared, type Hook, type LiveLoad, type McpServers, type Me, type PluginRead, type Plugins, type Summary, type Trashed } from './api.ts';
+import { ApiError, api, shared, type Hook, type HookFormat, type LiveLoad, type McpServers, type Me, type PluginRead, type Plugins, type Summary, type Trashed } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
@@ -1181,6 +1181,10 @@ function Shell() {
               <span className="shared-tag" title="Opened from a shared file. You can walk the steps and try changes, but nothing is saved.">
                 Shared copy
               </span>
+            ) : me?.canEdit === false ? (
+              <span className="shared-tag" title="You have view access on this hub. You can walk the steps and try changes, but nothing is saved.">
+                View only
+              </span>
             ) : (
               <button className="btn ink" onClick={() => setCreating(true)}>
                 New design
@@ -1855,7 +1859,7 @@ function Connections({ design, selected, plugins, onClose }: { design: Design | 
   const [err, setErr] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, string>>({});
   const [url, setUrl] = useState('');
-  const [format, setFormat] = useState<'cloudevents' | 'chat'>('cloudevents');
+  const [format, setFormat] = useState<HookFormat>('cloudevents');
   const [choice, setChoice] = useState(0);
   const [onlyThis, setOnlyThis] = useState(false);
   const [secret, setSecret] = useState('');
@@ -1929,7 +1933,7 @@ function Connections({ design, selected, plugins, onClose }: { design: Design | 
                   {h.url}
                 </code>
                 <span>
-                  {h.format === 'chat' ? 'Chat message' : 'CloudEvents'} · {what(h)} · {h.designs?.length ? h.designs.join(', ') : 'all designs'}
+                  {{ cloudevents: 'CloudEvents', chat: 'Chat message', slack: 'Slack with buttons' }[h.format]} · {what(h)} · {h.designs?.length ? h.designs.join(', ') : 'all designs'}
                   {h.signed ? ' · signed' : ''}
                   {results[h.id] ? ` · ${results[h.id]}` : ''}
                 </span>
@@ -1948,9 +1952,10 @@ function Connections({ design, selected, plugins, onClose }: { design: Design | 
         </ul>
         <form className="conn-form" onSubmit={add}>
           <input className="find-input" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.slack.com/… or your endpoint" aria-label="Webhook address" required />
-          <select className="find-input" value={format} onChange={(e) => setFormat(e.target.value as 'cloudevents' | 'chat')} aria-label="Format">
+          <select className="find-input" value={format} onChange={(e) => setFormat(e.target.value as HookFormat)} aria-label="Format">
             <option value="cloudevents">CloudEvents (JSON)</option>
             <option value="chat">Chat message (Slack, Teams, Discord)</option>
+            <option value="slack">Slack with Approve and Send back buttons</option>
           </select>
           <select className="find-input" value={choice} onChange={(e) => setChoice(Number(e.target.value))} aria-label="Events">
             {EVENT_CHOICES.map((c, i) => (

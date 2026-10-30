@@ -5,6 +5,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { EVENT_TYPES, designEvents, type DesignEvent } from './events.ts';
 import { userAppDir } from './paths.ts';
+import { slackMessage } from './slack.ts';
 import type { Design } from './schema.ts';
 
 // Webhooks: every write of a design posts what changed to the addresses listed in hooks.json, as CloudEvents or as a
@@ -21,8 +22,8 @@ const Pattern = z.string().refine((p) => p === '*' || (EVENT_TYPES as readonly s
 });
 export const HookInput = z.object({
   url: z.string().regex(/^https?:\/\/\S+$/i, 'an http(s) address'),
-  /** cloudevents: a JSON array of CloudEvents per write. chat: one line of text for Slack, Teams or Discord. */
-  format: z.enum(['cloudevents', 'chat']).default('cloudevents'),
+  /** cloudevents: a JSON array of CloudEvents per write. chat: one line of text for Slack, Teams or Discord. slack: new steps with Approve and Send back buttons. */
+  format: z.enum(['cloudevents', 'chat', 'slack']).default('cloudevents'),
   /** Event types or groups to send; all when empty. */
   events: z.array(Pattern).optional(),
   /** Design ids to send events for; all when empty. */
@@ -91,10 +92,13 @@ export function newStepsMessage(design: Design, events: DesignEvent[], app = app
 export function hookBody(h: Hook, design: Design, events: DesignEvent[], actor: Actor) {
   const mine = events.filter((e) => wanted(h, e, design.id));
   if (!mine.length) return undefined;
-  if (h.format === 'chat') {
+  if (h.format !== 'cloudevents') {
     // A chat is for people: the reviewer's own edits in the app post nothing there.
     const text = actor === 'app' ? undefined : newStepsMessage(design, mine);
-    return text && { contentType: 'application/json', body: JSON.stringify({ text, content: text }) };
+    if (!text) return undefined;
+    if (h.format === 'chat') return { contentType: 'application/json', body: JSON.stringify({ text, content: text }) };
+    const steps = mine.filter((e) => e.type === 'step.added' && !e.data.seen).map((e) => e.data.step as { id: string; title: string });
+    return { contentType: 'application/json', body: JSON.stringify(slackMessage(design, text, steps)) };
   }
   const time = new Date().toISOString();
   const batch = mine.map((e) => ({
@@ -167,8 +171,8 @@ export async function testHook(id: string) {
   const h = (await listHooks()).find((x) => x.id === id);
   if (!h) return undefined;
   const body =
-    h.format === 'chat'
+    h.format !== 'cloudevents'
       ? JSON.stringify({ text: 'system-design is connected.', content: 'system-design is connected.' })
       : JSON.stringify([{ specversion: '1.0', id: randomUUID(), source: `system-design://${os.hostname()}`, type: 'system-design.ping', time: new Date().toISOString(), datacontenttype: 'application/json', data: {} }]);
-  return post(h, h.format === 'chat' ? 'application/json' : 'application/cloudevents-batch+json', body, []);
+  return post(h, h.format !== 'cloudevents' ? 'application/json' : 'application/cloudevents-batch+json', body, []);
 }

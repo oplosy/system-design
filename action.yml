@@ -20,6 +20,10 @@ inputs:
     description: Fail the job when the design differs from the infrastructure
     required: false
     default: 'false'
+  share:
+    description: Attach a read-only HTML copy of the design to the run, and link it from the comment, for reviewers without the app
+    required: false
+    default: 'false'
   token:
     description: Token used to comment
     required: false
@@ -51,6 +55,20 @@ runs:
         INFRA: ${{ inputs.infra }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: bash "$GITHUB_ACTION_PATH/action/check.sh"
+    - name: Make a review copy
+      if: inputs.share == 'true'
+      shell: bash
+      env:
+        CLI: ${{ github.action_path }}/dist-cli/main.js
+        DESIGN: ${{ inputs.design }}
+      run: bash "$GITHUB_ACTION_PATH/action/share.sh"
+    - name: Attach the review copy
+      if: inputs.share == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: design-review
+        path: ${{ runner.temp }}/system-design-review.html
+        overwrite: true
     - name: Comment on the pull request
       if: inputs.comment == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash

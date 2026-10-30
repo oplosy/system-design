@@ -8,6 +8,7 @@ import { liveLines, queryPrometheus } from '../core/live.ts';
 import { PartContext, closeMcp, mcpList, mcpQueries, runMcp, testMcp } from '../core/mcp-client.ts';
 import { exportWithPlugin, pluginLinks, pluginList, pluginMetrics, readWithPlugins } from '../core/plugins.ts';
 import { RefSchema, ValidationError } from '../core/schema.ts';
+import { answerSlack, applyClick, slackClick, verifySlack } from '../core/slack.ts';
 import {
   ConflictError,
   DESIGNS_DIR,
@@ -27,7 +28,7 @@ import { shareHtml } from './share.ts';
 
 const MAX_BODY = 5 * 1024 * 1024;
 
-function readBody(req: IncomingMessage): Promise<unknown> {
+function readText(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks: Buffer[] = [];
@@ -38,15 +39,18 @@ function readBody(req: IncomingMessage): Promise<unknown> {
         req.destroy();
       } else chunks.push(c);
     });
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-      } catch {
-        reject(new ValidationError('invalid JSON'));
-      }
-    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
+}
+
+async function readBody(req: IncomingMessage): Promise<unknown> {
+  const text = await readText(req);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new ValidationError('invalid JSON');
+  }
 }
 
 function send(res: ServerResponse, status: number, body: unknown) {
@@ -125,6 +129,20 @@ export function createApi() {
           const result = await testHook(id);
           return result ? send(res, 200, result) : send(res, 404, { error: 'no such webhook' });
         }
+      }
+      if (resource === 'slack' && id === 'actions' && req.method === 'POST') {
+        const secret = process.env.SYSTEM_DESIGN_SLACK_SECRET;
+        if (!secret) return send(res, 404, { error: 'Set SYSTEM_DESIGN_SLACK_SECRET to take reviews from Slack.' });
+        const raw = await readText(req);
+        const header = (name: string) => [req.headers[name]].flat()[0];
+        if (!verifySlack(secret, header('x-slack-request-timestamp'), raw, header('x-slack-signature'))) return send(res, 401, { error: 'bad signature' });
+        const click = slackClick(raw);
+        if (!click) throw new ValidationError('not a review button');
+        const d = await readDesign(click.design);
+        applyClick(d, click);
+        await writeDesign(d, { actor: 'app' });
+        await answerSlack(click.responseUrl, `${click.action === 'approve' ? 'Approved' : 'Sent back'} by ${click.user}`).catch((e) => console.error(e));
+        return send(res, 200, {});
       }
       if (resource === 'mcp') {
         if (!id && req.method === 'GET') return send(res, 200, await mcpList());

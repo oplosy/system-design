@@ -135,8 +135,13 @@ docs/architecture.json merge=system-design
 | `SYSTEM_DESIGN_OIDC_CLIENT_ID`, `SYSTEM_DESIGN_OIDC_CLIENT_SECRET` | From registering the app with the provider |
 | `SYSTEM_DESIGN_URL` | The hub's public address, `https` unless it is local |
 | `SYSTEM_DESIGN_ALLOWED` | Who gets in, comma-separated: `ann@example.com, @example.com` |
+| `SYSTEM_DESIGN_EDITORS` | Optional, same form: who may change things. Everyone else allowed in can view only |
 
-Start it with `HOST=0.0.0.0` behind a TLS proxy that keeps the `Host` header, since the API refuses writes whose origin doesn't match it. Everyone allowed can read and edit; there are no read-only roles yet. Webhooks and MCP servers stay out of reach on a hub, since they hold the host's secrets, and plugins run on the server for everyone. Sessions last 12 hours and end when the server restarts; one server only. Without these variables nothing changes, and a server started with a non-local `HOST` warns that it has no sign-in. Comment names are set by the app, so they aren't proof against a signed-in person who edits the request.
+Start it with `HOST=0.0.0.0` behind a TLS proxy that keeps the `Host` header, since the API refuses writes whose origin doesn't match it. Without an editors list everyone allowed can edit. A viewer can walk the steps and try changes on the sheet, but nothing is saved. ID tokens are checked against the provider's published keys (RS256 or ES256). An address with `#design/item` still opens that item after sign-in. Webhooks and MCP servers stay out of reach on a hub, since they hold the host's secrets, and plugins run on the server for everyone. Sessions last 12 hours and end when the server restarts; one server only. Without these variables nothing changes, and a server started with a non-local `HOST` warns that it has no sign-in. Comment names are set by the app, so they aren't proof against a signed-in person who edits the request.
+
+**From Slack.** A webhook in the **Slack** format posts new steps from agents with Approve and Send back buttons. Create a Slack app, enable Interactivity with the request address `<SYSTEM_DESIGN_URL>/api/v1/slack/actions`, and set `SYSTEM_DESIGN_SLACK_SECRET` to the app's signing secret; the server must be reachable from Slack. The signature is what's checked, so everyone in that channel can review, whatever `SYSTEM_DESIGN_EDITORS` says, and an agent reads a send-back as a comment.
+
+**Without the app.** `share: true` on the [action](#pull-requests-github-action) attaches a read-only HTML copy of the design to the run as `design-review`, and links the run from the pull request comment.
 
 ## MCP servers
 

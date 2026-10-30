@@ -1746,6 +1746,85 @@ test('git merges two branches of a design item by item, and leaves a real clash 
   assert.throws(() => mergeFiles('', text(left), text(right)));
 });
 
+test('a hub behind a proxy takes writes from its own public address only', async () => {
+  const { trusted } = await import('../server/api.ts');
+  const req = (host: string, origin?: string) => ({ method: 'PUT', headers: { host, origin } }) as never;
+  assert.equal(trusted(req('hub.example', 'https://hub.example'), '0.0.0.0'), true);
+  assert.equal(typeof trusted(req('hub.example', 'https://evil.example'), '0.0.0.0'), 'string');
+});
+
+test('two people on a hub: the later save merges instead of losing the first', async () => {
+  const { mergeDesigns } = await import('./merge.ts');
+  await store.createDesign({ id: 'together', title: 'Together' });
+  const base = await store.readDesign('together');
+  const ann = structuredClone(base), bo = structuredClone(base);
+  m.addComment(ann, { step: 'start', text: 'From Ann', by: 'reviewer', author: 'Ann' });
+  m.addComponent(bo, { type: 'cache', label: 'Cache' });
+  await store.writeDesign(ann);
+  await assert.rejects(store.writeDesign(bo), store.ConflictError);
+  const merged = mergeDesigns(base, bo, await store.readDesign('together'))!;
+  assert.deepEqual(merged.clashes, []);
+  const saved = await store.writeDesign(merged.merged);
+  assert.deepEqual([saved.comments[0].author, saved.components[0].id], ['Ann', 'cache']);
+});
+
+test('Slack buttons review a step, and only with Slack\'s signature', async () => {
+  const crypto = await import('node:crypto');
+  const http = await import('node:http');
+  const { hookBody } = await import('./hooks.ts');
+  const { designEvents } = await import('./events.ts');
+  const { createApi } = await import('../server/api.ts');
+  const slack = await import('./slack.ts');
+
+  await store.createDesign({ id: 'chatty', title: 'Chatty <b>' });
+  const before = await store.readDesign('chatty');
+  const after = await store.updateDesign('chatty', (d) => void m.addStep(d, { title: 'Add a <cache>' }));
+  const step = after.steps.at(-1)!.id;
+  const hook = { id: 'h', url: 'https://hooks.slack.com/x', format: 'slack' as const };
+  const events = designEvents(before, after);
+  const body = JSON.parse(hookBody(hook, after, events, 'agent')!.body);
+  assert.ok(JSON.stringify(body.blocks).includes('Add a &lt;cache&gt;'));
+  assert.equal(body.blocks.at(-1).elements[1].value, `chatty/${step}`);
+  assert.equal(hookBody(hook, after, events, 'app'), undefined);
+
+  assert.equal(slack.slackClick('payload=%7B%7D'), undefined);
+  assert.equal(slack.slackClick(`payload=${encodeURIComponent(JSON.stringify({ actions: [{ action_id: 'delete', value: 'a/b' }] }))}`), undefined);
+
+  const secret = 'slack-test-secret';
+  const sign = (raw: string, ts: number, key = secret) => `v0=${crypto.createHmac('sha256', key).update(`v0:${ts}:${raw}`).digest('hex')}`;
+  const api = createApi();
+  const server = http.createServer((req, res) => {
+    req.url = req.url!.replace(/^\/api/, '');
+    void api.handle(req, res);
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/api/v1/slack/actions`;
+  const click = (id: string) => `payload=${encodeURIComponent(JSON.stringify({ actions: [{ action_id: id, value: `chatty/${step}` }], user: { name: 'ann' } }))}`;
+  const post = (raw: string, ts = Math.floor(Date.now() / 1000), signature = sign(raw, ts)) => fetch(url, { method: 'POST', body: raw, headers: { 'x-slack-request-timestamp': String(ts), 'x-slack-signature': signature } });
+  try {
+    delete process.env.SYSTEM_DESIGN_SLACK_SECRET;
+    assert.equal((await post(click('approve'))).status, 404);
+    process.env.SYSTEM_DESIGN_SLACK_SECRET = secret;
+    assert.equal((await post(click('approve'), undefined, 'v0=bad')).status, 401);
+    assert.equal((await post(click('approve'), undefined, sign(click('approve'), Math.floor(Date.now() / 1000), 'other'))).status, 401);
+    assert.equal((await post(click('approve'), Math.floor(Date.now() / 1000) - 3600)).status, 401);
+    assert.equal((await store.readDesign('chatty')).steps.at(-1)!.seen, false);
+
+    assert.equal((await post(click('send_back'))).status, 200);
+    const sent = (await store.readDesign('chatty')).steps.at(-1)!;
+    assert.equal(sent.changesRequested, true);
+    assert.match((await store.readDesign('chatty')).comments[0].text, /by ann/);
+
+    assert.equal((await post(click('approve'))).status, 200);
+    const done = (await store.readDesign('chatty')).steps.at(-1)!;
+    assert.deepEqual([done.seen, done.changesRequested], [true, undefined]);
+  } finally {
+    delete process.env.SYSTEM_DESIGN_SLACK_SECRET;
+    server.close();
+    api.close();
+  }
+});
+
 test('hub mode: sign-in, the allow list, and what stays out of reach', async () => {
   const http = await import('node:http');
   const { createHub, hubConfig } = await import('../server/auth.ts');
@@ -1755,21 +1834,31 @@ test('hub mode: sign-in, the allow list, and what stays out of reach', async () 
   assert.throws(() => hubConfig({ ...env, SYSTEM_DESIGN_OIDC_ISSUER: 'http://id.example' }), /must be https/);
 
   // A provider that signs in whoever `claims` says.
+  const crypto = await import('node:crypto');
+  const pair = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const other = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const part = (x: unknown) => Buffer.from(JSON.stringify(x)).toString('base64url');
+  const idToken = (c: unknown, header: object = { alg: 'RS256', kid: 'k1' }, key = pair.privateKey) => {
+    const body = `${part(header)}.${part(c)}`;
+    return `${body}.${crypto.sign('sha256', Buffer.from(body), key).toString('base64url')}`;
+  };
   let claims: Record<string, unknown> = {};
+  let token = (c: unknown) => idToken(c);
   let tokenBody = '';
   const idp = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    if (req.url!.startsWith('/.well-known')) return res.end(JSON.stringify({ issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token` }));
+    if (req.url!.startsWith('/.well-known')) return res.end(JSON.stringify({ issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/jwks` }));
+    if (req.url === '/jwks') return res.end(JSON.stringify({ keys: [{ ...pair.publicKey.export({ format: 'jwk' }), kid: 'k1' }] }));
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       tokenBody = body;
-      res.end(JSON.stringify({ id_token: `x.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.x` }));
+      res.end(JSON.stringify({ id_token: token(claims) }));
     });
   });
   await new Promise<void>((r) => idp.listen(0, '127.0.0.1', r));
   const issuer = `http://127.0.0.1:${(idp.address() as { port: number }).port}`;
-  const gate = createHub(hubConfig({ ...env, SYSTEM_DESIGN_OIDC_ISSUER: issuer, SYSTEM_DESIGN_URL: 'http://127.0.0.1' })!);
+  const gate = createHub(hubConfig({ ...env, SYSTEM_DESIGN_OIDC_ISSUER: issuer, SYSTEM_DESIGN_URL: 'http://127.0.0.1', SYSTEM_DESIGN_EDITORS: 'ann@team.example, @other.example' })!);
   const app = http.createServer(async (req, res) => {
     if (!(await gate(req, res))) res.end('app');
   });
@@ -1778,8 +1867,8 @@ test('hub mode: sign-in, the allow list, and what stays out of reach', async () 
   const get = (p: string, cookie = '') => fetch(base + p, { redirect: 'manual', headers: { cookie } });
   const jar = (r: Response) => r.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
 
-  async function signIn(who: Record<string, unknown>, change: (u: URL) => void = () => undefined) {
-    const start = await get('/auth/login');
+  async function signIn(who: Record<string, unknown>, change: (u: URL) => void = () => undefined, login = '/auth/login') {
+    const start = await get(login);
     const to = new URL(start.headers.get('location')!);
     assert.equal(to.searchParams.get('code_challenge_method'), 'S256');
     claims = { iss: issuer, aud: 'app', exp: Date.now() / 1000 + 60, nonce: to.searchParams.get('nonce'), ...who };
@@ -1791,14 +1880,15 @@ test('hub mode: sign-in, the allow list, and what stays out of reach', async () 
   try {
     assert.equal((await get('/api/designs')).status, 401);
     assert.equal((await get('/api/v1/designs')).status, 401);
-    assert.equal((await get('/')).headers.get('location'), '/auth/login');
+    assert.match(await (await get('/')).text(), /auth\/login\?next=/);
 
     const ok = await signIn({ email: 'ann@team.example', name: 'Ann' });
     assert.equal(ok.status, 302);
     assert.match(tokenBody, /code_verifier=/);
     const session = jar(ok).split('; ').find((c) => c.startsWith('sd_session=') && c.length > 12)!;
     assert.match(ok.headers.getSetCookie().join(), /HttpOnly; SameSite=Lax/);
-    assert.deepEqual(await (await get('/api/v1/me', session)).json(), { email: 'ann@team.example', name: 'Ann' });
+    assert.deepEqual(await (await get('/api/v1/me', session)).json(), { email: 'ann@team.example', name: 'Ann', canEdit: true });
+    assert.equal(ok.headers.get('location'), '/');
     assert.equal(await (await get('/api/designs', session)).text(), 'app');
     for (const p of ['/api/hooks', '/api/v1/hooks/x/test', '/api/v1/mcp', '/api/mcp/run']) assert.equal((await get(p, session)).status, 403, p);
     assert.equal((await get('/api/designs', `${session}x`)).status, 401);
@@ -1816,6 +1906,38 @@ test('hub mode: sign-in, the allow list, and what stays out of reach', async () 
     assert.equal((await signIn({ email: 'ann@team.example', exp: 1 })).status, 400);
     assert.equal((await signIn({ email: 'ann@team.example' }, (u) => u.searchParams.set('state', 'forged'))).status, 400);
     assert.equal((await get('/auth/callback?code=c&state=s')).status, 400);
+
+    // Deep links survive sign-in; anything else in `next` is dropped.
+    const next = (hash: string) => signIn({ email: 'ann@team.example' }, undefined, `/auth/login?next=${encodeURIComponent(hash)}`);
+    assert.equal((await next('#shop/api')).headers.get('location'), '/#shop/api');
+    assert.equal((await next('https://evil.example')).headers.get('location'), '/');
+    assert.equal((await next('#//evil.example?x')).headers.get('location'), '/');
+
+    // Forged tokens.
+    const refused = async (t: typeof token) => {
+      token = t;
+      const r = await signIn({ email: 'ann@team.example' });
+      token = (c) => idToken(c);
+      return r.status;
+    };
+    assert.equal(await refused((c) => idToken(c, undefined, other.privateKey)), 400);
+    assert.equal(await refused((c) => `${part({ alg: 'none' })}.${part(c)}.`), 400);
+    assert.equal(await refused((c) => idToken(c, { alg: 'HS256', kid: 'k1' })), 400);
+    assert.equal(await refused(() => 'garbage'), 400);
+
+    // A viewer reads and can't write; plugin lookups still work.
+    const seen = await signIn({ email: 'vic@team.example' });
+    const viewer = jar(seen).split('; ').find((c) => c.startsWith('sd_session=') && c.length > 12)!;
+    assert.equal((await (await get('/api/v1/me', viewer)).json()).canEdit, false);
+    assert.equal(await (await get('/api/designs', viewer)).text(), 'app');
+    const send = (p: string, method: string, cookie: string) => fetch(base + p, { method, headers: { cookie } });
+    assert.equal((await send('/api/designs/a', 'PUT', viewer)).status, 403);
+    assert.equal((await send('/api/designs', 'POST', viewer)).status, 403);
+    assert.equal((await send('/api/designs/a', 'DELETE', viewer)).status, 403);
+    assert.equal(await (await send('/api/v1/plugins/links', 'POST', viewer)).text(), 'app');
+    assert.equal(await (await send('/api/designs/a', 'PUT', session)).text(), 'app');
+    // Slack signs its own requests, so it passes without a session.
+    assert.equal(await (await fetch(`${base}/api/v1/slack/actions`, { method: 'POST' })).text(), 'app');
   } finally {
     app.close();
     idp.close();
