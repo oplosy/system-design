@@ -4,10 +4,11 @@ import type { Plugin } from 'vite';
 import { z } from 'zod';
 import pkg from '../package.json' with { type: 'json' };
 import { addHook, listHooks, publicHook, removeHook, testHook } from '../core/hooks.ts';
-import { liveLines, queryPrometheus } from '../core/live.ts';
+import { queryPrometheus, readLoad } from '../core/live.ts';
 import { PartContext, closeMcp, mcpList, mcpQueries, runMcp, testMcp } from '../core/mcp-client.ts';
 import { exportWithPlugin, pluginLinks, pluginList, pluginMetrics, readWithPlugins } from '../core/plugins.ts';
-import { RefSchema, ValidationError } from '../core/schema.ts';
+import * as m from '../core/mutations.ts';
+import { RefSchema, ValidationError, type Comment } from '../core/schema.ts';
 import { answerSlack, applyClick, slackClick, verifySlack } from '../core/slack.ts';
 import {
   ConflictError,
@@ -21,8 +22,10 @@ import {
   readDesign,
   restoreDesign,
   trashDesign,
+  updateDesign,
   writeDesign,
 } from '../core/store.ts';
+import { signedIn } from './auth.ts';
 import { designJsonSchema, openApi } from './openapi.ts';
 import { shareHtml } from './share.ts';
 
@@ -138,9 +141,7 @@ export function createApi() {
         if (!verifySlack(secret, header('x-slack-request-timestamp'), raw, header('x-slack-signature'))) return send(res, 401, { error: 'bad signature' });
         const click = slackClick(raw);
         if (!click) throw new ValidationError('not a review button');
-        const d = await readDesign(click.design);
-        applyClick(d, click);
-        await writeDesign(d, { actor: 'app' });
+        await updateDesign(click.design, (d) => applyClick(d, click), 'app');
         await answerSlack(click.responseUrl, `${click.action === 'approve' ? 'Approved' : 'Sent back'} by ${click.user}`).catch((e) => console.error(e));
         return send(res, 200, {});
       }
@@ -197,8 +198,7 @@ export function createApi() {
           const plugged = await pluginMetrics();
           if (!prometheus && !plugged.length) return send(res, 404, { error: 'Set PROMETHEUS_URL or add a metrics plugin to show live load.' });
           const d = await readDesign(id);
-          const all = await Promise.all([...(prometheus ? [queryPrometheus(prometheus)] : []), ...plugged.map((read) => read(d))]);
-          return send(res, 200, liveLines(d, { qps: all.flatMap((x) => x.qps), failed: all.flatMap((x) => x.failed), latency: all.flatMap((x) => x.latency) }));
+          return send(res, 200, await readLoad(d, [...(prometheus ? [{ name: 'Prometheus', read: () => queryPrometheus(prometheus) }] : []), ...plugged]));
         }
         if (id && sub === 'export' && req.method === 'GET') {
           const key = pathname.split('/')[4] ?? '';
@@ -207,11 +207,19 @@ export function createApi() {
           res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': `attachment; filename="${id}.${out.extension}"` });
           return res.end(out.text);
         }
+        if (id && sub === 'comments' && req.method === 'POST') {
+          const input = z.object({ step: z.string().optional(), target: z.string().optional(), text: z.string().min(1).max(5000) }).parse(await readBody(req));
+          let comment = '';
+          await updateDesign(id, (d) => void (comment = m.addComment(d, { ...input, by: 'reviewer', author: signedIn(req)?.name })), 'app');
+          return send(res, 201, { id: comment });
+        }
         if (sub) return send(res, 404, { error: 'not found' });
         if (id && req.method === 'GET') return send(res, 200, await readDesign(id));
         if (id && req.method === 'PUT') {
-          const body = (await readBody(req)) as { id?: unknown };
+          const body = (await readBody(req)) as { id?: unknown; comments?: unknown };
           if (body.id !== id) throw new ValidationError('id in body must match the URL');
+          const person = signedIn(req);
+          if (person && Array.isArray(body.comments)) m.keepAuthors(body.comments as Comment[], (await readDesign(id)).comments, person.name);
           return send(res, 200, await writeDesign(body as never, { actor: 'app' }));
         }
       }

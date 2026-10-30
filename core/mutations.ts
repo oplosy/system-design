@@ -383,6 +383,12 @@ export function addComment(d: Design, input: { step?: string; target?: string; t
   return id;
 }
 
+/** On a save from a signed-in person: comments already saved keep their author, and new ones get this person's name. */
+export function keepAuthors(comments: Comment[], saved: Comment[], name: string) {
+  const known = new Map(saved.map((c) => [c.id, c.author]));
+  for (const c of comments) c.author = known.has(c.id) ? known.get(c.id) : name;
+}
+
 /** The reviewer sends a step back. It counts as reviewed so the walkthrough can go on. */
 export function requestChanges(d: Design, step: string, text?: string) {
   const s = d.steps.find((x) => x.id === step);

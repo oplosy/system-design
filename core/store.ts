@@ -181,13 +181,13 @@ export async function createDesign(input: { id: string; title: string; descripti
 }
 
 /** Read, change and write a design, retrying if someone else wrote in between. This is how agents and syncs write. */
-export async function updateDesign(id: string, change: (d: Design) => void): Promise<Design> {
+export async function updateDesign(id: string, change: (d: Design) => void, actor: Actor = 'agent'): Promise<Design> {
   for (let attempt = 0; ; attempt++) {
     const before = await readDesign(id);
     const d = structuredClone(before);
     change(d);
     try {
-      return await writeDesign(d);
+      return await writeDesign(d, { actor });
     } catch (e) {
       if (!(e instanceof ConflictError) || attempt >= 3) throw e;
     }

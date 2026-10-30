@@ -1607,8 +1607,8 @@ test('plugins add formats, metrics and links, and a bad one is reported without 
   assert.match(out!.text, /^id,type,label\nweb,/);
   assert.equal(await plugins.exportWithPlugin('nope.csv', d), undefined);
 
-  const [read1] = await plugins.pluginMetrics();
-  assert.deepEqual(liveLines(d, await read1(d)).lines[d.connections[0].id], { qps: 12, latency: 25 });
+  const [metric] = await plugins.pluginMetrics();
+  assert.deepEqual(liveLines(d, await metric.read(d)).lines[d.connections[0].id], { qps: 12, latency: 25 });
 
   assert.deepEqual(await plugins.pluginLinks([{ kind: 'ticket', value: 'OPS-12' }, { kind: 'ticket', value: 'not one' }, { kind: 'docs', value: 'OPS-12' }]), { 'ticket:OPS-12': 'https://tickets.example.com/browse/OPS-12' });
 });
@@ -1832,6 +1832,7 @@ test('hub mode: sign-in, the allow list, and what stays out of reach', async () 
   assert.throws(() => hubConfig({ SYSTEM_DESIGN_OIDC_ISSUER: 'https://id.example' }), /SYSTEM_DESIGN_ALLOWED/);
   const env = { SYSTEM_DESIGN_OIDC_CLIENT_ID: 'app', SYSTEM_DESIGN_OIDC_CLIENT_SECRET: 's', SYSTEM_DESIGN_ALLOWED: 'Boss@Other.example, @team.example', SYSTEM_DESIGN_URL: 'https://hub.example/' };
   assert.throws(() => hubConfig({ ...env, SYSTEM_DESIGN_OIDC_ISSUER: 'http://id.example' }), /must be https/);
+  assert.throws(() => hubConfig({ ...env, SYSTEM_DESIGN_OIDC_ISSUER: 'https://id.example', SYSTEM_DESIGN_SESSION_SECRET: 'short' }), /32 characters/);
 
   // A provider that signs in whoever `claims` says.
   const crypto = await import('node:crypto');
@@ -1933,6 +1934,8 @@ test('hub mode: sign-in, the allow list, and what stays out of reach', async () 
     const send = (p: string, method: string, cookie: string) => fetch(base + p, { method, headers: { cookie } });
     assert.equal((await send('/api/designs/a', 'PUT', viewer)).status, 403);
     assert.equal((await send('/api/designs', 'POST', viewer)).status, 403);
+    assert.equal(await (await send('/api/v1/designs/a/comments', 'POST', viewer)).text(), 'app');
+    assert.equal((await send('/api/v1/designs/a/b/comments', 'POST', viewer)).status, 403);
     assert.equal((await send('/api/designs/a', 'DELETE', viewer)).status, 403);
     assert.equal(await (await send('/api/v1/plugins/links', 'POST', viewer)).text(), 'app');
     assert.equal(await (await send('/api/designs/a', 'PUT', session)).text(), 'app');
@@ -1941,5 +1944,82 @@ test('hub mode: sign-in, the allow list, and what stays out of reach', async () 
   } finally {
     app.close();
     idp.close();
+  }
+});
+
+test('a plugin that hangs is given up on, and a failing load source leaves the others', async () => {
+  const { within } = await import('./plugins.ts');
+  const { readLoad } = await import('./live.ts');
+  assert.equal(await within(Promise.resolve(1), 50), 1);
+  await assert.rejects(within(new Promise(() => undefined), 20), /no answer/);
+
+  const d = m.blankDesign('load', 'Load');
+  const a = m.addComponent(d, { type: 'service', label: 'A' }), b = m.addComponent(d, { type: 'service', label: 'B' });
+  const line = m.connect(d, { from: a, to: b });
+  const good = { name: 'good', read: async () => ({ qps: [{ client: 'a', server: 'b', value: 2 }], failed: [], latency: [] }) };
+  const bad = { name: 'bad', read: async () => Promise.reject(new Error('down')) };
+  const out = await readLoad(d, [bad, good]);
+  assert.deepEqual(out.lines[line], { qps: 2 });
+  assert.deepEqual(out.failed, ['bad: down']);
+  await assert.rejects(readLoad(d, [bad]), /bad: down/);
+});
+
+test('a plugin logging to stdout does not corrupt the MCP protocol', async () => {
+  const { spawn } = await import('node:child_process');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sd-noisy-'));
+  await fs.writeFile(path.join(dir, 'noisy.mjs'), `console.log('noise'); export default { name: 'noisy', importers: [{ id: 'n', name: 'n', matches: () => { console.log('more'); return false; }, read: () => ({}) }] };`);
+  const child = spawn(process.execPath, [path.join(import.meta.dirname, '..', 'mcp', 'server.ts')], { env: { ...process.env, SYSTEM_DESIGN_PLUGINS: dir } });
+  const first = await new Promise<string>((resolve, reject) => {
+    let out = '';
+    child.stdout.on('data', (c) => {
+      out += c;
+      if (out.includes('\n')) resolve(out.split('\n')[0]);
+    });
+    child.on('error', reject);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '1' } } })}\n`);
+  });
+  child.kill();
+  assert.equal(JSON.parse(first).id, 1);
+});
+
+test('on a hub the server decides who wrote a comment', async () => {
+  const http = await import('node:http');
+  const { createApi } = await import('../server/api.ts');
+  const { createHub } = await import('../server/auth.ts');
+  const saved = [{ id: 'c1', step: 'start', text: 'old', by: 'reviewer' as const, author: 'Ann', at: 'x' }];
+  const incoming = [{ ...saved[0], author: 'Forged' }, { ...saved[0], id: 'c2', author: 'Forged' }];
+  m.keepAuthors(incoming, saved, 'Bo');
+  assert.deepEqual(incoming.map((c) => c.author), ['Ann', 'Bo']);
+
+  // Two servers with one secret accept each other's sessions.
+  const config = { issuer: 'https://id.example', clientId: 'a', clientSecret: 's', url: 'http://127.0.0.1', allowed: ['@x.example'], sessionSecret: 'x'.repeat(32) };
+  const crypto = await import('node:crypto');
+  const body = Buffer.from(JSON.stringify({ email: 'bo@x.example', name: 'Bo', canEdit: true, exp: Date.now() + 60000 })).toString('base64url');
+  const session = `sd_session=${body}.${crypto.createHmac('sha256', config.sessionSecret).update(body).digest('base64url')}`;
+  const gate = createHub(config);
+
+  const api = createApi();
+  const server = http.createServer(async (req, res) => {
+    if (await gate(req, res)) return;
+    req.url = req.url!.replace(/^\/api/, '');
+    void api.handle(req, res);
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}/api/v1`;
+  const headers = { cookie: session, 'Content-Type': 'application/json' };
+  try {
+    await store.createDesign({ id: 'authors', title: 'Authors' });
+    const posted = await fetch(`${base}/designs/authors/comments`, { method: 'POST', headers, body: JSON.stringify({ text: 'From the viewer route', step: 'start', author: 'Forged' }) });
+    assert.equal(posted.status, 201);
+    assert.equal(await (await fetch(`${base}/designs/authors/comments`, { method: 'POST', headers, body: JSON.stringify({ text: '' }) })).status, 400);
+    const d = await store.readDesign('authors');
+    assert.equal(d.comments[0].author, 'Bo');
+    m.addComment(d, { step: 'start', text: 'Saved', by: 'reviewer', author: 'Forged' });
+    d.comments[0].author = 'Forged';
+    assert.equal((await fetch(`${base}/designs/authors`, { method: 'PUT', headers, body: JSON.stringify(d) })).status, 200);
+    assert.deepEqual((await store.readDesign('authors')).comments.map((c) => c.author), ['Bo', 'Bo']);
+  } finally {
+    server.close();
+    api.close();
   }
 });

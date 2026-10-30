@@ -1164,7 +1164,7 @@ function Shell() {
                 className="text-btn"
                 aria-pressed={liveOn}
                 onClick={() => setLiveOn((on) => !on)}
-                title={live?.unmatched.length ? `Live load from Prometheus. No line for: ${live.unmatched.join(', ')}` : 'Show measured load and latency on the lines'}
+                title={[live?.unmatched.length && `No line for: ${live.unmatched.join(', ')}`, live?.failed?.length && `Not answering: ${live.failed.join('; ')}`].filter(Boolean).join('. ') || 'Show measured load and latency on the lines'}
               >
                 Live
               </button>

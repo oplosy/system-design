@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { PluginDiagram } from './diagram.ts';
-import type { Sample } from './live.ts';
+import type { Load } from './live.ts';
 import { userAppDir } from './paths.ts';
 import { REF_KINDS, type Design, type Ref } from './schema.ts';
 
@@ -12,6 +12,21 @@ import { REF_KINDS, type Design, type Ref } from './schema.ts';
 // holds can add one. Loaded once per process, by the app and the MCP server alike.
 
 export const PLUGINS_DIR = process.env.SYSTEM_DESIGN_PLUGINS ?? path.join(userAppDir(), 'plugins');
+
+const TIMEOUT = 10000;
+
+/** Stops waiting for a plugin that hangs. It can't stop one that blocks the process, which is why plugins must be trusted. */
+export async function within<T>(work: T | Promise<T>, ms = TIMEOUT): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer in ${ms / 1000} seconds`)), ms);
+  });
+  try {
+    return await Promise.race([work, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const Fn = z.custom<(arg: never) => unknown>((x) => typeof x === 'function', 'a function');
 const Id = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'lowercase letters, digits and dashes');
@@ -29,7 +44,7 @@ const Plugin = z.object({
 type Plugin = z.infer<typeof Plugin>;
 
 const Samples = z.array(z.object({ client: z.string(), server: z.string(), value: z.number() })).default([]);
-const Load = z.object({ qps: Samples, failed: Samples, latency: Samples });
+const LoadShape = z.object({ qps: Samples, failed: Samples, latency: Samples });
 const Text = z.string();
 const WebUrl = z.string().regex(/^https?:\/\/\S+$/i, 'an http(s) address');
 
@@ -64,7 +79,7 @@ const installed = () => (loaded ??= loadPlugins());
 /** Calls into a plugin and checks what comes back, so a fault names the plugin instead of breaking somewhere later. */
 async function call<T>(plugin: Plugin, f: () => unknown, shape: z.ZodType<T>): Promise<T> {
   try {
-    return shape.parse(await f());
+    return shape.parse(await within(f()));
   } catch (e) {
     throw new Error(`Plugin ${plugin.name}: ${e instanceof z.ZodError ? z.prettifyError(e) : e instanceof Error ? e.message : e}`);
   }
@@ -92,7 +107,7 @@ export async function readWithPlugins(text: string) {
     for (const i of p.importers) {
       let match = false;
       try {
-        match = !!(await (i.matches as (t: string) => unknown)(text));
+        match = !!(await within((i.matches as (t: string) => unknown)(text)));
       } catch (e) {
         console.error(`system-design: plugin ${p.name}: ${e instanceof Error ? e.message : e}`);
       }
@@ -112,8 +127,8 @@ export async function exportWithPlugin(key: string, design: Design) {
 }
 
 /** Ways to measure a design's lines, one per metrics plugin. */
-export async function pluginMetrics(): Promise<((d: Design) => Promise<Record<'qps' | 'failed' | 'latency', Sample[]>>)[]> {
-  return (await installed()).plugins.flatMap((p) => p.metrics.map((x) => (d: Design) => call(p, () => (x.read as (d: Design) => unknown)(d), Load)));
+export async function pluginMetrics(): Promise<{ name: string; read: (d: Design) => Promise<Load> }[]> {
+  return (await installed()).plugins.flatMap((p) => p.metrics.map((x) => ({ name: x.name, read: (d: Design) => call(p, () => (x.read as (d: Design) => unknown)(d), LoadShape) })));
 }
 
 /** Addresses for the refs that link plugins can open, by `kind:value`. */

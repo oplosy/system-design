@@ -3,7 +3,7 @@ import type { Live } from '../core/live.ts';
 import { parseDesign, type Design } from '../core/schema.ts';
 
 export type Summary = { id: string; title: string; description?: string; steps: number; unseen: number; updated?: number };
-export type LiveLoad = { lines: Record<string, Live>; unmatched: string[] };
+export type LiveLoad = { lines: Record<string, Live>; unmatched: string[]; failed?: string[] };
 export type HookFormat = 'cloudevents' | 'chat' | 'slack';
 export type Hook = { id: string; url: string; format: HookFormat; events?: string[]; designs?: string[]; signed: boolean };
 export type HookInput = { url: string; format: HookFormat; events?: string[]; designs?: string[]; secret?: string };
@@ -84,6 +84,7 @@ function local(store: Map<string, Design>) {
     mcpRun: async (_: McpQuery, __: McpPart): Promise<{ text: string }> => readOnly(),
     mcpTest: async (_: string): Promise<McpTest> => readOnly(),
     me: async (): Promise<Me> => null,
+    comment: async (_: string, __: { step?: string; target?: string; text: string }): Promise<unknown> => readOnly(),
     hooks: async () => [] as Hook[],
     addHook: async (_: HookInput): Promise<Hook> => readOnly(),
     removeHook: async (_: string): Promise<unknown> => readOnly(),
@@ -117,6 +118,7 @@ export const api = shared ? local(shared) : {
     viewing = me?.canEdit === false;
     return me;
   },
+  comment: (id: string, input: { step?: string; target?: string; text: string }) => call<unknown>('POST', `/api/v1/designs/${id}/comments`, input),
   hooks: () => call<Hook[]>('GET', '/api/v1/hooks'),
   addHook: (input: HookInput) => call<Hook>('POST', '/api/v1/hooks', input),
   removeHook: (id: string) => call<unknown>('DELETE', `/api/v1/hooks/${encodeURIComponent(id)}`),

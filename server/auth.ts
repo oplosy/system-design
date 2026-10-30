@@ -6,7 +6,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 // server. Everyone on the allow list can read, and edit unless an editors list leaves them out; hooks and MCP servers
 // hold the host's secrets, so they stay out of reach over the network.
 
-export type HubConfig = { issuer: string; clientId: string; clientSecret: string; url: string; allowed: string[]; editors?: string[] };
+export type HubConfig = { issuer: string; clientId: string; clientSecret: string; url: string; allowed: string[]; editors?: string[]; sessionSecret?: string };
 type Jwk = Record<string, unknown> & { kid?: string };
 export type User = { email: string; name: string; canEdit: boolean };
 
@@ -30,6 +30,8 @@ export function hubConfig(env: Record<string, string | undefined> = process.env)
   if (!issuer) return undefined;
   const need = ['SYSTEM_DESIGN_OIDC_CLIENT_ID', 'SYSTEM_DESIGN_OIDC_CLIENT_SECRET', 'SYSTEM_DESIGN_ALLOWED', 'SYSTEM_DESIGN_URL'].filter((k) => !env[k]);
   if (need.length) throw new Error(`Sign-in needs ${need.join(', ')}`);
+  const sessionSecret = env.SYSTEM_DESIGN_SESSION_SECRET;
+  if (sessionSecret !== undefined && sessionSecret.length < 32) throw new Error('SYSTEM_DESIGN_SESSION_SECRET needs at least 32 characters');
   return {
     issuer: safeUrl('SYSTEM_DESIGN_OIDC_ISSUER', issuer),
     clientId: env.SYSTEM_DESIGN_OIDC_CLIENT_ID!,
@@ -37,6 +39,7 @@ export function hubConfig(env: Record<string, string | undefined> = process.env)
     url: safeUrl('SYSTEM_DESIGN_URL', env.SYSTEM_DESIGN_URL!),
     allowed: emails(env.SYSTEM_DESIGN_ALLOWED!),
     editors: env.SYSTEM_DESIGN_EDITORS ? emails(env.SYSTEM_DESIGN_EDITORS) : undefined,
+    sessionSecret,
   };
 }
 
@@ -54,6 +57,10 @@ export function signedBy(keys: Jwk[], token: string) {
   return verify('sha256', Buffer.from(`${head}.${body}`), alg === 'ES256' ? { key, dsaEncoding: 'ieee-p1363' } : key, Buffer.from(signature, 'base64url'));
 }
 
+const people = new WeakMap<IncomingMessage, User>();
+/** Who made this request, on a hub. */
+export const signedIn = (req: IncomingMessage) => people.get(req);
+
 function cookies(req: IncomingMessage) {
   return Object.fromEntries((req.headers.cookie ?? '').split(';').flatMap((c) => {
     const at = c.indexOf('=');
@@ -63,8 +70,8 @@ function cookies(req: IncomingMessage) {
 
 /** Returns `gate`: called before anything else, it answers the request itself (true) or lets it through (false). */
 export function createHub(config: HubConfig) {
-  // shortcut: a new key per start signs everyone out on restart and can't span servers; read it from the environment when a hub runs more than one.
-  const key = randomBytes(32);
+  // Without a set secret, a new key per start signs everyone out on restart.
+  const key = config.sessionSecret ?? randomBytes(32);
   const hmac = (body: string) => createHmac('sha256', key).update(body).digest('base64url');
   const seal = (data: object, seconds: number) => {
     const body = b64(JSON.stringify({ ...data, exp: Date.now() + seconds * 1000 }));
@@ -176,6 +183,7 @@ export function createHub(config: HubConfig) {
       } else redirect(res, '/auth/login');
       return true;
     }
+    people.set(req, user);
     if (!api) return false;
     if (resource === 'me') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -183,8 +191,9 @@ export function createHub(config: HubConfig) {
       return true;
     }
     if (OWNER_ONLY.has(resource)) return (deny(res, 403, 'Only the machine this runs on can change this.'), true);
-    // Plugin reads and link lookups change nothing, though they are POSTs.
-    if (!user.canEdit && req.method !== 'GET' && req.method !== 'HEAD' && resource !== 'plugins') return (deny(res, 403, 'You can view this hub, not change it.'), true);
+    // Plugin reads and link lookups change nothing, though they are POSTs; a comment is what a viewer is there for.
+    const allowed = resource === 'plugins' || /^designs\/[^/]+\/comments$/.test(pathname.slice(api[0].length));
+    if (!user.canEdit && req.method !== 'GET' && req.method !== 'HEAD' && !allowed) return (deny(res, 403, 'You can view this hub, not change it.'), true);
     return false;
   };
 }

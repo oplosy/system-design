@@ -63,6 +63,14 @@ export function openApi(version: string) {
         },
         delete: { summary: 'Move a design to the trash', responses: { '200': ok('Trashed', { type: 'object', properties: { trashed: { type: 'string' } } }), ...errors } },
       },
+      '/designs/{id}/comments': {
+        parameters: [id],
+        post: {
+          summary: 'Add a review comment; on a hub the author is the signed-in person, and viewers may do this too',
+          requestBody: body({ type: 'object', required: ['text'], properties: { step: { type: 'string' }, target: { type: 'string' }, text: { type: 'string' } } }),
+          responses: { '201': ok('The comment', { type: 'object', properties: { id: { type: 'string' } } }), ...errors },
+        },
+      },
       '/designs/{id}/share': {
         parameters: [id],
         get: { summary: 'One self-contained, read-only HTML file of the design', responses: { '200': { description: 'HTML', content: { 'text/html': { schema: { type: 'string' } } } }, ...errors } },

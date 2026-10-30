@@ -15,6 +15,9 @@ import * as m from '../core/mutations.ts';
 import { createDesign, listDesigns, listTemplates, readDesign, updateDesign } from '../core/store.ts';
 import { guessType } from '../src/shapes.ts';
 
+// Stdout is the protocol: a plugin's stray log must not reach it.
+console.log = console.info = console.debug = console.error;
+
 const instructions = `Local system design canvas. The user reviews every step you add, one by one, so use it to make your architecture decisions visible.
 - Work in steps: each add_step is one reviewable change ("Add cache in front of DB"). Put every component, connection, note and decision of that change into the same add_step call.
 - Always record a decision (title, why, alternatives, tradeoffs) for any non-obvious choice, linked to the components it affects.

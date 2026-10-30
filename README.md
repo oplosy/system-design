@@ -135,9 +135,10 @@ docs/architecture.json merge=system-design
 | `SYSTEM_DESIGN_OIDC_CLIENT_ID`, `SYSTEM_DESIGN_OIDC_CLIENT_SECRET` | From registering the app with the provider |
 | `SYSTEM_DESIGN_URL` | The hub's public address, `https` unless it is local |
 | `SYSTEM_DESIGN_ALLOWED` | Who gets in, comma-separated: `ann@example.com, @example.com` |
-| `SYSTEM_DESIGN_EDITORS` | Optional, same form: who may change things. Everyone else allowed in can view only |
+| `SYSTEM_DESIGN_EDITORS` | Optional, same form: who may change things. Everyone else allowed in can view and comment |
+| `SYSTEM_DESIGN_SESSION_SECRET` | Optional, 32+ characters: keeps people signed in across restarts, and lets several servers share sessions |
 
-Start it with `HOST=0.0.0.0` behind a TLS proxy that keeps the `Host` header, since the API refuses writes whose origin doesn't match it. Without an editors list everyone allowed can edit. A viewer can walk the steps and try changes on the sheet, but nothing is saved. ID tokens are checked against the provider's published keys (RS256 or ES256). An address with `#design/item` still opens that item after sign-in. Webhooks and MCP servers stay out of reach on a hub, since they hold the host's secrets, and plugins run on the server for everyone. Sessions last 12 hours and end when the server restarts; one server only. Without these variables nothing changes, and a server started with a non-local `HOST` warns that it has no sign-in. Comment names are set by the app, so they aren't proof against a signed-in person who edits the request.
+Start it with `HOST=0.0.0.0` behind a TLS proxy that keeps the `Host` header, since the API refuses writes whose origin doesn't match it. Without an editors list everyone allowed can edit. A viewer can walk the steps, comment and try changes on the sheet, but only comments are saved. ID tokens are checked against the provider's published keys (RS256 or ES256). An address with `#design/item` still opens that item after sign-in. Webhooks and MCP servers stay out of reach on a hub, since they hold the host's secrets, and plugins run on the server for everyone. Sessions last 12 hours; without a session secret they end when the server restarts. Without these variables nothing changes, and a server started with a non-local `HOST` warns that it has no sign-in. The server sets the name on each new comment from the session, and keeps it on saved ones.
 
 **From Slack.** A webhook in the **Slack** format posts new steps from agents with Approve and Send back buttons. Create a Slack app, enable Interactivity with the request address `<SYSTEM_DESIGN_URL>/api/v1/slack/actions`, and set `SYSTEM_DESIGN_SLACK_SECRET` to the app's signing secret; the server must be reachable from Slack. The signature is what's checked, so everyone in that channel can review, whatever `SYSTEM_DESIGN_EDITORS` says, and an agent reads a send-back as a comment.
 
@@ -189,7 +190,7 @@ Each function may be async.
 - **Metrics** feed **Live**, alongside Prometheus if it is set. Each list holds `{ client, server, value }`, matched to parts as in [Live load](#live-load): `qps` and `failed` per second, `latency` in round-trip seconds.
 - **Links** turn a part's plain value of one kind (a ticket number) into the address it opens, or nothing.
 
-**Connections** lists what is installed, and why a plugin that failed to load did; `/api/v1/plugins` gives the same. A plugin that fails to load leaves the others working. After adding or changing one, restart the app and the agent's MCP server. Log to stderr, never stdout: the MCP server's stdout is its protocol.
+**Connections** lists what is installed, and why a plugin that failed to load did; `/api/v1/plugins` gives the same. A plugin that fails to load leaves the others working. After adding or changing one, restart the app and the agent's MCP server. A call that takes more than 10 seconds is given up on, and a metrics source that fails leaves the others showing, with the failure in **Live**'s tooltip. The MCP server sends `console.log` to stderr, so stray logs can't reach its protocol; writing to `process.stdout` directly still would.
 
 ## Pictures for docs
 

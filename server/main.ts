@@ -2,6 +2,7 @@
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import { closeMcp } from '../core/mcp-client.ts';
 import { createApi } from './api.ts';
 import { createHub, hubConfig } from './auth.ts';
 import { DIST } from './share.ts';
@@ -77,4 +78,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.on('close', api.close);
+// Ends the stdio MCP servers this process started.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => void closeMcp().finally(() => process.exit(0)));
 server.listen(PORT, HOST, () => console.log(`System design on http://${HOST}:${PORT}`));

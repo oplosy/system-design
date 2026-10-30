@@ -6,6 +6,7 @@ import { slugify } from './mutations.ts';
 
 export type Sample = { client: string; server: string; value: number };
 export type Live = { qps?: number; latency?: number; errors?: number };
+export type Load = Record<'qps' | 'failed' | 'latency', Sample[]>;
 
 const QUERIES = {
   qps: 'sum by (client, server) (rate(traces_service_graph_request_total[5m]))',
@@ -27,6 +28,15 @@ export async function queryPrometheus(base: string): Promise<Record<keyof typeof
   };
   const [qps, failed, latency] = await Promise.all([one(QUERIES.qps), one(QUERIES.failed), one(QUERIES.latency)]);
   return { qps, failed, latency };
+}
+
+/** All sources together; one that fails is named and the others still count. Fails only when none answers. */
+export async function readLoad(d: Design, sources: { name: string; read: (d: Design) => Promise<Load> }[]) {
+  const settled = await Promise.allSettled(sources.map((s) => s.read(d)));
+  const good = settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+  const failed = settled.flatMap((r, i) => (r.status === 'rejected' ? [`${sources[i].name}: ${r.reason instanceof Error ? r.reason.message : r.reason}`] : []));
+  if (!good.length) throw new Error(failed.join('; '));
+  return { ...liveLines(d, { qps: good.flatMap((x) => x.qps), failed: good.flatMap((x) => x.failed), latency: good.flatMap((x) => x.latency) }), failed };
 }
 
 const round = (x: number) => (x >= 10 ? Math.round(x) : Math.round(x * 10) / 10);

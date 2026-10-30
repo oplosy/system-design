@@ -1378,11 +1378,21 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: '
 function Comments({ design, step, target, change, onSelect }: { design: Design; step: string; target?: string; change: Change; onSelect: (id: string) => void }) {
   const [text, setText] = useState('');
   const [me, setMe] = useState<Me>(null);
+  const [err, setErr] = useState<string | null>(null);
   useEffect(() => void api.me().then(setMe, () => undefined), []);
   const list = design.comments.filter((c) => (target ? c.target === target : c.step === step));
   const label = (id: string) => [...design.components, ...design.boundaries].find((x) => x.id === id)?.label ?? design.decisions.find((x) => x.id === id)?.title ?? id;
   const send = () => {
     if (!text.trim()) return;
+    // A viewer's saves go nowhere, so the comment goes to the server on its own and comes back with the next update.
+    if (me?.canEdit === false) {
+      setErr(null);
+      api.comment(design.id, { step: target ? undefined : step, target, text }).then(
+        () => setText(''),
+        (e) => setErr(e instanceof Error ? e.message : String(e)),
+      );
+      return;
+    }
     change((d) => m.addComment(d, { step: target ? undefined : step, target, text, by: 'reviewer', author: me?.name }));
     setText('');
   };
@@ -1417,6 +1427,7 @@ function Comments({ design, step, target, change, onSelect }: { design: Design; 
         </div>
       ))}
       <div className="comment-new">
+        {err && <em className="ed-error">{err}</em>}
         <textarea
           className="ed"
           rows={2}
