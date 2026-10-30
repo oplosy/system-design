@@ -113,6 +113,29 @@ The API is versioned under `/api/v1` (`/api` stays as an alias). `/api/v1/openap
 
 Webhooks get every change, whether made in the app, by an agent or by a command: one POST per write, as a JSON array of [CloudEvents](https://cloudevents.io) (`application/cloudevents-batch+json`) of the types `system-design.design.*`, `step.*`, `part.*`, `line.*`, `boundary.*`, `note.*`, `decision.*`, `flow.*` and `comment.*`, each with `actor` (`app` or `agent`), a link to the item and the item itself. Moving things on the canvas sends nothing. A hook can be limited to event groups and designs; with a secret it carries `X-System-Design-Signature: sha256=<HMAC-SHA256 of the body>`. Network errors, 429 and 5xx are retried twice, and a webhook that fails never fails the write. The **chat** format posts "New step in “Shop”: Add a cache. 2 waiting for review" to Slack, Discord or Teams when an agent or a sync adds steps. Hooks live in `hooks.json` in the user's app folder (`SYSTEM_DESIGN_HOOKS` moves it), never next to the designs, so secrets stay out of git; manage them in the dialog or at `/api/v1/hooks`. `SYSTEM_DESIGN_WEBHOOK` still works as a chat hook for new steps, and `SYSTEM_DESIGN_URL` sets the links' address (default `http://127.0.0.1:5180`).
 
+## Plugins
+
+A plugin teaches the app a new format, metric source or link target with no change here. It is one JavaScript module (`.mjs` or `.js`) in the `plugins` folder of the user's app folder (`SYSTEM_DESIGN_PLUGINS` moves it), and the app and the MCP server load it when they start. Plugins run as code with your rights, so they load from that folder only, never from a design, a repository or the API; add only what you trust. [`examples/plugins/service-list.mjs`](examples/plugins/service-list.mjs) has one of each kind:
+
+```js
+export default {
+  name: 'my-tools', // lowercase, unique
+  importers: [{ id, name, matches: (text) => boolean, read: (text) => diagram }],
+  exporters: [{ id, name, extension, render: (design) => text }],
+  metrics: [{ name, read: (design) => ({ qps, failed, latency }) }],
+  links: [{ kind, url: (value) => address }],
+};
+```
+
+Each function may be async.
+
+- **Importers** are asked first, for anything pasted, dropped, given to a new design or sent to `import_diagram`. `read` returns `{ nodes: [{ key, label?, type?, tech?, description?, group? }], groups?: [{ key, label, parent?, kind? }], edges?: [{ from, to, label?, async? }], flows?: [{ title, path }], leftOut?: [] }`; the result is checked, and comes in as a step for review like any import.
+- **Exporters** appear in the **Export** menu, in `export_design` as `<plugin>.<id>`, and at `/api/v1/designs/<id>/export/<plugin>.<id>`.
+- **Metrics** feed **Live**, alongside Prometheus if it is set. Each list holds `{ client, server, value }`, matched to parts as in [Live load](#live-load): `qps` and `failed` per second, `latency` in round-trip seconds.
+- **Links** turn a part's plain value of one kind (a ticket number) into the address it opens, or nothing.
+
+**Connections** lists what is installed, and why a plugin that failed to load did; `/api/v1/plugins` gives the same. A plugin that fails to load leaves the others working. After adding or changing one, restart the app and the agent's MCP server. Log to stderr, never stdout: the MCP server's stdout is its protocol.
+
 ## Pictures for docs
 
 `system-design svg <design> docs/architecture.svg --badge docs/design-badge.svg` draws the design (boundaries, parts, lines and their load; light and dark) and a badge with its part count and steps waiting for review; with `--infra docker-compose.yml` the badge says whether the design matches that file. Run it in CI or a pre-commit hook and commit the files, so a README or wiki shows the current design:

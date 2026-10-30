@@ -1,6 +1,6 @@
 import type { ComponentType, Design } from './schema.ts';
 import * as m from './mutations.ts';
-import { importDiagram } from './diagram.ts';
+import { fromPlugin, importDiagram, type PluginDiagram } from './diagram.ts';
 import { expandDrawio, isDrawio, readDrawio } from './drawio.ts';
 import { importMermaid, mermaidKind } from './mermaid.ts';
 import { importInfra, readInfra } from './infra.ts';
@@ -29,6 +29,8 @@ const NAMES = {
 } as const;
 
 type Guess = (words: string) => ComponentType | undefined;
+/** What a plugin importer read from the text; plugins run on the server, so it arrives ready. */
+type Plugged = { format: string; diagram: PluginDiagram } | null;
 
 /** Undoes encodings some sources add (draw.io's clipboard and compressed pages); call before the rest. */
 export async function unpack(text: string) {
@@ -49,7 +51,8 @@ export function formatOf(text: string): string | undefined {
 }
 
 /** Adds `text` to `step` of a design (the latest when unset), reusing the parts it already has. Returns what was added. */
-export function importText(d: Design, text: string, { step, guess }: { step?: string; guess?: Guess } = {}) {
+export function importText(d: Design, text: string, { step, guess, plugin }: { step?: string; guess?: Guess; plugin?: Plugged } = {}) {
+  if (plugin) return importDiagram(d, fromPlugin(plugin.diagram), { step, guess });
   if (mermaidKind(text)) return importMermaid(d, text, { step, guess });
   if (isDrawio(text)) return importDiagram(d, readDrawio(text), { step, guess });
   if (isStructurizr(text)) return importDiagram(d, readStructurizr(text), { step, guess });
@@ -60,15 +63,15 @@ export function importText(d: Design, text: string, { step, guess }: { step?: st
 const count = (n: number, one: string, many = `${one}s`) => (n ? `${n} ${n > 1 ? many : one}` : '');
 
 /** Adds `text` to `d` as one new step, reusing the parts it already has. Returns the step id. */
-export function importAsStep(d: Design, text: string, { title, seen, guess }: { title?: string; seen?: boolean; guess?: Guess } = {}) {
-  const format = formatOf(text);
+export function importAsStep(d: Design, text: string, { title, seen, guess, plugin }: { title?: string; seen?: boolean; guess?: Guess; plugin?: Plugged } = {}) {
+  const format = plugin?.format ?? formatOf(text);
   if (!format) {
     throw new Error(
       'Paste a Mermaid flowchart, sequence, C4 or architecture diagram, C4-PlantUML, a draw.io diagram, a Structurizr workspace, a docker-compose file, Kubernetes manifests, "terraform show -json" output, a CloudFormation or CDK template, a Pulumi stack export, a Backstage catalog, an OpenAPI or AsyncAPI document, or OTLP / Jaeger traces.',
     );
   }
   const step = m.addStep(d, { title: title ?? `Import ${format}`, seen });
-  const added = importText(d, text, { step, guess });
+  const added = importText(d, text, { step, guess, plugin });
   const what = [
     count(added.components.length, 'part'),
     count(added.connections.length, 'line'),

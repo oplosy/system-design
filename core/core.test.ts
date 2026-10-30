@@ -8,6 +8,7 @@ process.env.SYSTEM_DESIGN_DIR = await fs.mkdtemp(path.join(os.tmpdir(), 'sd-test
 // Webhooks from these writes go to a file of the test's own, never to the machine's real ones.
 process.env.SYSTEM_DESIGN_HOOKS = path.join(process.env.SYSTEM_DESIGN_DIR, '..', `sd-hooks-${process.pid}.json`);
 delete process.env.SYSTEM_DESIGN_WEBHOOK;
+process.env.SYSTEM_DESIGN_PLUGINS = path.join(import.meta.dirname, '..', 'examples', 'plugins');
 const store = await import('./store.ts');
 const m = await import('./mutations.ts');
 const { parseDesign } = await import('./schema.ts');
@@ -1568,5 +1569,85 @@ test('the versioned API publishes its OpenAPI document and design schema, and ma
     server.close();
     api.close();
     await fs.rm(HOOKS_FILE, { force: true });
+  }
+});
+
+test('plugins add formats, metrics and links, and a bad one is reported without stopping the rest', async () => {
+  const plugins = await import('./plugins.ts');
+  const { importAsStep } = await import('./importer.ts');
+  const { liveLines } = await import('./live.ts');
+
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sd-plugins-'));
+  await fs.writeFile(path.join(dir, 'a-good.mjs'), `export default { name: 'good' };`);
+  await fs.writeFile(path.join(dir, 'b-bad.mjs'), `export default { name: 'Not An Id' };`);
+  await fs.writeFile(path.join(dir, 'c-crash.mjs'), `throw new Error('boom');`);
+  await fs.writeFile(path.join(dir, 'd-twin.mjs'), `export default { name: 'good' };`);
+  await fs.writeFile(path.join(dir, 'notes.txt'), 'not code');
+  const { plugins: ok, failed } = await plugins.loadPlugins(dir);
+  assert.deepEqual(ok.map((p) => p.name), ['good']);
+  assert.deepEqual(failed.map((f) => f.file), ['b-bad.mjs', 'c-crash.mjs', 'd-twin.mjs']);
+  assert.deepEqual(await plugins.loadPlugins(path.join(dir, 'missing')), { plugins: [], failed: [] });
+
+  const listed = await plugins.pluginList();
+  assert.equal(listed.plugins[0].exporters[0].key, 'service-list.csv');
+
+  const text = '# services\nweb -> api\napi -> db\n';
+  const read = await plugins.readWithPlugins(text);
+  assert.equal(read?.format, 'service list');
+  assert.equal(await plugins.readWithPlugins('nothing known'), undefined);
+  const d = m.blankDesign('plugged', 'Plugged');
+  const step = importAsStep(d, text, { plugin: read });
+  assert.deepEqual(d.components.map((c) => c.id), ['web', 'api', 'db']);
+  assert.equal(d.connections.length, 2);
+  assert.match(d.steps.find((s) => s.id === step)!.summary!, /service list: 3 parts, 2 lines/);
+
+  const out = await plugins.exportWithPlugin('service-list.csv', d);
+  assert.equal(out?.extension, 'csv');
+  assert.match(out!.text, /^id,type,label\nweb,/);
+  assert.equal(await plugins.exportWithPlugin('nope.csv', d), undefined);
+
+  const [read1] = await plugins.pluginMetrics();
+  assert.deepEqual(liveLines(d, await read1(d)).lines[d.connections[0].id], { qps: 12, latency: 25 });
+
+  assert.deepEqual(await plugins.pluginLinks([{ kind: 'ticket', value: 'OPS-12' }, { kind: 'ticket', value: 'not one' }, { kind: 'docs', value: 'OPS-12' }]), { 'ticket:OPS-12': 'https://tickets.example.com/browse/OPS-12' });
+});
+
+test('a plugin diagram must hang together', async () => {
+  const { PluginDiagram } = await import('./diagram.ts');
+  assert.equal(PluginDiagram.safeParse({ nodes: [{ key: 'a' }], edges: [{ from: 'a', to: 'ghost' }] }).success, false);
+  assert.equal(PluginDiagram.safeParse({ nodes: [{ key: 'a', group: 'g' }] }).success, false);
+  assert.equal(PluginDiagram.safeParse({ nodes: [{ key: 'a' }], groups: [{ key: 'c', label: 'C', parent: 'p' }, { key: 'p', label: 'P' }] }).success, false);
+  assert.equal(PluginDiagram.safeParse({ nodes: [] }).success, false);
+  assert.equal(PluginDiagram.safeParse({ nodes: [{ key: 'a', group: 'g' }], groups: [{ key: 'g', label: 'G' }] }).success, true);
+});
+
+test('the API serves plugins but can never add one', async () => {
+  const http = await import('node:http');
+  const { createApi } = await import('../server/api.ts');
+  const api = createApi();
+  const server = http.createServer((req, res) => {
+    req.url = req.url!.replace(/^\/api/, '');
+    void api.handle(req, res);
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}/api/v1`;
+  try {
+    await store.createDesign({ id: 'plug-api', title: 'Plug' });
+    const info = await (await fetch(`${base}/plugins`)).json();
+    assert.equal(info.plugins[0].name, 'service-list');
+    assert.equal((await fetch(`${base}/plugins`, { method: 'POST', body: '{}' })).status, 404);
+    const read = await fetch(`${base}/plugins/read`, { method: 'POST', body: JSON.stringify({ text: '# services\na -> b' }) });
+    assert.equal((await read.json()).format, 'service list');
+    assert.equal((await fetch(`${base}/plugins/read`, { method: 'POST', body: JSON.stringify({ text: 1 }) })).status, 400);
+    const file = await fetch(`${base}/designs/plug-api/export/service-list.csv`);
+    assert.match(file.headers.get('content-disposition')!, /plug-api\.csv/);
+    assert.equal((await fetch(`${base}/designs/plug-api/export/nope.csv`)).status, 404);
+    const links = await fetch(`${base}/plugins/links`, { method: 'POST', body: JSON.stringify([{ kind: 'ticket', value: 'OPS-1' }]) });
+    assert.deepEqual(await links.json(), { 'ticket:OPS-1': 'https://tickets.example.com/browse/OPS-1' });
+    assert.equal((await fetch(`${base}/plugins/links`, { method: 'POST', body: JSON.stringify([{ kind: 'nope', value: 'x' }]) })).status, 400);
+    assert.deepEqual((await (await fetch(`${base}/designs/plug-api/live`)).json()).unmatched, ['web → api']);
+  } finally {
+    server.close();
+    api.close();
   }
 });

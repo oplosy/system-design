@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { PluginDiagram } from '../core/diagram.ts';
 import { EVENT_TYPES } from '../core/events.ts';
 import { HookInput } from '../core/hooks.ts';
-import { DesignSchema } from '../core/schema.ts';
+import { DesignSchema, RefSchema } from '../core/schema.ts';
 
 // The API's published contract: an OpenAPI 3.1 document and the design file's JSON Schema, both built from the zod
 // schemas the server validates with, so they can't drift from what it accepts. Served at /api/v1/openapi.json and
@@ -78,6 +79,30 @@ export function openApi(version: string) {
           },
         },
       },
+      '/designs/{id}/export/{exporter}': {
+        parameters: [id, { name: 'exporter', in: 'path', required: true, schema: { type: 'string' }, description: 'Key from /plugins: <plugin>.<exporter>' }],
+        get: { summary: 'The design as text from an exporter plugin', responses: { '200': { description: 'The file', content: { 'text/plain': { schema: { type: 'string' } } } }, ...errors } },
+      },
+      '/plugins': {
+        get: {
+          summary: 'Installed plugins and those that failed to load (plugins are added on disk only, never here)',
+          responses: { '200': ok('Plugins', { type: 'object', properties: { dir: { type: 'string' }, plugins: { type: 'array', items: { type: 'object' } }, failed: { type: 'array', items: { type: 'object', properties: { file: { type: 'string' }, error: { type: 'string' } } } } } }) },
+        },
+      },
+      '/plugins/links': {
+        post: {
+          summary: 'Addresses link plugins give for these refs, by `kind:value`',
+          requestBody: body({ type: 'array', items: json(RefSchema) }),
+          responses: { '200': ok('Addresses', { type: 'object', additionalProperties: { type: 'string' } }), ...errors },
+        },
+      },
+      '/plugins/read': {
+        post: {
+          summary: 'Read text with the first importer plugin that recognises it; null when none does',
+          requestBody: body({ type: 'object', required: ['text'], properties: { text: { type: 'string' } } }),
+          responses: { '200': ok('Format and diagram, or null', { oneOf: [{ type: 'null' }, { type: 'object', properties: { format: { type: 'string' }, diagram: ref('PluginDiagram') } }] }), ...errors },
+        },
+      },
       '/templates': { get: { summary: 'List templates', responses: { '200': ok('Summaries', { type: 'array', items: ref('Summary') }) } } },
       '/trash': { get: { summary: 'Designs in the trash', responses: { '200': ok('Entries', { type: 'array', items: ref('Trashed') }) } } },
       '/trash/{entry}': {
@@ -117,6 +142,7 @@ export function openApi(version: string) {
       schemas: {
         Design: json(DesignSchema),
         HookInput: json(HookInput),
+        PluginDiagram: json(PluginDiagram),
         Hook: { allOf: [ref('HookInput'), { type: 'object', required: ['id'], properties: { id: { type: 'string' }, signed: { type: 'boolean' } } }] },
         Summary: {
           type: 'object',

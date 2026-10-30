@@ -5,7 +5,8 @@ import { z } from 'zod';
 import pkg from '../package.json' with { type: 'json' };
 import { addHook, listHooks, publicHook, removeHook, testHook } from '../core/hooks.ts';
 import { liveLines, queryPrometheus } from '../core/live.ts';
-import { ValidationError } from '../core/schema.ts';
+import { exportWithPlugin, pluginLinks, pluginList, pluginMetrics, readWithPlugins } from '../core/plugins.ts';
+import { RefSchema, ValidationError } from '../core/schema.ts';
 import {
   ConflictError,
   DESIGNS_DIR,
@@ -124,6 +125,15 @@ export function createApi() {
           return result ? send(res, 200, result) : send(res, 404, { error: 'no such webhook' });
         }
       }
+      if (resource === 'plugins') {
+        if (!id && req.method === 'GET') return send(res, 200, await pluginList());
+        if (id === 'read' && !sub && req.method === 'POST') {
+          const { text } = (await readBody(req)) as { text?: unknown };
+          if (typeof text !== 'string') throw new ValidationError('text must be a string');
+          return send(res, 200, (await readWithPlugins(text)) ?? null);
+        }
+        if (id === 'links' && !sub && req.method === 'POST') return send(res, 200, await pluginLinks(z.array(RefSchema).max(500).parse(await readBody(req))));
+      }
       if (resource === 'info' && req.method === 'GET') return send(res, 200, { dir: DESIGNS_DIR });
       if (resource === 'trash') {
         if (!id && req.method === 'GET') return send(res, 200, await listTrash());
@@ -154,9 +164,18 @@ export function createApi() {
         if (id && sub === 'live' && req.method === 'GET') {
           // The address comes from the environment only, never the request, so the page can't point the server elsewhere.
           const prometheus = process.env.PROMETHEUS_URL;
-          if (!prometheus) return send(res, 404, { error: 'Set PROMETHEUS_URL to show live load.' });
+          const plugged = await pluginMetrics();
+          if (!prometheus && !plugged.length) return send(res, 404, { error: 'Set PROMETHEUS_URL or add a metrics plugin to show live load.' });
           const d = await readDesign(id);
-          return send(res, 200, liveLines(d, await queryPrometheus(prometheus)));
+          const all = await Promise.all([...(prometheus ? [queryPrometheus(prometheus)] : []), ...plugged.map((read) => read(d))]);
+          return send(res, 200, liveLines(d, { qps: all.flatMap((x) => x.qps), failed: all.flatMap((x) => x.failed), latency: all.flatMap((x) => x.latency) }));
+        }
+        if (id && sub === 'export' && req.method === 'GET') {
+          const key = pathname.split('/')[4] ?? '';
+          const out = await exportWithPlugin(key, await readDesign(id));
+          if (!out) return send(res, 404, { error: 'no such exporter' });
+          res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': `attachment; filename="${id}.${out.extension}"` });
+          return res.end(out.text);
         }
         if (sub) return send(res, 404, { error: 'not found' });
         if (id && req.method === 'GET') return send(res, 200, await readDesign(id));

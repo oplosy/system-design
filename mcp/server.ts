@@ -10,6 +10,7 @@ import { importAsStep, unpack } from '../core/importer.ts';
 import { importAdrsAsStep, loadAdrs, saveAdrs } from '../core/adr.ts';
 import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
 import { failureImpact, lint } from '../core/lint.ts';
+import { exportWithPlugin, pluginList, readWithPlugins } from '../core/plugins.ts';
 import * as m from '../core/mutations.ts';
 import { createDesign, listDesigns, listTemplates, readDesign, updateDesign } from '../core/store.ts';
 import { guessType } from '../src/shapes.ts';
@@ -248,15 +249,20 @@ server.registerTool('lint', { description: 'Check a design for likely smells: is
   ok(lint(await readDesign(id))),
 );
 
+const plugged = (await pluginList()).plugins.flatMap((p) => p.exporters);
 const EXPORTERS = { mermaid: toMermaid, structurizr: toStructurizr, plantuml: toPlantUml, drawio: toDrawio, decisions: toDecisionRecord };
 
 server.registerTool(
   'export_design',
   {
-    description: 'A design as text for another tool: a Mermaid flowchart, Structurizr DSL or C4-PlantUML (C4 container level), a draw.io file, or the decision record as Markdown',
-    inputSchema: { id: design, format: z.enum(['mermaid', 'structurizr', 'plantuml', 'drawio', 'decisions']) },
+    description: `A design as text for another tool: a Mermaid flowchart, Structurizr DSL or C4-PlantUML (C4 container level), a draw.io file, the decision record as Markdown${plugged.length ? `, or from a plugin: ${plugged.map((x) => `${x.key} (${x.name})`).join(', ')}` : ''}`,
+    inputSchema: { id: design, format: z.enum(['mermaid', 'structurizr', 'plantuml', 'drawio', 'decisions', ...plugged.map((x) => x.key)]) },
   },
-  async ({ id, format }) => ({ content: [{ type: 'text' as const, text: EXPORTERS[format](await readDesign(id)) }] }),
+  async ({ id, format }) => {
+    const d = await readDesign(id);
+    const text = format in EXPORTERS ? EXPORTERS[format as keyof typeof EXPORTERS](d) : (await exportWithPlugin(format, d))!.text;
+    return { content: [{ type: 'text' as const, text }] };
+  },
 );
 
 server.registerTool(
@@ -378,7 +384,8 @@ server.registerTool(
   async ({ design: id, text, path: file, title }) => {
     if (!text === !file) throw new Error('Give either text or path.');
     const source = await unpack(text ?? (await fs.readFile(path.resolve(file!), 'utf8')));
-    return edit(id, (d) => importAsStep(d, source, { title, guess: guessType }));
+    const plugin = await readWithPlugins(source);
+    return edit(id, (d) => importAsStep(d, source, { title, guess: guessType, plugin }));
   },
 );
 

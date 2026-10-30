@@ -1,4 +1,5 @@
-import type { BoundaryKind, ComponentType, Design } from './schema.ts';
+import { z } from 'zod';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType, type Design } from './schema.ts';
 import * as m from './mutations.ts';
 
 // What every diagram reader (Mermaid, C4, draw.io, Structurizr) hands over, and how it lands in a design.
@@ -29,6 +30,46 @@ export type Diagram = {
   /** What the reader could not bring in, said for the reviewer. */
   leftOut: string[];
 };
+
+/** A diagram as a plugin hands it over: plain JSON, every key checked, so it can cross the API and land safely. */
+export const PluginDiagram = z
+  .object({
+    nodes: z
+      .array(
+        z.object({
+          key: z.string().min(1),
+          label: z.string().min(1).optional(),
+          type: z.enum(COMPONENT_TYPES).optional(),
+          tech: z.string().optional(),
+          description: z.string().optional(),
+          /** Key of the group it sits in. */
+          group: z.string().optional(),
+        }),
+      )
+      .min(1),
+    /** Parents before children. */
+    groups: z.array(z.object({ key: z.string().min(1), label: z.string().min(1), parent: z.string().optional(), kind: z.enum(BOUNDARY_KINDS).optional() })).default([]),
+    edges: z.array(z.object({ from: z.string(), to: z.string(), label: z.string().optional(), async: z.boolean().optional() })).default([]),
+    flows: z.array(z.object({ title: z.string().min(1), path: z.array(z.string()).min(2) })).default([]),
+    leftOut: z.array(z.string()).default([]),
+  })
+  .superRefine((d, ctx) => {
+    const nodes = new Set(d.nodes.map((n) => n.key));
+    const seen = new Set<string>();
+    for (const g of d.groups) {
+      if (g.parent && !seen.has(g.parent)) ctx.addIssue({ code: 'custom', message: `group ${g.key}: parent ${g.parent} must come first` });
+      seen.add(g.key);
+    }
+    for (const n of d.nodes) if (n.group && !seen.has(n.group)) ctx.addIssue({ code: 'custom', message: `node ${n.key}: no group ${n.group}` });
+    for (const k of [...d.edges.flatMap((e) => [e.from, e.to]), ...d.flows.flatMap((f) => f.path)]) if (!nodes.has(k)) ctx.addIssue({ code: 'custom', message: `no node ${k}` });
+  });
+export type PluginDiagram = z.infer<typeof PluginDiagram>;
+
+export const fromPlugin = (p: PluginDiagram): Diagram => ({
+  ...p,
+  edges: p.edges.map((e) => ({ ...e, async: !!e.async })),
+  member: new Map(p.nodes.flatMap((n) => (n.group ? [[n.key, n.group] as const] : []))),
+});
 
 /**
  * Adds a read diagram to `step` of a design. Parts and boxes the design already has (same name) are reused, so a

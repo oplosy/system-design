@@ -1,3 +1,4 @@
+import type { PluginDiagram } from '../core/diagram.ts';
 import type { Live } from '../core/live.ts';
 import { parseDesign, type Design } from '../core/schema.ts';
 
@@ -5,6 +6,12 @@ export type Summary = { id: string; title: string; description?: string; steps: 
 export type LiveLoad = { lines: Record<string, Live>; unmatched: string[] };
 export type Hook = { id: string; url: string; format: 'cloudevents' | 'chat'; events?: string[]; designs?: string[]; signed: boolean };
 export type HookInput = { url: string; format: 'cloudevents' | 'chat'; events?: string[]; designs?: string[]; secret?: string };
+export type Plugins = {
+  dir: string;
+  plugins: { name: string; importers: string[]; exporters: { key: string; name: string; extension: string }[]; metrics: string[]; links: string[] }[];
+  failed: { file: string; error: string }[];
+};
+export type PluginRead = { format: string; diagram: PluginDiagram } | null;
 export type Trashed = { entry: string; id: string; title: string; deleted: number };
 
 export class ApiError extends Error {
@@ -61,6 +68,9 @@ function local(store: Map<string, Design>) {
     live: async (_: string): Promise<LiveLoad> => {
       throw new ApiError('A shared copy has no live data.', 404);
     },
+    plugins: async (): Promise<Plugins> => ({ dir: '', plugins: [], failed: [] }),
+    readWithPlugin: async (_: string): Promise<PluginRead> => null,
+    pluginLinks: async (_: { kind: string; value: string }[]): Promise<Record<string, string>> => ({}),
     hooks: async () => [] as Hook[],
     addHook: async (_: HookInput): Promise<Hook> => readOnly(),
     removeHook: async (_: string): Promise<unknown> => readOnly(),
@@ -80,6 +90,10 @@ export const api = shared ? local(shared) : {
   restore: (entry: string) => call<Design>('POST', `/api/trash/${entry}`),
   info: () => call<{ dir: string }>('GET', '/api/info'),
   live: (id: string) => call<LiveLoad>('GET', `/api/designs/${id}/live`),
+  plugins: () => call<Plugins>('GET', '/api/v1/plugins'),
+  // Asks only when an importer is installed, so a big file is never sent for nothing.
+  readWithPlugin: async (text: string) => ((await call<Plugins>('GET', '/api/v1/plugins')).plugins.some((p) => p.importers.length) ? call<PluginRead>('POST', '/api/v1/plugins/read', { text }) : null),
+  pluginLinks: (refs: { kind: string; value: string }[]) => call<Record<string, string>>('POST', '/api/v1/plugins/links', refs),
   hooks: () => call<Hook[]>('GET', '/api/v1/hooks'),
   addHook: (input: HookInput) => call<Hook>('POST', '/api/v1/hooks', input),
   removeHook: (id: string) => call<unknown>('DELETE', `/api/v1/hooks/${encodeURIComponent(id)}`),

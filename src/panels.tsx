@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
+import { api } from './api.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, REF_KINDS, RefSchema, type BoundaryKind, type ComponentType, type ConnectionKind, type Design, type Ref, type RefKind } from '../core/schema.ts';
 import { codeUrl, costAt, flowLatency, money, stepCostChange } from '../core/export.ts';
 import { failureImpact, loadOf } from '../core/lint.ts';
@@ -289,6 +290,13 @@ const webLink = (v: string) => (/^https?:\/\/\S+$/i.test(v) ? v : undefined);
 
 /** A part's links and identifiers in other tools: one row each, plus a row to add one. */
 function RefsEditor({ refs = [], onChange }: { refs?: Ref[]; onChange: (refs: Ref[] | undefined) => void }) {
+  // Plugins can turn plain values (a ticket number) into addresses.
+  const [resolved, setResolved] = useState<Record<string, string>>({});
+  const plain = JSON.stringify(refs.filter((r) => !webLink(r.value)));
+  useEffect(() => {
+    if (plain !== '[]') void api.pluginLinks(JSON.parse(plain)).then(setResolved, () => undefined);
+  }, [plain]);
+  const address = (r: Ref) => webLink(r.value) ?? webLink(resolved[`${r.kind}:${r.value}`] ?? '');
   const [kind, setKind] = useState<RefKind>('link');
   const [value, setValue] = useState('');
   const set = (next: Ref[]) => onChange(next.length ? next : undefined);
@@ -303,8 +311,8 @@ function RefsEditor({ refs = [], onChange }: { refs?: Ref[]; onChange: (refs: Re
       {refs.map((r, i) => (
         <div className="ref-row" key={`${r.kind}-${i}`}>
           <span className="ref-kind">{REF_NAMES[r.kind]}</span>
-          {webLink(r.value) ? (
-            <a className="ref ref-value" href={webLink(r.value)} target="_blank" rel="noreferrer noopener" title={r.value}>
+          {address(r) ? (
+            <a className="ref ref-value" href={address(r)} target="_blank" rel="noreferrer noopener" title={r.value}>
               {r.label ?? r.value.replace(/^https?:\/\//i, '')}
             </a>
           ) : (

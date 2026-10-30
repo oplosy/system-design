@@ -23,7 +23,7 @@ import { lint } from '../core/lint.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import { mergeDesigns } from '../core/merge.ts';
 import * as m from '../core/mutations.ts';
-import { ApiError, api, shared, type Hook, type LiveLoad, type Summary, type Trashed } from './api.ts';
+import { ApiError, api, shared, type Hook, type LiveLoad, type PluginRead, type Plugins, type Summary, type Trashed } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
@@ -148,6 +148,9 @@ function Shell() {
   const [creating, setCreating] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [plugins, setPlugins] = useState<Plugins | null>(null);
+  useEffect(() => void api.plugins().then(setPlugins, () => undefined), []);
+  const pluginExports = useMemo(() => (plugins?.plugins ?? []).flatMap((p) => p.exporters.map((x) => ({ ...x, kind: `plugin:${x.key}` }))), [plugins]);
   const offeredList = useRef(false);
   // Show only parts with this tag (a view of the same model); null shows everything.
   const [tag, setTag] = useState<string | null>(null);
@@ -897,18 +900,19 @@ function Shell() {
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
-  const exportAs = async (kind: (typeof EXPORTS)[number]['kind']) => {
+  const exportAs = async (kind: ExportKind) => {
     if (!design) return;
     if (kind === 'mermaid') return downloadText(toMermaid(design), `${design.id}.mmd`);
-    if (kind === 'html') {
+    const plugged = pluginExports.find((x) => x.kind === kind);
+    if (kind === 'html' || plugged) {
       // The server builds the file from what is on disk, so save the last edit first.
       clearTimeout(saveState.current.timer);
       if (saveState.current.pending) await flush();
       try {
-        const res = await fetch(`/api/designs/${design.id}/share`);
+        const res = await fetch(plugged ? `/api/v1/designs/${design.id}/export/${encodeURIComponent(plugged.key)}` : `/api/designs/${design.id}/share`);
         if (!res.ok) return setError(`Export failed: ${(await res.json().catch(() => ({}))).error ?? res.statusText}`);
         const url = URL.createObjectURL(await res.blob());
-        download(url, `${design.id}.html`);
+        download(url, `${design.id}.${plugged?.extension ?? 'html'}`);
         return setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch (e) {
         return setError(`Export failed: ${errorText(e)}`);
@@ -1053,9 +1057,15 @@ function Shell() {
     } catch (e) {
       return setError(`That ${what} can’t be read: ${errorText(e)}`);
     }
-    if (!formatOf(text)) return setError(`That ${what} isn’t a diagram or infrastructure file this can read.`);
+    let plugin: PluginRead = null;
+    try {
+      plugin = await api.readWithPlugin(text);
+    } catch (e) {
+      return setError(`That ${what} can’t be read: ${errorText(e)}`);
+    }
+    if (!plugin && !formatOf(text)) return setError(`That ${what} isn’t a diagram or infrastructure file this can read.`);
     const before = designRef.current?.steps.length ?? 0;
-    change((d) => void importAsStep(d, text, { seen: true, guess: guessType }));
+    change((d) => void importAsStep(d, text, { seen: true, guess: guessType, plugin }));
     const after = designRef.current?.steps.length ?? 0;
     if (after > before) {
       setSelected(null);
@@ -1152,13 +1162,13 @@ function Shell() {
                 className="text-btn"
                 aria-pressed={liveOn}
                 onClick={() => setLiveOn((on) => !on)}
-                title={live?.unmatched.length ? `Live load from Prometheus. No line for: ${live.unmatched.join(', ')}` : 'Show live load and latency from Prometheus on the lines'}
+                title={live?.unmatched.length ? `Live load from Prometheus. No line for: ${live.unmatched.join(', ')}` : 'Show measured load and latency on the lines'}
               >
                 Live
               </button>
             )}
             <LayoutMenu disabled={!design} selected={nodes.filter((n) => n.selected).length} onPick={arrange} />
-            <ExportMenu disabled={!design} onPick={exportAs} />
+            <ExportMenu disabled={!design} extra={pluginExports} onPick={exportAs} />
             <button className="text-btn" disabled={!design} onClick={() => present(true)} title="Walk through the steps full screen">
               Present
             </button>
@@ -1323,7 +1333,7 @@ function Shell() {
           )
         )}
 
-        {connecting && <Connections design={design} selected={selected} onClose={() => setConnecting(false)} />}
+        {connecting && <Connections design={design} selected={selected} plugins={plugins} onClose={() => setConnecting(false)} />}
         {browsing && (
           <Designs
             designs={designs}
@@ -1563,7 +1573,9 @@ const EXPORTS = [
   { kind: 'html', title: 'Shared HTML', desc: 'One file that opens anywhere: walk the steps, play flows; nothing is saved' },
 ] as const;
 
-function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (kind: (typeof EXPORTS)[number]['kind']) => void }) {
+type ExportKind = (typeof EXPORTS)[number]['kind'] | `plugin:${string}`;
+
+function ExportMenu({ disabled, extra, onPick }: { disabled: boolean; extra: { kind: string; name: string; extension: string }[]; onPick: (kind: ExportKind) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -1575,7 +1587,7 @@ function ExportMenu({ disabled, onPick }: { disabled: boolean; onPick: (kind: (t
       </button>
       {open && (
         <div className="menu menu-right" role="menu" aria-label="Export">
-          {EXPORTS.filter((x) => !(shared && x.kind === 'html')).map((x) => (
+          {[...EXPORTS.filter((x) => !(shared && x.kind === 'html')), ...extra.map((x) => ({ kind: x.kind as ExportKind, title: x.name, desc: `From a plugin, as .${x.extension}` }))].map((x) => (
             <button
               key={x.kind}
               role="menuitem"
@@ -1831,7 +1843,7 @@ const EVENT_CHOICES = [
  * Where the app meets the rest of the world: webhooks that get every change, and the addresses other tools and
  * agents use (a link to what is open, the versioned API, its OpenAPI document, the design schema, change events, MCP).
  */
-function Connections({ design, selected, onClose }: { design: Design | null; selected: string | null; onClose: () => void }) {
+function Connections({ design, selected, plugins, onClose }: { design: Design | null; selected: string | null; plugins: Plugins | null; onClose: () => void }) {
   const [hooks, setHooks] = useState<Hook[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, string>>({});
@@ -1873,6 +1885,7 @@ function Connections({ design, selected, onClose }: { design: Design | null; sel
   const copy = (what: string, text: string) => navigator.clipboard?.writeText(text).then(() => setCopied(what));
   const addresses: [string, string, string][] = [
     ['API', `${origin}/api/v1`, 'Designs, templates, trash and webhooks over JSON'],
+    ['Plugins', `${origin}/api/v1/plugins`, 'What is installed here'],
     ['OpenAPI', `${origin}/api/v1/openapi.json`, 'Generate a client, or import it into Postman, n8n or Zapier'],
     ['Design schema', `${origin}/api/v1/schema/design.json`, 'JSON Schema of a design file'],
     ['Change stream', `${origin}/api/v1/events`, 'Server-sent events whenever a design changes'],
@@ -1941,6 +1954,38 @@ function Connections({ design, selected, onClose }: { design: Design | null; sel
             Add webhook
           </button>
         </form>
+        <h3 className="conn-head">Plugins</h3>
+        <p className="quiet conn-note">
+          Add formats, metric sources and link targets by putting a <code>.mjs</code> module in <code>{plugins?.dir}</code>, then restart. Plugins run as code on this machine, so add only what you trust.
+        </p>
+        <ul className="designs-list">
+          {plugins?.plugins.map((p) => (
+            <li key={p.name} className="designs-row">
+              <span className="choice-main">
+                <strong>{p.name}</strong>
+                <span>
+                  {[
+                    p.importers.length && `Reads ${p.importers.join(', ')}`,
+                    p.exporters.length && `Exports ${p.exporters.map((x) => x.name).join(', ')}`,
+                    p.metrics.length && `Live load from ${p.metrics.join(', ')}`,
+                    p.links.length && `Opens ${p.links.join(', ')} links`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </span>
+            </li>
+          ))}
+          {plugins?.failed.map((f) => (
+            <li key={f.file} className="designs-row">
+              <span className="choice-main">
+                <strong>{f.file}</strong>
+                <em className="ed-error">{f.error}</em>
+              </span>
+            </li>
+          ))}
+          {!plugins?.plugins.length && !plugins?.failed.length && <li className="designs-empty">No plugins yet.</li>}
+        </ul>
         <h3 className="conn-head">For other tools and agents</h3>
         <ul className="designs-list">
           {link && (
@@ -2002,10 +2047,11 @@ function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; o
       let left: string[];
       try {
         const text = await importer.unpack(source);
-        if (!importer.formatOf(text)) throw new Error('This isn’t a diagram or infrastructure file this can read.');
-        fill = (d) => void importer.importText(d, text, { guess: guessType });
+        const plugin = await api.readWithPlugin(text);
+        if (!plugin && !importer.formatOf(text)) throw new Error('This isn’t a diagram or infrastructure file this can read.');
+        fill = (d) => void importer.importText(d, text, { guess: guessType, plugin });
         const draft = m.blankDesign(id, title.trim());
-        left = importer.importText(draft, text, { guess: guessType }).leftOut;
+        left = importer.importText(draft, text, { guess: guessType, plugin }).leftOut;
         parseDesign(draft);
       } catch (e) {
         return setErr(errorText(e));
