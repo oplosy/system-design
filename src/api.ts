@@ -12,6 +12,10 @@ export type Plugins = {
   failed: { file: string; error: string }[];
 };
 export type PluginRead = { format: string; diagram: PluginDiagram } | null;
+export type McpServers = { file: string; error?: string; servers: { name: string; kind: 'http' | 'stdio'; queries: string[] }[] };
+export type McpTest = { ok: boolean; tools?: number; readOnly?: number; error?: string };
+export type McpQuery = { server: string; title: string };
+export type McpPart = { id: string; label: string; tech?: string; tags?: string[]; refs?: { kind: string; value: string }[] };
 export type Trashed = { entry: string; id: string; title: string; deleted: number };
 
 export class ApiError extends Error {
@@ -71,6 +75,10 @@ function local(store: Map<string, Design>) {
     plugins: async (): Promise<Plugins> => ({ dir: '', plugins: [], failed: [] }),
     readWithPlugin: async (_: string): Promise<PluginRead> => null,
     pluginLinks: async (_: { kind: string; value: string }[]): Promise<Record<string, string>> => ({}),
+    mcp: async (): Promise<McpServers> => ({ file: '', servers: [] }),
+    mcpQueries: async (_: McpPart) => [] as McpQuery[],
+    mcpRun: async (_: McpQuery, __: McpPart): Promise<{ text: string }> => readOnly(),
+    mcpTest: async (_: string): Promise<McpTest> => readOnly(),
     hooks: async () => [] as Hook[],
     addHook: async (_: HookInput): Promise<Hook> => readOnly(),
     removeHook: async (_: string): Promise<unknown> => readOnly(),
@@ -94,6 +102,10 @@ export const api = shared ? local(shared) : {
   // Asks only when an importer is installed, so a big file is never sent for nothing.
   readWithPlugin: async (text: string) => ((await call<Plugins>('GET', '/api/v1/plugins')).plugins.some((p) => p.importers.length) ? call<PluginRead>('POST', '/api/v1/plugins/read', { text }) : null),
   pluginLinks: (refs: { kind: string; value: string }[]) => call<Record<string, string>>('POST', '/api/v1/plugins/links', refs),
+  mcp: () => call<McpServers>('GET', '/api/v1/mcp'),
+  mcpQueries: (part: McpPart) => call<McpQuery[]>('POST', '/api/v1/mcp/queries', part),
+  mcpRun: (q: McpQuery, part: McpPart) => call<{ text: string }>('POST', '/api/v1/mcp/run', { server: q.server, query: q.title, part }),
+  mcpTest: (name: string) => call<McpTest>('POST', `/api/v1/mcp/${encodeURIComponent(name)}/test`),
   hooks: () => call<Hook[]>('GET', '/api/v1/hooks'),
   addHook: (input: HookInput) => call<Hook>('POST', '/api/v1/hooks', input),
   removeHook: (id: string) => call<unknown>('DELETE', `/api/v1/hooks/${encodeURIComponent(id)}`),

@@ -113,6 +113,31 @@ The API is versioned under `/api/v1` (`/api` stays as an alias). `/api/v1/openap
 
 Webhooks get every change, whether made in the app, by an agent or by a command: one POST per write, as a JSON array of [CloudEvents](https://cloudevents.io) (`application/cloudevents-batch+json`) of the types `system-design.design.*`, `step.*`, `part.*`, `line.*`, `boundary.*`, `note.*`, `decision.*`, `flow.*` and `comment.*`, each with `actor` (`app` or `agent`), a link to the item and the item itself. Moving things on the canvas sends nothing. A hook can be limited to event groups and designs; with a secret it carries `X-System-Design-Signature: sha256=<HMAC-SHA256 of the body>`. Network errors, 429 and 5xx are retried twice, and a webhook that fails never fails the write. The **chat** format posts "New step in “Shop”: Add a cache. 2 waiting for review" to Slack, Discord or Teams when an agent or a sync adds steps. Hooks live in `hooks.json` in the user's app folder (`SYSTEM_DESIGN_HOOKS` moves it), never next to the designs, so secrets stay out of git; manage them in the dialog or at `/api/v1/hooks`. `SYSTEM_DESIGN_WEBHOOK` still works as a chat hook for new steps, and `SYSTEM_DESIGN_URL` sets the links' address (default `http://127.0.0.1:5180`).
 
+## MCP servers
+
+The app can ask the MCP servers you already run (GitHub, Jira, Datadog and so on) about a part, right in its panel. List them in `mcp-servers.json` in the user's app folder (`SYSTEM_DESIGN_MCP` moves it). It takes the usual `mcpServers` shape, so entries can be copied from another client, plus `queries`:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": { "Authorization": "Bearer ${GITHUB_TOKEN}" },
+      "queries": [{ "title": "Open pull requests", "tool": "search_pull_requests", "args": { "query": "repo:{repo} is:open" } }]
+    },
+    "tickets": {
+      "command": "node",
+      "args": ["examples/mcp/tickets-server.mjs", "stdio"],
+      "queries": [{ "title": "Open tickets", "tool": "list_tickets", "args": { "service": "{label}" } }]
+    }
+  }
+}
+```
+
+A query names a tool and its arguments. Strings may hold `{id}`, `{label}`, `{tech}`, `{tag}` (the first tag) or a link kind such as `{repo}` or `{otel}`, filled from the part; a part shows only the queries it has everything for, and a query runs when you click it. `${NAME}` in `url`, `headers`, `args` and `env` comes from the environment, so tokens need not sit in the file.
+
+Access is read-only by default: a tool is called only if it declares `readOnlyHint`, or if its server's `allow` list names it. Answers are shown as plain text, at most 20,000 characters, and are never acted on. The file can run commands, so it can only be edited on disk, never through a design or the API. **Connections** shows the servers and tests each one; `/api/v1/mcp` gives the same, without commands, addresses or headers. Servers using OAuth, or the older SSE transport, aren't supported yet. Restart after editing the file.
+
 ## Plugins
 
 A plugin teaches the app a new format, metric source or link target with no change here. It is one JavaScript module (`.mjs` or `.js`) in the `plugins` folder of the user's app folder (`SYSTEM_DESIGN_PLUGINS` moves it), and the app and the MCP server load it when they start. Plugins run as code with your rights, so they load from that folder only, never from a design, a repository or the API; add only what you trust. [`examples/plugins/service-list.mjs`](examples/plugins/service-list.mjs) has one of each kind:

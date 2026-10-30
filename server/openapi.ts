@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { PluginDiagram } from '../core/diagram.ts';
 import { EVENT_TYPES } from '../core/events.ts';
 import { HookInput } from '../core/hooks.ts';
+import { PartContext } from '../core/mcp-client.ts';
 import { DesignSchema, RefSchema } from '../core/schema.ts';
 
 // The API's published contract: an OpenAPI 3.1 document and the design file's JSON Schema, both built from the zod
@@ -82,6 +83,26 @@ export function openApi(version: string) {
       '/designs/{id}/export/{exporter}': {
         parameters: [id, { name: 'exporter', in: 'path', required: true, schema: { type: 'string' }, description: 'Key from /plugins: <plugin>.<exporter>' }],
         get: { summary: 'The design as text from an exporter plugin', responses: { '200': { description: 'The file', content: { 'text/plain': { schema: { type: 'string' } } } }, ...errors } },
+      },
+      '/mcp': {
+        get: {
+          summary: 'MCP servers from mcp-servers.json (edited on disk only, never here); commands, addresses and headers are not shown',
+          responses: { '200': ok('Servers', { type: 'object', properties: { file: { type: 'string' }, error: { type: 'string' }, servers: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, kind: { enum: ['http', 'stdio'] }, queries: { type: 'array', items: { type: 'string' } } } } } } }) },
+        },
+      },
+      '/mcp/queries': {
+        post: { summary: 'The queries that can run for a part', requestBody: body(json(PartContext)), responses: { '200': ok('Queries', { type: 'array', items: { type: 'object', properties: { server: { type: 'string' }, title: { type: 'string' } } } }), ...errors } },
+      },
+      '/mcp/run': {
+        post: {
+          summary: 'Run one configured query for a part. Only read-only tools run, unless the file allows the tool',
+          requestBody: body({ type: 'object', required: ['server', 'query', 'part'], properties: { server: { type: 'string' }, query: { type: 'string' }, part: json(PartContext) } }),
+          responses: { '200': ok('What the server answered', { type: 'object', properties: { text: { type: 'string' } } }), ...errors },
+        },
+      },
+      '/mcp/{server}/test': {
+        parameters: [{ name: 'server', in: 'path', required: true, schema: { type: 'string' } }],
+        post: { summary: 'Connect to a server and count its tools', responses: { '200': ok('How it went', { type: 'object', properties: { ok: { type: 'boolean' }, tools: { type: 'integer' }, readOnly: { type: 'integer' }, error: { type: 'string' } } }), ...errors } },
       },
       '/plugins': {
         get: {

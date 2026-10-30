@@ -5,6 +5,7 @@ import { z } from 'zod';
 import pkg from '../package.json' with { type: 'json' };
 import { addHook, listHooks, publicHook, removeHook, testHook } from '../core/hooks.ts';
 import { liveLines, queryPrometheus } from '../core/live.ts';
+import { PartContext, closeMcp, mcpList, mcpQueries, runMcp, testMcp } from '../core/mcp-client.ts';
 import { exportWithPlugin, pluginLinks, pluginList, pluginMetrics, readWithPlugins } from '../core/plugins.ts';
 import { RefSchema, ValidationError } from '../core/schema.ts';
 import {
@@ -125,6 +126,15 @@ export function createApi() {
           return result ? send(res, 200, result) : send(res, 404, { error: 'no such webhook' });
         }
       }
+      if (resource === 'mcp') {
+        if (!id && req.method === 'GET') return send(res, 200, await mcpList());
+        if (id === 'queries' && !sub && req.method === 'POST') return send(res, 200, await mcpQueries(PartContext.parse(await readBody(req))));
+        if (id === 'run' && !sub && req.method === 'POST') {
+          const { server, query, part } = z.object({ server: z.string(), query: z.string(), part: PartContext }).parse(await readBody(req));
+          return send(res, 200, await runMcp(server, query, part));
+        }
+        if (id && sub === 'test' && req.method === 'POST') return send(res, 200, await testMcp(decodeURIComponent(id)));
+      }
       if (resource === 'plugins') {
         if (!id && req.method === 'GET') return send(res, 200, await pluginList());
         if (id === 'read' && !sub && req.method === 'POST') {
@@ -193,7 +203,13 @@ export function createApi() {
     }
   }
 
-  return { handle, close: () => watcher.close() };
+  return {
+    handle,
+    close: () => {
+      watcher.close();
+      void closeMcp();
+    },
+  };
 }
 
 /** Mounts the API inside the Vite dev server. */

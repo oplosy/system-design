@@ -23,7 +23,7 @@ import { lint } from '../core/lint.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, parseDesign, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import { mergeDesigns } from '../core/merge.ts';
 import * as m from '../core/mutations.ts';
-import { ApiError, api, shared, type Hook, type LiveLoad, type PluginRead, type Plugins, type Summary, type Trashed } from './api.ts';
+import { ApiError, api, shared, type Hook, type LiveLoad, type McpServers, type PluginRead, type Plugins, type Summary, type Trashed } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes, type FlowEdge } from './canvas.tsx';
 import type { Pt } from './edges.ts';
@@ -1853,7 +1853,15 @@ function Connections({ design, selected, plugins, onClose }: { design: Design | 
   const [onlyThis, setOnlyThis] = useState(false);
   const [secret, setSecret] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
+  const [mcp, setMcp] = useState<McpServers | null>(null);
   useDismiss(true, onClose);
+  useEffect(() => void api.mcp().then(setMcp, (e) => setErr(errorText(e))), []);
+  const testMcp = (name: string) =>
+    run(async () => {
+      setResults((r) => ({ ...r, [name]: 'Connecting…' }));
+      const r = await api.mcpTest(name);
+      setResults((x) => ({ ...x, [name]: r.ok ? `Connected: ${r.tools} tools, ${r.readOnly} read-only` : `Failed: ${r.error}` }));
+    });
   const load = useCallback(() => api.hooks().then(setHooks).catch((e) => setErr(errorText(e))), []);
   useEffect(() => void load(), [load]);
   const run = async (f: () => Promise<unknown>) => {
@@ -1954,6 +1962,30 @@ function Connections({ design, selected, plugins, onClose }: { design: Design | 
             Add webhook
           </button>
         </form>
+        <h3 className="conn-head">MCP servers</h3>
+        <p className="quiet conn-note">
+          Servers you already run answer questions about a part in its panel. List them in <code>{mcp?.file}</code>, then restart. Only tools that declare themselves read-only are called.
+        </p>
+        {mcp?.error && <em className="ed-error">{mcp.error}</em>}
+        <ul className="designs-list">
+          {mcp?.servers.map((s) => (
+            <li key={s.name} className="designs-row">
+              <span className="choice-main">
+                <strong>{s.name}</strong>
+                <span>
+                  {s.queries.length ? s.queries.join(', ') : 'No queries yet'}
+                  {results[s.name] ? ` · ${results[s.name]}` : ''}
+                </span>
+              </span>
+              <span className="designs-actions">
+                <button className="text-btn" onClick={() => testMcp(s.name)}>
+                  Test
+                </button>
+              </span>
+            </li>
+          ))}
+          {!mcp?.servers.length && !mcp?.error && <li className="designs-empty">No MCP servers yet.</li>}
+        </ul>
         <h3 className="conn-head">Plugins</h3>
         <p className="quiet conn-note">
           Add formats, metric sources and link targets by putting a <code>.mjs</code> module in <code>{plugins?.dir}</code>, then restart. Plugins run as code on this machine, so add only what you trust.

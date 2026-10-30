@@ -9,6 +9,7 @@ process.env.SYSTEM_DESIGN_DIR = await fs.mkdtemp(path.join(os.tmpdir(), 'sd-test
 process.env.SYSTEM_DESIGN_HOOKS = path.join(process.env.SYSTEM_DESIGN_DIR, '..', `sd-hooks-${process.pid}.json`);
 delete process.env.SYSTEM_DESIGN_WEBHOOK;
 process.env.SYSTEM_DESIGN_PLUGINS = path.join(import.meta.dirname, '..', 'examples', 'plugins');
+process.env.SYSTEM_DESIGN_MCP = path.join(process.env.SYSTEM_DESIGN_DIR, '..', `sd-mcp-${process.pid}.json`);
 const store = await import('./store.ts');
 const m = await import('./mutations.ts');
 const { parseDesign } = await import('./schema.ts');
@@ -1649,5 +1650,74 @@ test('the API serves plugins but can never add one', async () => {
   } finally {
     server.close();
     api.close();
+  }
+});
+
+test('MCP query args are filled from the part, and a part without what they need gets no query', async () => {
+  const { fillArgs, expand, readConfig } = await import('./mcp-client.ts');
+  const part = { id: 'api', label: 'API', tags: ['payments'], refs: [{ kind: 'repo' as const, value: 'org/api' }] };
+  assert.deepEqual(fillArgs({ q: 'repo:{repo} {tag}', deep: [{ n: '{label}' }], plain: 3, other: '{nope}' }, part), { q: 'repo:org/api payments', deep: [{ n: 'API' }], plain: 3, other: '{nope}' });
+  assert.equal(fillArgs({ q: '{otel}' }, part), undefined);
+  process.env.SD_TEST_TOKEN = 'abc';
+  assert.equal(expand('Bearer ${SD_TEST_TOKEN}'), 'Bearer abc');
+  assert.throws(() => expand('${SD_TEST_MISSING}'), /SD_TEST_MISSING is not set/);
+
+  const bad = path.join(process.env.SYSTEM_DESIGN_DIR!, '..', `sd-mcp-bad-${process.pid}.json`);
+  await fs.writeFile(bad, JSON.stringify({ mcpServers: { x: { command: 'a', url: 'https://b' } } }));
+  assert.match((await readConfig(bad)).error!, /either command or url/);
+  assert.deepEqual(await readConfig(`${bad}.missing`), { servers: {} });
+});
+
+test('the MCP client calls read-only tools over stdio and HTTP, refuses others and hides its config', async () => {
+  const http = await import('node:http');
+  const { StreamableHTTPServerTransport } = await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
+  const { ticketsServer } = await import(new URL('../examples/mcp/tickets-server.mjs', import.meta.url).href);
+  const script = path.join(import.meta.dirname, '..', 'examples', 'mcp', 'tickets-server.mjs');
+
+  let auth: string | undefined;
+  const remote = http.createServer(async (req, res) => {
+    auth = req.headers.authorization;
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await ticketsServer().connect(transport);
+    await transport.handleRequest(req, res);
+  });
+  await new Promise<void>((r) => remote.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(remote.address() as { port: number }).port}/mcp`;
+  process.env.SD_TEST_TOKEN = 'abc';
+  const queries = [
+    { title: 'Tickets', tool: 'list_tickets', args: { service: '{label}' } },
+    { title: 'Close', tool: 'close_ticket', args: { id: '{label}' } },
+    { title: 'By trace', tool: 'list_tickets', args: { service: '{otel}' } },
+  ];
+  await fs.writeFile(
+    process.env.SYSTEM_DESIGN_MCP!,
+    JSON.stringify({
+      mcpServers: {
+        local: { command: process.execPath, args: [script, 'stdio'], queries },
+        remote: { url, headers: { Authorization: 'Bearer ${SD_TEST_TOKEN}' }, queries: queries.slice(0, 1) },
+        allowed: { command: process.execPath, args: [script, 'stdio'], allow: ['close_ticket'], queries: queries.slice(1, 2) },
+      },
+    }),
+  );
+  const mcp = await import('./mcp-client.ts');
+  const part = { id: 'api', label: 'API' };
+  try {
+    const list = await mcp.mcpList();
+    assert.deepEqual(list.servers.map((s) => s.kind), ['stdio', 'http', 'stdio']);
+    assert.ok(!JSON.stringify(list).includes(script) && !JSON.stringify(list).includes('Bearer'));
+    assert.deepEqual((await mcp.mcpQueries(part)).map((q) => q.title), ['Tickets', 'Close', 'Tickets', 'Close']);
+
+    assert.deepEqual(await mcp.testMcp('local'), { ok: true, tools: 2, readOnly: 1 });
+    assert.equal((await mcp.runMcp('local', 'Tickets', part)).text, 'OPS-1: API is slow');
+    await assert.rejects(mcp.runMcp('local', 'Close', part), /doesn't declare itself read-only/);
+    await assert.rejects(mcp.runMcp('local', 'By trace', part), /lacks what/);
+    await assert.rejects(mcp.runMcp('ghost', 'Tickets', part), /no MCP server/);
+    assert.equal((await mcp.runMcp('allowed', 'Close', part)).text, 'closed API');
+
+    assert.equal((await mcp.runMcp('remote', 'Tickets', part)).text, 'OPS-1: API is slow');
+    assert.equal(auth, 'Bearer abc');
+  } finally {
+    await mcp.closeMcp();
+    remote.close();
   }
 });

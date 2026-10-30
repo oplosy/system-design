@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
-import { api } from './api.ts';
+import { api, type McpPart, type McpQuery } from './api.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, REF_KINDS, RefSchema, type BoundaryKind, type ComponentType, type ConnectionKind, type Design, type Ref, type RefKind } from '../core/schema.ts';
 import { codeUrl, costAt, flowLatency, money, stepCostChange } from '../core/export.ts';
 import { failureImpact, loadOf } from '../core/lint.ts';
@@ -287,6 +287,52 @@ const REF_NAMES: Record<RefKind, string> = {
 };
 // Only web addresses open; identifiers (otel, k8s, an ARN) and anything else stay text.
 const webLink = (v: string) => (/^https?:\/\/\S+$/i.test(v) ? v : undefined);
+
+/** What the user's MCP servers can say about a part. Each query runs when asked, since it sends part data to that server. */
+function Connected({ part }: { part: McpPart }) {
+  const [queries, setQueries] = useState<McpQuery[]>([]);
+  const [open, setOpen] = useState<Record<string, { text?: string; error?: string }>>({});
+  const asked = JSON.stringify({ id: part.id, label: part.label, tech: part.tech, tags: part.tags, refs: part.refs?.map((r) => ({ kind: r.kind, value: r.value })) });
+  useEffect(() => {
+    let stop = false;
+    setOpen({});
+    api.mcpQueries(JSON.parse(asked)).then(
+      (q) => !stop && setQueries(q),
+      () => !stop && setQueries([]),
+    );
+    return () => {
+      stop = true;
+    };
+  }, [asked]);
+  if (!queries.length) return null;
+  const key = (q: McpQuery) => `${q.server}/${q.title}`;
+  const show = (q: McpQuery) => {
+    setOpen((o) => ({ ...o, [key(q)]: { text: 'Asking…' } }));
+    api.mcpRun(q, JSON.parse(asked)).then(
+      ({ text }) => setOpen((o) => ({ ...o, [key(q)]: { text: text || 'Nothing.' } })),
+      (e) => setOpen((o) => ({ ...o, [key(q)]: { error: e instanceof Error ? e.message : String(e) } })),
+    );
+  };
+  return (
+    <div className="refs">
+      {queries.map((q) => {
+        const r = open[key(q)];
+        return (
+          <div key={key(q)}>
+            <div className="ref-row">
+              <span className="ref-kind">{q.server}</span>
+              <button type="button" className="text-btn" onClick={() => show(q)}>
+                {q.title}
+              </button>
+            </div>
+            {r?.error && <em className="ed-error">{r.error}</em>}
+            {r?.text && <pre className="mcp-result">{r.text}</pre>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** A part's links and identifiers in other tools: one row each, plus a row to add one. */
 function RefsEditor({ refs = [], onChange }: { refs?: Ref[]; onChange: (refs: Ref[] | undefined) => void }) {
@@ -857,6 +903,7 @@ export function Inspector({
             <Prop label="Links">
               <RefsEditor refs={component.refs} onChange={(refs) => edit((d: Design) => d.components, { refs })} />
             </Prop>
+            <Connected part={component} />
             <Prop label="Capacity">
               <Num label="Capacity" unit="req/s" value={component.capacity} onCommit={(v) => edit((d: Design) => d.components, { capacity: v })} />
               {(() => {
