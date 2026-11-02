@@ -103,6 +103,10 @@ const TF_TYPES: Record<string, [ComponentType, string]> = {
   aws_vpc_endpoint: ['private-link', 'VPC Endpoint'],
   aws_glue_registry: ['schema-registry', 'Glue Schema Registry'],
   aws_autoscaling_group: ['autoscaler', 'Auto Scaling'],
+  aws_verifiedpermissions_policy_store: ['policy-engine', 'Verified Permissions'],
+  aws_inspector2_enabler: ['vulnerability-scanner', 'Inspector'],
+  aws_glue_catalog_database: ['data-catalog', 'Glue Data Catalog'],
+  aws_bedrock_guardrail: ['llm-gateway', 'Bedrock Guardrails'],
   google_compute_instance: ['vm', 'Compute Engine'],
   google_cloudfunctions_function: ['function', 'Cloud Functions'],
   google_cloudfunctions2_function: ['function', 'Cloud Functions'],
@@ -119,6 +123,7 @@ const TF_TYPES: Record<string, [ComponentType, string]> = {
   google_secret_manager_secret: ['secrets', 'Secret Manager'],
   google_artifact_registry_repository: ['registry', 'Artifact Registry'],
   google_compute_service_attachment: ['private-link', 'Private Service Connect'],
+  google_data_catalog_entry_group: ['data-catalog', 'Data Catalog'],
   azurerm_linux_virtual_machine: ['vm', 'Azure VM'],
   azurerm_windows_virtual_machine: ['vm', 'Azure VM'],
   azurerm_linux_function_app: ['function', 'Azure Functions'],
@@ -144,6 +149,7 @@ const TF_TYPES: Record<string, [ComponentType, string]> = {
   azurerm_container_registry: ['registry', 'ACR'],
   azurerm_private_endpoint: ['private-link', 'Private Endpoint'],
   azurerm_virtual_wan: ['transit-gateway', 'Virtual WAN'],
+  azurerm_purview_account: ['data-catalog', 'Purview'],
   docker_container: ['service', 'Docker'],
   kubernetes_deployment: ['service', 'Kubernetes'],
 };
@@ -155,7 +161,7 @@ const TF_BRIDGE =
 const TF_PLUMBING =
   /^(aws_(security_group|vpc|subnet|route|internet_gateway|eip|network_|default_|db_subnet_group|elasticache_subnet_group|iam_|kms_)|google_(compute_(network|subnetwork|firewall)|project_iam|service_account)|azurerm_(resource_group|virtual_network|subnet|network_|role_))/;
 /** Which end of a wiring resource calls the other: lower calls higher, equal ranks don't link. */
-const TF_FRONT: Partial<Record<ComponentType, number>> = { cdn: 0, 'api-gateway': 1, 'load-balancer': 2, 'event-bus': 3, pubsub: 4, stream: 5, queue: 6 };
+const TF_FRONT: Partial<Record<ComponentType, number>> = { cdn: 0, 'api-gateway': 1, 'load-balancer': 2, 'event-bus': 3, pubsub: 4, stream: 5, queue: 6, 'dead-letter-queue': 6 };
 
 /** "module.api.aws_lb.main[0]" → "module.api.aws_lb.main": instances of one resource share its links. */
 const base = (address: string) => address.replace(/\[[^\]]*\]/g, '');
@@ -174,13 +180,16 @@ function terraform(file: Doc) {
   const module = (r: Doc) => base(String(r.address ?? '')).match(/^(.*?)\.?[^.]+\.[^.]+$/)?.[1] ?? '';
   const parts: Part[] = [];
   const skipped = new Map<string, number>();
+  // A queue is a dead-letter queue when another queue's redrive policy names it, or its name says so.
+  const deadLetterArns = new Set(resources.map((r) => { try { return JSON.parse(String(obj(r.values).redrive_policy)).deadLetterTargetArn; } catch { return undefined; } }).filter(Boolean));
   for (const r of resources) {
-    const t = TF_TYPES[r.type];
+    let t = TF_TYPES[r.type];
     if (!t) {
       skipped.set(r.type, (skipped.get(r.type) ?? 0) + 1);
       continue;
     }
     const v = obj(r.values);
+    if (t[0] === 'queue' && (deadLetterArns.has(v.arn) || /dlq|dead[-_ ]?letter/i.test(String(v.name ?? r.name)))) t = ['dead-letter-queue', t[1]];
     const named = [v.name, v.identifier, v.function_name, v.bucket, v.cluster_identifier, v.replication_group_id].find((x) => typeof x === 'string' && x);
     const index = r.index === undefined ? '' : `-${r.index}`;
     const engine = typeof v.engine === 'string' ? ` ${v.engine}` : '';
@@ -295,6 +304,8 @@ const CFN_RESOURCES: Record<string, string> = {
   'AWS::Events::EventBus': 'aws_cloudwatch_event_bus',
   'AWS::Route53::HostedZone': 'aws_route53_zone',
   'AWS::SNS::Subscription': 'aws_sns_topic_subscription',
+  'AWS::EC2::TransitGateway': 'aws_ec2_transit_gateway',
+  'AWS::AutoScaling::AutoScalingGroup': 'aws_autoscaling_group',
 };
 const snake = (s: string) => s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/([A-Z])([A-Z][a-z])/g, '$1_$2').toLowerCase();
 
@@ -345,6 +356,7 @@ const PULUMI_PROVIDERS: Record<string, string> = { gcp: 'google', azure: 'azurer
 const PULUMI_MODULES: Record<string, string> = { apigateway: 'api_gateway', cloudrun: 'cloud_run', cloudrunv2: 'cloud_run_v2' };
 const PULUMI_TYPES: Record<string, string> = {
   'aws:rds/instance:Instance': 'aws_db_instance',
+  'aws:ec2transitgateway/transitGateway:TransitGateway': 'aws_ec2_transit_gateway',
   // azure-native follows Azure's resource names, not Terraform's.
   'azure-native:containerservice:ManagedCluster': 'azurerm_kubernetes_cluster',
   'azure-native:web:WebApp': 'azurerm_linux_web_app',

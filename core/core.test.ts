@@ -2029,4 +2029,18 @@ test('Terraform network and scaling resources draw as their own parts', async ()
   const res = (type: string) => ({ address: `${type}.x`, mode: 'managed', type, name: 'x', values: {} });
   const state = JSON.stringify({ format_version: '1.0', values: { root_module: { resources: ['aws_ec2_transit_gateway', 'aws_vpc_endpoint', 'aws_autoscaling_group', 'azurerm_private_endpoint'].map(res) } } });
   assert.deepEqual(readInfra(state).parts.map((p) => p.type), ['transit-gateway', 'private-link', 'autoscaler', 'private-link']);
+
+  const queues = JSON.stringify({
+    format_version: '1.0',
+    values: {
+      root_module: {
+        resources: [
+          { address: 'aws_sqs_queue.jobs', mode: 'managed', type: 'aws_sqs_queue', name: 'jobs', values: { name: 'jobs', arn: 'arn:jobs', redrive_policy: JSON.stringify({ deadLetterTargetArn: 'arn:parked' }) } },
+          { address: 'aws_sqs_queue.parked', mode: 'managed', type: 'aws_sqs_queue', name: 'parked', values: { name: 'parked', arn: 'arn:parked' } },
+          { address: 'aws_sqs_queue.mail_dlq', mode: 'managed', type: 'aws_sqs_queue', name: 'mail_dlq', values: { name: 'mail-dlq' } },
+        ],
+      },
+    },
+  });
+  assert.deepEqual(readInfra(queues).parts.map((p) => `${p.label}:${p.type}`), ['jobs:queue', 'parked:dead-letter-queue', 'mail-dlq:dead-letter-queue']);
 });
