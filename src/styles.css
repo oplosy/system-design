@@ -2063,21 +2063,38 @@ code.ref-value {
   color: var(--select);
 }
 
+/* A part's size comes from its type, so its text fits the shape: the name takes two lines, the rest one. */
 .node-label {
   position: absolute;
+  width: max-content;
   transform: translate(-50%, -50%);
   text-align: center;
   line-height: 1.2;
   font-size: 13px;
   font-weight: 500;
   pointer-events: none;
-  white-space: nowrap;
+}
+
+.node-label.from-top {
+  transform: translate(-50%, -10px);
+}
+
+.node-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .node-tech {
   font: 11px var(--mono);
   color: var(--muted);
   margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .note-text,
@@ -2114,6 +2131,10 @@ code.ref-value {
 
 .edge-label {
   position: absolute;
+  width: max-content;
+  max-width: 170px;
+  text-align: center;
+  overflow-wrap: anywhere;
   font: 11px var(--mono);
   padding: 1px 5px;
   background: var(--canvas);

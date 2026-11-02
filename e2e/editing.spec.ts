@@ -179,3 +179,21 @@ test('dragging a boundary by its tab carries the parts inside it', async ({ page
   expect(Math.round(after.db.x - before.db.x)).toBe(Math.round(after.app.x - before.app.x));
   expect(after.client).toEqual(before.client);
 });
+
+test('a long name wraps inside its part and a long technology line is cut short', async ({ page, request }) => {
+  await openCopy(page, request, 'long-label-copy', {
+    edit: (d) => {
+      d.components = (d.components as { id: string }[]).map((c) => (c.id === 'app' ? { ...c, label: 'A very long service name that keeps going on and on and on', tech: 'One technology line that never seems to end at all' } : c));
+    },
+  });
+  const part = page.locator('.react-flow__node', { hasText: 'A very long' });
+  const fit = await part.evaluate((el) => {
+    const label = el.querySelector<HTMLElement>('.node-label')!;
+    const name = el.querySelector<HTMLElement>('.node-name')!;
+    const tech = el.querySelector<HTMLElement>('.node-tech')!;
+    return { width: label.offsetWidth, part: el.querySelector<HTMLElement>('.sd-node')!.offsetWidth, lines: name.offsetHeight / parseFloat(getComputedStyle(name).lineHeight), cut: tech.scrollWidth > tech.clientWidth };
+  });
+  expect(fit.width).toBeLessThan(fit.part);
+  expect(Math.round(fit.lines)).toBe(2);
+  expect(fit.cut).toBe(true);
+});

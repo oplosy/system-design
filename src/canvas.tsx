@@ -47,9 +47,9 @@ export type DecisionNode = Node<Common & { title: string; why: string }, 'decisi
 export type BoundaryNode = Node<Common & { kind: BoundaryKind; label: string; detail?: string; w: number; h: number }, 'boundary'>;
 export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; relation?: ConnectionKind; route?: Route; bend?: number; qps?: number; latency?: number; errors?: number; live?: boolean; unseen: boolean; faded: boolean; added?: boolean; hops?: number[]; hopOn?: boolean }, 'rough'>;
 
-function Frame({ w, h, data, children }: { w: number; h: number; data: Common; children: React.ReactNode }) {
+function Frame({ w, h, data, title, children }: { w: number; h: number; data: Common; title?: string; children: React.ReactNode }) {
   return (
-    <div className={`sd-node${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}${data.changed ? ' changed' : ''}${data.removed ? ' removed' : ''}`} style={{ width: w, height: h }}>
+    <div className={`sd-node${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}${data.changed ? ' changed' : ''}${data.removed ? ' removed' : ''}`} style={{ width: w, height: h }} title={title}>
       {children}
       {data.unseen && <span className="unseen-dot" title="Not reviewed yet" />}
       {!!data.comments && (
@@ -73,13 +73,19 @@ export const ComponentNodeView = memo(function ComponentNodeView({ id, data }: N
   const sketch = useContext(SketchContext);
   const { onOpen } = useContext(EdgeContext);
   const spec = SHAPES[data.type];
+  // A caption under a drawing may be wider than a small shape; a label inside stays clear of the edges, and of a glyph beside it.
+  const labelX = spec.labelX ?? spec.w / 2;
+  const caption = spec.labelY >= spec.h * 0.7;
+  const maxWidth = caption ? Math.max(spec.w, 130) : 2 * Math.min(labelX, spec.w - labelX) - 12;
+  // Mid-shape labels grow both ways; a caption or a header band grows downwards, away from the drawing.
+  const fromTop = caption || spec.labelY <= spec.h * 0.35;
   return (
-    <Frame w={spec.w} h={spec.h} data={data}>
+    <Frame w={spec.w} h={spec.h} data={data} title={data.tech ? `${data.label}\n${data.tech}` : data.label}>
       <svg width={spec.w} height={spec.h} overflow="visible">
         <ShapeDrawing type={data.type} sketch={sketch} seed={hash(id)} dashed={spec.dashed} />
       </svg>
-      <div className="node-label" style={{ left: spec.labelX ?? spec.w / 2, top: spec.labelY, maxWidth: spec.w + 30 }}>
-        <div>{data.label}</div>
+      <div className={`node-label${fromTop ? ' from-top' : ''}`} style={{ left: labelX, top: spec.labelY, maxWidth }}>
+        <div className="node-name">{data.label}</div>
         {data.tech && <div className="node-tech">{data.tech}</div>}
         {data.cost !== undefined && <div className="node-tech">{money(data.cost, data.currency)} a month</div>}
       </div>
