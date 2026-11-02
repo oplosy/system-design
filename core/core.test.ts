@@ -2023,3 +2023,10 @@ test('on a hub the server decides who wrote a comment', async () => {
     api.close();
   }
 });
+
+test('Terraform network and scaling resources draw as their own parts', async () => {
+  const { readInfra } = await import('./infra.ts');
+  const res = (type: string) => ({ address: `${type}.x`, mode: 'managed', type, name: 'x', values: {} });
+  const state = JSON.stringify({ format_version: '1.0', values: { root_module: { resources: ['aws_ec2_transit_gateway', 'aws_vpc_endpoint', 'aws_autoscaling_group', 'azurerm_private_endpoint'].map(res) } } });
+  assert.deepEqual(readInfra(state).parts.map((p) => p.type), ['transit-gateway', 'private-link', 'autoscaler', 'private-link']);
+});
