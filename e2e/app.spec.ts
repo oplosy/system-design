@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { more, openDetails, openParts } from './helpers.ts';
+import { more, openCopy, openDetails, openParts } from './helpers.ts';
 
 // Every test fails on a console error or an uncaught exception: a missing import after a refactor shows up there first.
 test.beforeEach(async ({ page }) => {
@@ -110,7 +110,9 @@ test('Ctrl+F opens the find box, Esc closes it, and / opens the parts', async ({
   await expect(page.getByPlaceholder('Search parts')).toHaveCount(0);
 });
 
-test('a step with decisions opens with its details and keeps them closed once closed', async ({ page }) => {
+test('a step with decisions opens with its details and keeps them closed once closed', async ({ page, request }) => {
+  // The arrows approve steps, which must not reach the design the other tests open.
+  await openCopy(page, request, 'walk-steps');
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('.review-sheet')).toContainText('Cache-aside with a short TTL');
