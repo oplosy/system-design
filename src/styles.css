@@ -4,7 +4,7 @@
   --canvas: #f6f6f4;
   --panel: #ffffff;
   /* Follows --panel in every theme. The sheet's own parts stay on the solid --panel. */
-  --glass: color-mix(in srgb, var(--panel) 72%, transparent);
+  --glass: color-mix(in srgb, var(--panel) 55%, transparent);
   --float: 0 1px 2px rgb(20 20 25 / 0.06);
   --hover: rgb(20 20 25 / 0.05);
   --field: rgb(20 20 25 / 0.035);
@@ -179,7 +179,7 @@ button:disabled {
 .toast,
 .react-flow__controls,
 .react-flow__minimap {
-  backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(3px);
 }
 
 /* Buttons: one filled main action, quiet text for the rest. */
