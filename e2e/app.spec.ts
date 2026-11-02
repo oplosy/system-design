@@ -66,3 +66,15 @@ test('palette search finds the parts added later, in their own kit', async ({ pa
   await search.fill('mcp');
   await expect(page.getByText('MCP server / tool')).toBeVisible();
 });
+
+test('an edit is saved to disk and undo takes it back', async ({ page, request }) => {
+  const components = async () => ((await (await request.get('/api/designs/three-tier')).json()) as { components: unknown[] }).components.length;
+  // The design holds more parts than the first step shows, so count against what is on disk now.
+  const before = await components();
+  await page.getByRole('button', { name: /^User/ }).first().click();
+  await expect(page.locator('.react-flow__node')).toHaveCount(4);
+  await expect.poll(components).toBe(before + 1);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(page.locator('.react-flow__node')).toHaveCount(3);
+  await expect.poll(components).toBe(before);
+});

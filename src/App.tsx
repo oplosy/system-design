@@ -21,7 +21,6 @@ import { codeUrl, costAt, toDecisionRecord, toMermaid } from '../core/export.ts'
 import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
 import { lint } from '../core/lint.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
-import { mergeDesigns } from '../core/merge.ts';
 import * as m from '../core/mutations.ts';
 import { ApiError, api, shared, type LiveLoad, type Me, type PluginRead, type Plugins, type Summary } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt, boundaryBoxes } from './boundaries.ts';
@@ -37,6 +36,7 @@ import { type ExportKind, TagMenu, LayoutMenu, ExportMenu, AppearanceMenu, Inlin
 import { DesignSwitcher, Designs } from './designs.tsx';
 import { FindBox, PresentBar, ReviewBar } from './bars.tsx';
 import { Dock } from './dock.tsx';
+import { useDesignStore } from './use-design-store.ts';
 import { DOCKS, useDocks, useSketch, useTheme, type Docks } from './use-prefs.ts';
 import { Inspector } from './inspector.tsx';
 import { Connections } from './connections.tsx';
@@ -89,10 +89,14 @@ function Shell() {
   const [id, setId] = useState<string | null>(() => readHash().design);
   // An item the address points at, shown once its design has loaded.
   const linkTo = useRef<string | null>(readHash().item);
-  const [design, setDesign] = useState<Design | null>(null);
   const [viewIndex, setViewIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const store = useDesignStore(setError);
+  const { design, designRef, saveState, hist, commit, flush, change, settle } = store;
+  const undo = (back: boolean) => {
+    if (store.undo(back)) setSelected(null);
+  };
   const [creating, setCreating] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -122,10 +126,6 @@ function Shell() {
   // Which option of a step with options is on the sheet; its first until another is chosen.
   const [optionView, setOptionView] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Editing | null>(null);
-  const designRef = useRef<Design | null>(null);
-  const saveState = useRef({ timer: undefined as number | undefined, pending: false, inFlight: false, dirty: false });
-  // Undo history of whole designs. It restarts whenever the design is replaced from disk.
-  const hist = useRef({ past: [] as Design[], future: [] as Design[], at: 0 });
   const clip = useRef<{ items: m.Clip; pastes: number } | null>(null);
   /** A copy, cut or paste key still waiting for its clipboard event. */
   const clipKey = useRef<string | null>(null);
@@ -142,103 +142,6 @@ function Shell() {
     maxZoom: 1.2,
   };
 
-
-  // The design as last loaded or saved: what local edits are replayed from when a save meets a newer file.
-  const baseRef = useRef<Design | null>(null);
-  const commit = useCallback((d: Design | null, { fresh = false } = {}) => {
-    designRef.current = d;
-    setDesign(d);
-    if (fresh) {
-      hist.current = { past: [], future: [], at: 0 };
-      baseRef.current = d;
-    }
-  }, []);
-
-  const flush = useCallback(async () => {
-    const s = saveState.current;
-    s.pending = false;
-    if (s.inFlight) {
-      s.dirty = true;
-      return;
-    }
-    const d = designRef.current;
-    if (!d) return;
-    s.inFlight = true;
-    try {
-      const saved = await api.save(d);
-      baseRef.current = saved;
-      if (designRef.current?.id === saved.id) commit({ ...designRef.current, rev: saved.rev });
-      setError(null);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
-        // Someone (usually an agent) wrote meanwhile: replay the edits since the last save onto their version.
-        const theirs = await api.get(d.id);
-        const base = baseRef.current;
-        const result = base?.id === d.id ? mergeDesigns(base, designRef.current?.id === d.id ? designRef.current : d, theirs) : undefined;
-        if (result) {
-          baseRef.current = theirs;
-          commit(result.merged);
-          s.dirty = true;
-          setError(result.clashes.length ? `This design changed on disk while you edited; your edits were kept on top (overrode: ${result.clashes.join(', ')}).` : null);
-        } else {
-          s.dirty = false;
-          commit(theirs, { fresh: true });
-          setError('This design changed on disk (probably an agent) in a way your last edit can’t be merged into, so it was reloaded and that edit dropped.');
-        }
-      } else setError(errorText(e));
-    } finally {
-      s.inFlight = false;
-      if (s.dirty) {
-        s.dirty = false;
-        void flush();
-      }
-    }
-  }, [commit]);
-
-  const schedule = useCallback(() => {
-    const s = saveState.current;
-    clearTimeout(s.timer);
-    s.pending = true;
-    s.timer = window.setTimeout(flush, 350);
-  }, [flush]);
-
-  /** Applies an edit locally right away and saves shortly after. `record: false` keeps it out of undo (automatic layout). */
-  const change = useCallback(
-    (fn: (d: Design) => void, { record = true } = {}) => {
-      const cur = designRef.current;
-      if (!cur) return;
-      const next = structuredClone(cur);
-      try {
-        fn(next);
-      } catch (e) {
-        setError(errorText(e));
-        return;
-      }
-      if (record) {
-        const h = hist.current, now = Date.now();
-        // Edits in quick succession (typing, one drag) undo as one.
-        if (now - h.at > 600) h.past = [...h.past.slice(-99), cur];
-        h.at = now;
-        h.future = [];
-      }
-      commit(next);
-      schedule();
-    },
-    [commit, schedule],
-  );
-
-  const undo = (back: boolean) => {
-    const h = hist.current, cur = designRef.current;
-    const from = back ? h.past : h.future;
-    if (!cur || !from.length) return;
-    (back ? h.future : h.past).push(cur);
-    const snap = from.pop()!;
-    h.at = 0;
-    // Keep the newest revision so the save is not taken for a stale write.
-    commit({ ...snap, rev: cur.rev });
-    schedule();
-    setSelected(null);
-  };
 
   const refreshLists = useCallback(() => {
     api.designs().then(setDesigns).catch((e) => setError(errorText(e)));
@@ -712,11 +615,6 @@ function Shell() {
       const dec = x.decisions.find((i) => i.id === e.id);
       if (dec) dec.title = v;
     });
-  };
-  /** Saves a pending edit now, so switching designs cannot drop it. */
-  const settle = async () => {
-    clearTimeout(saveState.current.timer);
-    if (saveState.current.pending) await flush();
   };
   const drill = async (target: string, via: string) => {
     if (!design) return;
