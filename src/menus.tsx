@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type Design } from '../core/schema.ts';
-import { shared } from './api.ts';
+import { shared, type LiveLoad } from './api.ts';
 import { LAYOUTS, type LayoutKind } from './layout.ts';
 import { type Editing, type Theme } from './format.ts';
 
@@ -66,128 +66,70 @@ const THEMES = [
   { key: 'system', title: 'System' },
 ] as const;
 const STYLES = [
-  { key: 'sketch', title: 'Sketch' },
   { key: 'clean', title: 'Clean' },
+  { key: 'sketch', title: 'Sketch' },
 ] as const;
 
-export function AppearanceMenu({
-  sketch,
-  onSketch,
-  theme,
-  onTheme,
-  icon,
-}: {
-  sketch: boolean;
-  onSketch: (s: boolean) => void;
-  theme: Theme;
-  onTheme: (t: Theme) => void;
-  icon: (d: string) => React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => setOpen(false), []);
-  useDismiss(open, close, ref);
+function Appearance({ sketch, onSketch, theme, onTheme }: { sketch: boolean; onSketch: (s: boolean) => void; theme: Theme; onTheme: (t: Theme) => void }) {
   return (
-    <div className="switcher" ref={ref}>
-      <button className="icon-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)} title="Appearance: theme and drawing style" aria-label="Appearance">
-        {icon('M8 2.5v1.2M8 12.3v1.2M2.5 8h1.2M12.3 8h1.2M4.1 4.1l.85.85M11.05 11.05l.85.85M4.1 11.9l.85-.85M11.05 4.95l.85-.85M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z')}
-      </button>
-      {open && (
-        <div className="menu menu-right menu-pad" role="dialog" aria-label="Appearance">
-          <span className="field-label">Theme</span>
-          <Seg label="Theme" value={theme} options={THEMES} onPick={onTheme} />
-          <span className="field-label">Drawing style</span>
-          <Seg label="Drawing style" value={sketch ? 'sketch' : 'clean'} options={STYLES} onPick={(v) => onSketch(v === 'sketch')} />
-          <p className="menu-note">Sketch draws hand-made lines like a whiteboard; Clean draws crisp ones for docs.</p>
-        </div>
-      )}
+    <div className="menu-form">
+      <span className="field-label">Theme</span>
+      <Seg label="Theme" value={theme} options={THEMES} onPick={onTheme} />
+      <span className="field-label">Drawing style</span>
+      <Seg label="Drawing style" value={sketch ? 'sketch' : 'clean'} options={STYLES} onPick={(v) => onSketch(v === 'sketch')} />
+      <p className="menu-note">Clean draws crisp lines for docs; Sketch draws hand-made ones like a whiteboard.</p>
     </div>
   );
+}
+
+function tagCounts(design: Design | null) {
+  const counts = new Map<string, number>();
+  for (const c of design?.components ?? []) for (const t of c.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+  return counts;
 }
 
 /** Views of one model: everything, or only the parts with one tag. */
-export function TagMenu({ design, tag, onPick }: { design: Design; tag: string | null; onPick: (tag: string | null) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => setOpen(false), []);
-  useDismiss(open, close, ref);
-  const counts = new Map<string, number>();
-  for (const c of design.components) for (const t of c.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
-  // A tag that no part carries any more (renamed, removed, another design) falls back to everything.
-  useEffect(() => {
-    if (tag && !counts.has(tag)) onPick(null);
-  });
-  if (!counts.size) return null;
-  const pick = (t: string | null) => {
-    setOpen(false);
-    onPick(t);
-  };
+function TagList({ counts, tag, onPick }: { counts: Map<string, number>; tag: string | null; onPick: (tag: string | null) => void }) {
   return (
-    <div className="switcher" ref={ref}>
-      <button className="text-btn" aria-haspopup="menu" aria-expanded={open} aria-pressed={!!tag} onClick={() => setOpen((o) => !o)} title="Show only the parts with one tag">
-        {tag ? `View: ${tag}` : 'View'}
+    <>
+      <button role="menuitemradio" aria-checked={!tag} className="menu-item" onClick={() => onPick(null)}>
+        <span className="menu-main">
+          <span className="menu-title">Everything</span>
+          <span className="menu-desc">Every part on the sheet</span>
+        </span>
       </button>
-      {open && (
-        <div className="menu menu-right" role="menu" aria-label="View">
-          <button role="menuitemradio" aria-checked={!tag} className="menu-item" onClick={() => pick(null)}>
-            <span className="menu-main">
-              <span className="menu-title">Everything</span>
-              <span className="menu-desc">Every part on the sheet</span>
+      {[...counts].sort(([a], [b]) => a.localeCompare(b)).map(([t, n]) => (
+        <button key={t} role="menuitemradio" aria-checked={tag === t} className="menu-item" onClick={() => onPick(t)}>
+          <span className="menu-main">
+            <span className="menu-title">{t}</span>
+            <span className="menu-desc">
+              {n} {n > 1 ? 'parts' : 'part'}
             </span>
-          </button>
-          {[...counts].sort(([a], [b]) => a.localeCompare(b)).map(([t, n]) => (
-            <button key={t} role="menuitemradio" aria-checked={tag === t} className="menu-item" onClick={() => pick(t)}>
-              <span className="menu-main">
-                <span className="menu-title">{t}</span>
-                <span className="menu-desc">
-                  {n} {n > 1 ? 'parts' : 'part'}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+          </span>
+        </button>
+      ))}
+    </>
   );
 }
 
-export function LayoutMenu({ disabled, selected, onPick }: { disabled: boolean; selected: number; onPick: (kind: LayoutKind, selectionOnly: boolean) => void }) {
-  const [open, setOpen] = useState(false);
+function LayoutList({ selected, onPick }: { selected: number; onPick: (kind: LayoutKind, selectionOnly: boolean) => void }) {
   const [onlySelected, setOnlySelected] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => setOpen(false), []);
-  useDismiss(open, close, ref);
   const scoped = onlySelected && selected > 1;
   return (
-    <div className="switcher" ref={ref}>
-      <button className="text-btn" disabled={disabled} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} title="Re-arrange items automatically (Ctrl+Z undoes it)">
-        Layout
-      </button>
-      {open && (
-        <div className="menu menu-right" role="menu" aria-label="Layout">
-          <label className={`check${selected > 1 ? '' : ' off'}`} title={selected > 1 ? undefined : 'Select two or more items first (Shift or Ctrl + click, or drag a box)'}>
-            <input type="checkbox" checked={scoped} disabled={selected < 2} onChange={(e) => setOnlySelected(e.target.checked)} />
-            Only the selected items{selected > 1 ? ` (${selected})` : ''}
-          </label>
-          {LAYOUTS.map((x) => (
-            <button
-              key={x.key}
-              role="menuitem"
-              className="menu-item"
-              onClick={() => {
-                setOpen(false);
-                onPick(x.key, scoped);
-              }}
-            >
-              <span className="menu-main">
-                <span className="menu-title">{x.title}</span>
-                <span className="menu-desc">{x.desc}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <>
+      <label className={`check${selected > 1 ? '' : ' off'}`} title={selected > 1 ? undefined : 'Select two or more items first (Shift or Ctrl + click, or drag a box)'}>
+        <input type="checkbox" checked={scoped} disabled={selected < 2} onChange={(e) => setOnlySelected(e.target.checked)} />
+        Only the selected items{selected > 1 ? ` (${selected})` : ''}
+      </label>
+      {LAYOUTS.map((x) => (
+        <button key={x.key} role="menuitem" className="menu-item" onClick={() => onPick(x.key, scoped)}>
+          <span className="menu-main">
+            <span className="menu-title">{x.title}</span>
+            <span className="menu-desc">{x.desc}</span>
+          </span>
+        </button>
+      ))}
+    </>
   );
 }
 
@@ -204,34 +146,118 @@ const EXPORTS = [
 
 export type ExportKind = (typeof EXPORTS)[number]['kind'] | `plugin:${string}`;
 
-export function ExportMenu({ disabled, extra, onPick }: { disabled: boolean; extra: { kind: string; name: string; extension: string }[]; onPick: (kind: ExportKind) => void }) {
+function ExportList({ extra, onPick }: { extra: { kind: string; name: string; extension: string }[]; onPick: (kind: ExportKind) => void }) {
+  return [...EXPORTS.filter((x) => !(shared && x.kind === 'html')), ...extra.map((x) => ({ kind: x.kind as ExportKind, title: x.name, desc: `From a plugin, as .${x.extension}` }))].map((x) => (
+    <button key={x.kind} role="menuitem" className="menu-item" onClick={() => onPick(x.kind)}>
+      <span className="menu-main">
+        <span className="menu-title">{x.title}</span>
+        <span className="menu-desc">{x.desc}</span>
+      </span>
+    </button>
+  ));
+}
+
+type MoreMenuProps = {
+  design: Design | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: (back: boolean) => void;
+  onFind: () => void;
+  tag: string | null;
+  onTag: (tag: string | null) => void;
+  live: LiveLoad | null;
+  liveOn: boolean;
+  onLiveToggle: () => void;
+  selectedCount: number;
+  onArrange: (kind: LayoutKind, selectionOnly: boolean) => void;
+  exportExtras: { kind: string; name: string; extension: string }[];
+  onExport: (kind: ExportKind) => void;
+  onPresent: () => void;
+  minimap: boolean;
+  onMinimap: (on: boolean) => void;
+  sketch: boolean;
+  onSketch: (sketch: boolean) => void;
+  theme: Theme;
+  onTheme: (theme: Theme) => void;
+};
+
+/** Everything that is not the sheet: one menu, with longer lists and settings on a page of their own. */
+export function MoreMenu(p: MoreMenuProps) {
+  const { design, tag, onTag } = p;
   const [open, setOpen] = useState(false);
+  const [page, setPage] = useState<'view' | 'layout' | 'export' | 'appearance' | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => {
+    setOpen(false);
+    setPage(null);
+  }, []);
   useDismiss(open, close, ref);
+  const counts = tagCounts(design);
+  // A tag that no part carries any more (renamed, removed, another design) falls back to everything.
+  useEffect(() => {
+    if (tag && !counts.has(tag)) onTag(null);
+  });
+  /** Closes the menu, then acts. */
+  const act = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
+    close();
+    fn(...args);
+  };
+  const action = (name: string, onClick: () => void, hint?: string, disabled?: boolean) => (
+    <button role="menuitem" className="menu-row" disabled={disabled} onClick={act(onClick)}>
+      {name}
+      {hint && <span className="menu-hint" aria-hidden="true">{hint}</span>}
+    </button>
+  );
+  const sub = (name: string, to: NonNullable<typeof page>, hint?: string, disabled?: boolean) => (
+    <button role="menuitem" className="menu-row" aria-haspopup="menu" disabled={disabled} onClick={() => setPage(to)}>
+      {name}
+      <span className="menu-hint" aria-hidden="true">{hint} ›</span>
+    </button>
+  );
+  const check = (name: string, on: boolean, onClick: () => void, title?: string) => (
+    <button role="menuitemcheckbox" aria-checked={on} className="menu-row" title={title} onClick={onClick}>
+      {name}
+      <span className="menu-hint" aria-hidden="true">{on ? 'On' : 'Off'}</span>
+    </button>
+  );
+  const pages = {
+    view: <TagList counts={counts} tag={tag} onPick={act(onTag)} />,
+    layout: <LayoutList selected={p.selectedCount} onPick={act(p.onArrange)} />,
+    export: <ExportList extra={p.exportExtras} onPick={act(p.onExport)} />,
+    appearance: <Appearance sketch={p.sketch} onSketch={p.onSketch} theme={p.theme} onTheme={p.onTheme} />,
+  };
   return (
     <div className="switcher" ref={ref}>
-      <button className="text-btn" disabled={disabled} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        Export
+      <button className="icon-btn float" aria-haspopup="menu" aria-expanded={open} aria-label="More" title="More" onClick={() => (open ? close() : setOpen(true))}>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M3 8h.01M8 8h.01M13 8h.01" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+        </svg>
       </button>
       {open && (
-        <div className="menu menu-right" role="menu" aria-label="Export">
-          {[...EXPORTS.filter((x) => !(shared && x.kind === 'html')), ...extra.map((x) => ({ kind: x.kind as ExportKind, title: x.name, desc: `From a plugin, as .${x.extension}` }))].map((x) => (
-            <button
-              key={x.kind}
-              role="menuitem"
-              className="menu-item"
-              onClick={() => {
-                setOpen(false);
-                onPick(x.kind);
-              }}
-            >
-              <span className="menu-main">
-                <span className="menu-title">{x.title}</span>
-                <span className="menu-desc">{x.desc}</span>
-              </span>
-            </button>
-          ))}
+        <div className={`menu menu-right${page ? '' : ' menu-short'}`} role="menu" aria-label="More">
+          {page ? (
+            <>
+              <button className="menu-back" onClick={() => setPage(null)}>
+                ‹ Back
+              </button>
+              {pages[page]}
+            </>
+          ) : (
+            <>
+              {action('Undo', () => p.onUndo(true), 'Ctrl+Z', !p.canUndo)}
+              {action('Redo', () => p.onUndo(false), 'Ctrl+Shift+Z', !p.canRedo)}
+              {action('Find', p.onFind, 'Ctrl+F', !design)}
+              <hr className="menu-rule" />
+              {counts.size > 0 && sub('View', 'view', tag ?? undefined)}
+              {design && !shared && check('Live load', p.liveOn, act(p.onLiveToggle), [p.live?.unmatched.length && `No line for: ${p.live.unmatched.join(', ')}`, p.live?.failed?.length && `Not answering: ${p.live.failed.join('; ')}`].filter(Boolean).join('. ') || 'Show measured load and latency on the lines')}
+              {sub('Layout', 'layout', undefined, !design)}
+              {sub('Export', 'export', undefined, !design)}
+              {action('Present', p.onPresent, undefined, !design)}
+              <hr className="menu-rule" />
+              {check('Overview map', p.minimap, () => p.onMinimap(!p.minimap))}
+              {sub('Appearance', 'appearance')}
+            </>
+          )}
         </div>
       )}
     </div>

@@ -44,7 +44,7 @@ export function hash(s: string) {
 export function options(sketch: boolean, fill: string | undefined, seed: number, extra: Options = {}): Options {
   return sketch
     ? { stroke: 'currentColor', strokeWidth: 1.4, roughness: 1.2, fill, fillStyle: 'hachure', hachureGap: 11, fillWeight: 0.8, seed, ...extra }
-    : { stroke: 'currentColor', strokeWidth: 1.2, roughness: 0, bowing: 0, disableMultiStroke: true, fill: fill && `${fill}30`, fillStyle: 'solid', seed, ...extra };
+    : { stroke: 'currentColor', strokeWidth: 1.2, roughness: 0, bowing: 0, disableMultiStroke: true, fill: fill && 'var(--panel)', fillStyle: 'solid', seed, ...extra };
 }
 
 export const toPaths = (drawables: Drawable[]): PathInfo[] => drawables.flatMap((d) => gen.toPaths(d));

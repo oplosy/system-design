@@ -10,6 +10,7 @@ test('someone on the editors list signs in and gets the whole app', async ({ pag
   await page.goto('/#three-tier');
   await expect(page.locator('.react-flow__node')).toHaveCount(3);
   expect(await me(page)).toMatchObject({ email: 'ann@example.com', canEdit: true });
+  await page.getByRole('button', { name: /^Three-tier web app/ }).click();
   await expect(page.getByRole('button', { name: 'New design', exact: true })).toBeVisible();
 });
 
@@ -19,6 +20,8 @@ test('someone allowed in but not an editor can look, not change', async ({ page,
   await expect(page.locator('.react-flow__node')).toHaveCount(3);
   expect(await me(page)).toMatchObject({ email: 'bob@example.com', canEdit: false });
   await expect(page.getByText('View only', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^Three-tier web app/ }).click();
+  await expect(page.getByRole('listbox', { name: 'Designs' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'New design', exact: true })).toHaveCount(0);
   // The server refuses a change from a viewer even when it is sent by hand.
   const design = await (await page.request.get('/api/designs/three-tier')).json();

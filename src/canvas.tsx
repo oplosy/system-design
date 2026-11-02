@@ -7,7 +7,7 @@ import { edgeGeometry, type Pt, type Route } from './edges.ts';
 import { Paths, ShapeDrawing } from './shape-drawing.tsx';
 import { DECISION_SIZE, NOTE_COLOR, NOTE_SIZE, SHAPES, gen, hash, options, toPaths } from './shapes.ts';
 
-export const SketchContext = createContext(true);
+export const SketchContext = createContext(false);
 /** What edges and nodes need from the app: whether editing is allowed, how to save a bend, start a label edit, delete, or open a part's inner design. */
 export const EdgeContext = createContext<{
   locked: boolean;
@@ -103,7 +103,7 @@ export const NoteNodeView = memo(function NoteNodeView({ id, data }: NodeProps<N
   const sketch = useContext(SketchContext);
   const { w, h } = NOTE_SIZE;
   const paths = useMemo(
-    () => toPaths([gen.rectangle(2, 2, w - 4, h - 4, options(sketch, undefined, hash(id), { fill: sketch ? NOTE_COLOR : '#FAC775', fillStyle: 'solid', stroke: sketch ? NOTE_COLOR : 'none', roughness: sketch ? 1.8 : 0 }))]),
+    () => toPaths([gen.rectangle(2, 2, w - 4, h - 4, options(sketch, undefined, hash(id), { fill: sketch ? NOTE_COLOR : 'var(--panel)', fillStyle: 'solid', stroke: sketch ? NOTE_COLOR : 'var(--rule-strong)', roughness: sketch ? 1.8 : 0 }))]),
     [sketch, id, w, h],
   );
   return (
@@ -121,12 +121,12 @@ export const DecisionNodeView = memo(function DecisionNodeView({ id, data }: Nod
   const { w, h } = DECISION_SIZE;
   const body = h - 16;
   const outline = `M2 2 H${w - 2} V${body} H52 L34 ${h - 2} L36 ${body} H2 Z`;
-  const paths = useMemo(() => toPaths([gen.path(outline, options(sketch, undefined, hash(id), { stroke: NOTE_COLOR, strokeWidth: 1.6 }))]), [sketch, id, outline]);
+  const paths = useMemo(() => toPaths([gen.path(outline, options(sketch, undefined, hash(id), { stroke: sketch ? NOTE_COLOR : 'var(--rule-strong)', strokeWidth: sketch ? 1.6 : 1.2 }))]), [sketch, id, outline]);
   return (
     <Frame w={w} h={h} data={data}>
       <svg width={w} height={h} overflow="visible">
         <path d={outline} style={{ fill: 'var(--panel)', stroke: 'none' }} />
-        <Paths paths={paths} dashed />
+        <Paths paths={paths} dashed={sketch} />
       </svg>
       <div className="decision-text" style={{ height: body - 4 }}>
         <div className="decision-kicker">Decision</div>
@@ -142,16 +142,17 @@ export const BoundaryNodeView = memo(function BoundaryNodeView({ id, data }: Nod
   const sketch = useContext(SketchContext);
   const spec = BOUNDARY_SPECS[data.kind];
   const { w, h } = data;
+  const color = sketch ? spec.color : 'var(--quiet)';
   const paths = useMemo(
-    () => toPaths([gen.rectangle(1, 1, w - 2, h - 2, options(sketch, undefined, hash(id), { stroke: spec.color, strokeWidth: spec.strokeWidth, roughness: sketch ? 0.8 : 0 }))]),
-    [sketch, id, w, h, spec],
+    () => toPaths([gen.rectangle(1, 1, w - 2, h - 2, options(sketch, undefined, hash(id), { stroke: color, strokeWidth: sketch ? spec.strokeWidth : 1, roughness: sketch ? 0.8 : 0 }))]),
+    [sketch, id, w, h, spec, color],
   );
   // Narrow boxes drop the kind word (the line style still shows it) so the label stays readable.
   const roomy = w > 7.5 * (spec.name.length + data.label.length + (data.detail?.length ?? 0)) + 70;
   return (
-    <div className={`sd-boundary${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}${data.changed ? ' changed' : ''}`} style={{ width: w, height: h, color: spec.color }}>
+    <div className={`sd-boundary${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}${data.changed ? ' changed' : ''}`} style={{ width: w, height: h, color }}>
       <svg width={w} height={h} overflow="visible">
-        <rect x={1} y={1} width={w - 2} height={h - 2} rx={sketch ? 0 : 6} style={{ fill: spec.color, fillOpacity: 0.05, stroke: 'none' }} />
+        <rect x={1} y={1} width={w - 2} height={h - 2} rx={sketch ? 0 : 6} style={{ fill: color, fillOpacity: sketch ? 0.05 : 0.03, stroke: 'none' }} />
         {paths.map((p, i) => (
           <path key={i} d={p.d} style={{ stroke: p.stroke, strokeWidth: p.strokeWidth, fill: 'none' }} strokeDasharray={spec.dash} strokeLinecap="round" />
         ))}
@@ -244,7 +245,7 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
   return (
     <>
       <BaseEdge id={id} path={geo.d} style={{ stroke: 'transparent' }} interactionWidth={18} />
-      <g className={`rough-edge${data?.faded ? ' faded' : ''}${selected ? ' selected' : ''}${data?.hops ? ' on-path' : ''}${data?.hopOn ? ' hop-on' : ''}${failing ? ' failing' : ''}`} style={{ color: link ? NOTE_COLOR : undefined }}>
+      <g className={`rough-edge${data?.faded ? ' faded' : ''}${selected ? ' selected' : ''}${data?.hops ? ' on-path' : ''}${data?.hopOn ? ' hop-on' : ''}${failing ? ' failing' : ''}`} style={{ color: link ? (sketch ? NOTE_COLOR : 'var(--quiet)') : undefined }}>
         <Paths paths={line} dashed={dashed} />
         <Paths paths={ends} />
       </g>

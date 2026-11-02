@@ -1,11 +1,9 @@
-/* Quiet, neutral UI over a full-bleed sheet: floating glass panels, hairlines only where they help. */
+/* The sheet fills the window. Everything else is a small plain surface that appears when it is needed: ink on neutral, one accent. */
 :root {
   --bg: #f4f4f2;
   --canvas: #f6f6f4;
   --panel: #ffffff;
-  --glass: rgb(255 255 255 / 0.74);
-  --glass-border: rgb(20 20 25 / 0.07);
-  --glass-shadow: 0 1px 1px rgb(20 20 25 / 0.03), 0 10px 30px rgb(20 20 25 / 0.07);
+  --float: 0 1px 2px rgb(20 20 25 / 0.06);
   --hover: rgb(20 20 25 / 0.05);
   --active: rgb(20 20 25 / 0.08);
   --seg-on: #ffffff;
@@ -16,7 +14,7 @@
   --rule: rgb(20 20 25 / 0.07);
   --rule-strong: rgb(20 20 25 / 0.13);
   --dots: #d8d8d3;
-  --signal: #dd4f17;
+  --signal: var(--select);
   --danger: #e5484d;
   --select: #3466f0;
   --note: #fac775;
@@ -24,8 +22,8 @@
   --note-ink: #412402;
   --decision: #ba7517;
   --lift: 0 2px 6px rgb(20 20 25 / 0.05), 0 16px 40px rgb(20 20 25 / 0.12);
-  --radius: 14px;
-  /* UI and Clean labels / ids, numbers and tags / Sketch labels, notes and decisions. All cover Turkish. */
+  --radius: 10px;
+  /* Everything / technical values such as ids and costs / Sketch labels, notes and decisions. All cover Turkish. */
   --sans: 'Instrument Sans', system-ui, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
   --hand: 'Shantell Sans', 'Comic Sans MS', cursive;
@@ -37,9 +35,7 @@
     --bg: #0d0d0f;
     --canvas: #111113;
     --panel: #19191c;
-    --glass: rgb(25 25 29 / 0.7);
-    --glass-border: rgb(255 255 255 / 0.07);
-    --glass-shadow: 0 1px 1px rgb(0 0 0 / 0.3), 0 12px 34px rgb(0 0 0 / 0.45);
+    --float: 0 1px 2px rgb(0 0 0 / 0.4);
     --hover: rgb(255 255 255 / 0.06);
     --active: rgb(255 255 255 / 0.1);
     --seg-on: rgb(255 255 255 / 0.12);
@@ -50,7 +46,6 @@
     --rule: rgb(255 255 255 / 0.07);
     --rule-strong: rgb(255 255 255 / 0.13);
     --dots: #26262a;
-    --signal: #ff7a45;
     --danger: #ff6369;
     --select: #7c9cff;
     --decision: #efa94a;
@@ -63,9 +58,7 @@
   --bg: #0d0d0f;
   --canvas: #111113;
   --panel: #19191c;
-  --glass: rgb(25 25 29 / 0.7);
-  --glass-border: rgb(255 255 255 / 0.07);
-  --glass-shadow: 0 1px 1px rgb(0 0 0 / 0.3), 0 12px 34px rgb(0 0 0 / 0.45);
+  --float: 0 1px 2px rgb(0 0 0 / 0.4);
   --hover: rgb(255 255 255 / 0.06);
   --active: rgb(255 255 255 / 0.1);
   --seg-on: rgb(255 255 255 / 0.12);
@@ -76,7 +69,6 @@
   --rule: rgb(255 255 255 / 0.07);
   --rule-strong: rgb(255 255 255 / 0.13);
   --dots: #26262a;
-  --signal: #ff7a45;
   --danger: #ff6369;
   --select: #7c9cff;
   --decision: #efa94a;
@@ -146,7 +138,7 @@ button:disabled {
 }
 
 .pad {
-  padding: 16px 20px;
+  padding: 8px 0;
 }
 
 kbd {
@@ -163,20 +155,21 @@ kbd.lead {
 }
 
 /* Floating surfaces share one material. */
-.topbar,
-.dock,
-.review,
+.float,
+.switcher-btn,
+.card,
+.palette,
+.review-bar,
+.review-sheet,
 .present-bar,
 .sequence,
 .menu,
-.pop,
+.find-input,
 .react-flow__controls,
 .react-flow__minimap {
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(18px) saturate(1.5);
-  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  background: var(--panel);
+  border: 1px solid var(--rule-strong);
+  box-shadow: var(--float);
 }
 
 /* Buttons: one filled main action, quiet text for the rest. */
@@ -378,20 +371,14 @@ kbd.lead {
   display: flex;
   align-items: center;
   gap: 8px;
-  font: 600 10.5px/1.4 var(--sans);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--quiet);
+  font: 500 12px/1.4 var(--sans);
+  color: var(--muted);
 }
 
 .rule-count {
   margin-left: auto;
-  padding: 1px 6px;
-  border-radius: 99px;
-  background: var(--hover);
-  font: 500 10.5px/1.4 var(--mono);
-  letter-spacing: 0;
-  color: var(--muted);
+  font: 500 12px/1.4 var(--sans);
+  color: var(--quiet);
 }
 
 .field-label {
@@ -402,17 +389,7 @@ kbd.lead {
   margin-top: 0;
 }
 
-.swatch-sq {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-}
-
-.swatch-sq.hollow {
-  border: 1px dashed var(--ink-2);
-}
-
-/* App shell: the sheet fills the window; bars and panels float above it. */
+/* App shell: the sheet fills the window; a few small pieces float above it. */
 
 .app {
   position: relative;
@@ -420,57 +397,37 @@ kbd.lead {
   overflow: hidden;
 }
 
-/* One glass strip: brand and design on the left, find in the middle, actions on the right. */
+/* The design on the left, the menu on the right; the sheet stays usable between them. */
 .topbar {
   position: absolute;
   top: 12px;
   left: 12px;
   right: 12px;
   z-index: 30;
-  display: grid;
-  /* Find stays centred until the actions need the room; then the design title gives way. */
-  grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
-  align-items: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
-  height: 44px;
-  padding: 0 6px;
-  border-radius: var(--radius);
-}
-
-.topbar .btn {
-  height: 32px;
-  margin-left: 4px;
-  border-radius: 9px;
+  pointer-events: none;
 }
 
 .bar {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
   min-width: 0;
-}
-
-.topbar > .bar:last-child {
-  grid-column: 3;
-  justify-self: end;
+  pointer-events: auto;
 }
 
 .wordmark {
-  padding: 0 6px 0 4px;
-  font: 600 13px/1 var(--mono);
-  letter-spacing: -0.02em;
+  font-weight: 600;
   white-space: nowrap;
 }
 
-.wordmark span {
-  color: var(--signal);
-  margin: 0 1px;
-}
-
 .shared-tag {
-  padding: 0 8px;
-  font: 500 12px/1 var(--mono);
-  color: var(--signal);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -493,12 +450,11 @@ kbd.lead {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  max-width: min(340px, 100%);
-  padding: 0 10px;
-  border-radius: 8px;
-  font-size: 13.5px;
-  font-weight: 600;
+  height: 36px;
+  max-width: min(420px, 60vw);
+  padding: 0 12px;
+  border-radius: var(--radius);
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -510,7 +466,7 @@ kbd.lead {
 
 .switcher-btn:hover,
 .switcher-btn[aria-expanded='true'] {
-  background: var(--hover);
+  border-color: var(--quiet);
 }
 
 .switcher-btn svg {
@@ -520,35 +476,76 @@ kbd.lead {
 
 .menu {
   position: absolute;
-  top: calc(100% + 10px);
-  left: -6px;
+  top: calc(100% + 6px);
+  left: 0;
   z-index: 40;
-  width: 380px;
-  max-height: 440px;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(480px, calc(100vh - 72px));
   overflow-y: auto;
   padding: 6px;
-  border-radius: 12px;
-  background: var(--panel);
+  border-radius: var(--radius);
   box-shadow: var(--lift);
   animation: rise 0.12s ease-out;
 }
 
 .menu-right {
   left: auto;
-  right: -6px;
-  width: 320px;
+  right: 0;
+  width: min(320px, calc(100vw - 24px));
 }
 
-.menu-pad {
-  width: 272px;
-  padding: 14px;
+.menu-short {
+  width: 232px;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+}
+
+.menu-row:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.menu-hint {
+  font-size: 12px;
+  color: var(--quiet);
+  white-space: nowrap;
+}
+
+.menu-rule {
+  height: 1px;
+  margin: 6px 4px;
+  border: 0;
+  background: var(--rule);
+}
+
+.menu-back {
+  display: block;
+  width: 100%;
+  padding: 6px 10px 8px;
+  color: var(--muted);
+}
+
+.menu-back:hover {
+  color: var(--ink);
+}
+
+.menu-form {
+  padding: 4px 8px 8px;
 }
 
 .menu-head {
   padding: 6px 10px 10px;
   margin-bottom: 4px;
   border-bottom: 1px solid var(--rule);
-  font: 11.5px var(--mono);
+  font-size: 12px;
   color: var(--quiet);
 }
 
@@ -587,7 +584,7 @@ kbd.lead {
   gap: 14px;
   width: 100%;
   padding: 9px 10px;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .menu-item:hover {
@@ -607,7 +604,6 @@ kbd.lead {
 }
 
 .menu-title {
-  font-size: 13.5px;
   font-weight: 500;
 }
 
@@ -620,7 +616,7 @@ kbd.lead {
 }
 
 .menu-meta {
-  font: 11.5px var(--mono);
+  font-size: 12px;
   color: var(--quiet);
   white-space: nowrap;
 }
@@ -639,79 +635,63 @@ kbd.lead {
   isolation: isolate;
 }
 
-/* Side panels */
-
-.dock {
+/* What a selected item says about itself, over the right of the sheet. */
+.card {
   position: absolute;
-  top: 68px;
-  bottom: 12px;
+  top: 60px;
+  right: 12px;
   z-index: 20;
   display: flex;
   flex-direction: column;
+  width: min(320px, calc(100% - 24px));
+  max-height: calc(100% - 72px);
   border-radius: var(--radius);
-  animation: fade 0.15s ease-out;
+  box-shadow: var(--lift);
+  animation: rise 0.12s ease-out;
+  overflow: hidden;
 }
 
-.dock-left {
+/* The + and the parts it opens. */
+.add {
+  position: absolute;
+  top: 60px;
   left: 12px;
+  z-index: 20;
 }
 
-.dock-right {
-  right: 12px;
+.add .icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  font-size: 20px;
 }
 
-.dock > aside {
-  flex: 1;
-  min-height: 0;
-  border-radius: inherit;
+.icon-btn.float:hover,
+.icon-btn.float[aria-expanded='true'] {
+  background: var(--panel);
+  border-color: var(--quiet);
 }
 
-.dock-resize {
-  position: absolute;
-  top: 16px;
-  bottom: 16px;
-  width: 10px;
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.dock-left .dock-resize {
-  right: -6px;
-}
-
-.dock-right .dock-resize {
-  left: -6px;
-}
-
-.dock-resize::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 4px;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--select);
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-
-.dock-resize:hover::after,
-.dock-resize:focus-visible::after,
-.dock-resize:active::after {
-  opacity: 0.7;
-}
-
-.dock-resize:focus-visible {
-  outline: none;
+.topbar .icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
 }
 
 /* Palette */
 
 .palette {
+  position: absolute;
+  top: 0;
+  left: 44px;
   display: flex;
   flex-direction: column;
+  width: min(280px, calc(100vw - 80px));
+  height: min(520px, calc(100vh - 152px));
   overflow: hidden;
+  border-radius: var(--radius);
+  box-shadow: var(--lift);
+  animation: rise 0.12s ease-out;
 }
 
 .palette-top {
@@ -808,13 +788,6 @@ kbd.lead {
   border: 1.5px dashed var(--note-edge);
 }
 
-.palette-foot {
-  padding: 10px 16px 12px;
-  border-top: 1px solid var(--rule);
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--quiet);
-}
 
 /* Canvas chrome */
 
@@ -823,15 +796,110 @@ kbd.lead {
   --xy-edge-label-background-color: var(--canvas);
 }
 
-.react-flow__background-pattern.dots {
+.react-flow__background-pattern/* Review: one line for where the walkthrough is, with the step's details unfolding above it. */
+.review {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(640px, calc(100% - 24px));
+}
+
+.review-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 48px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+}
+
+.review-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+
+.review-title:hover {
+  background: var(--hover);
+}
+
+.review-title svg {
+  flex: none;
+  color: var(--quiet);
+}
+
+.review-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.review-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* DETAILS_HEIGHT in App.tsx matches this share of the window. */
+.review-sheet {
+  display: flex;
+  flex-direction: column;
+  max-height: 42vh;
+  overflow: hidden;
+  border-radius: var(--radius);
+  box-shadow: var(--lift);
+  animation: rise 0.12s ease-out;
+}
+
+.card .inspector,
+.review-sheet .inspector {
+  flex: 1;
+  min-height: 0;
+}
+
+.review-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 6px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.review-seen {
+  margin: 0 auto 0 8px;
+  font-size: 12px;
+  color: var(--quiet);
+  white-space: nowrap;
+}
+
+.review-ask {
+  flex: none;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.dots {
   fill: var(--dots);
 }
 
 .react-flow__panel.react-flow__controls {
   margin: 0;
-  top: 68px;
-  left: calc(var(--left) + 12px);
-  border-radius: 10px;
+  right: 12px;
+  bottom: 12px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -858,32 +926,23 @@ kbd.lead {
 
 .react-flow__panel.react-flow__minimap {
   margin: 0;
-  top: 68px;
-  right: calc(var(--right) + 12px);
-  border-radius: 10px;
+  top: 60px;
+  right: 12px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
-
-/* On a narrow window the overview would cover the drawing. */
-@media (max-width: 1180px) {
-  .react-flow__minimap {
-    display: none;
-  }
-}
-
-/* Review bar: where the walkthrough is, what this step is, and what to do with it. */
 
 /* Where a drilled-into design was opened from. */
 .trail {
   position: absolute;
   top: 64px;
-  left: calc(var(--left) + 56px);
+  left: 60px;
   z-index: 10;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  max-width: calc(100% - var(--left) - var(--right) - 240px);
+  max-width: calc(100% - 120px);
   font-size: 13px;
 }
 
@@ -938,12 +997,12 @@ kbd.lead {
 .sequence {
   position: absolute;
   top: 64px;
-  left: calc(var(--left) + (100% - var(--left) - var(--right)) / 2);
+  left: 50%;
   transform: translateX(-50%);
   z-index: 11;
   display: flex;
   flex-direction: column;
-  max-width: calc(100% - var(--left) - var(--right) - 24px);
+  max-width: calc(100% - 24px);
   max-height: calc(100% - 160px);
   border-radius: var(--radius);
 }
@@ -962,8 +1021,7 @@ kbd.lead {
 
 .sequence-head .quiet {
   order: -1;
-  font: 11px var(--mono);
-  text-transform: uppercase;
+  font-size: 12px;
 }
 
 .sequence-body {
@@ -1012,46 +1070,99 @@ kbd.lead {
   stroke: var(--danger);
 }
 
+/* Review: one line for where the walkthrough is, with the step's details unfolding above it. */
 .review {
   position: absolute;
-  bottom: 14px;
-  left: calc(var(--left) + (100% - var(--left) - var(--right)) / 2);
+  left: 50%;
+  bottom: 12px;
   transform: translateX(-50%);
   z-index: 10;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
-  width: min(760px, calc(100% - var(--left) - var(--right) - 24px));
-  padding: 8px 8px 8px 16px;
+  width: min(640px, calc(100% - 24px));
+}
+
+.review-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 48px;
+  padding: 0 8px;
   border-radius: var(--radius);
 }
 
-.review-main {
+.review-title {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.review-meta {
-  display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 11.5px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+
+.review-title:hover {
+  background: var(--hover);
+}
+
+.review-title svg {
+  flex: none;
+  color: var(--quiet);
+}
+
+.review-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
+}
+
+.review-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Wraps to a second line before it gets cut off when the panels leave little room. */
-.review-title {
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+/* DETAILS_HEIGHT in App.tsx matches this share of the window. */
+.review-sheet {
+  display: flex;
+  flex-direction: column;
+  max-height: 42vh;
   overflow: hidden;
+  border-radius: var(--radius);
+  box-shadow: var(--lift);
+  animation: rise 0.12s ease-out;
+}
+
+.card .inspector,
+.review-sheet .inspector {
+  flex: 1;
+  min-height: 0;
+}
+
+.review-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 6px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.review-seen {
+  margin: 0 auto 0 8px;
+  font-size: 12px;
+  color: var(--quiet);
+  white-space: nowrap;
+}
+
+.review-ask {
+  flex: none;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--rule);
 }
 
 .dots {
@@ -1103,38 +1214,18 @@ kbd.lead {
   background: var(--muted);
 }
 
-.review-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-}
-
 .review-done {
   padding: 0 10px;
   font-weight: 500;
   color: var(--muted);
 }
 
-.pop {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(100% + 8px);
-  display: flex;
-  flex-direction: column;
-  padding: 14px;
-  border-radius: var(--radius);
-  background: var(--panel);
-  animation: rise 0.12s ease-out;
-}
-
-.pop .ed {
+.review-ask .ed {
   width: 100%;
   margin: 0;
   padding: 8px 10px;
   border: 1px solid var(--rule-strong);
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .pop-foot {
@@ -1153,7 +1244,7 @@ kbd.lead {
 }
 
 .insp-head {
-  padding: 18px 20px 16px;
+  padding: 14px 16px;
 }
 
 .insp-tagline {
@@ -1177,10 +1268,9 @@ kbd.lead {
 }
 
 .insp-title {
-  font-size: 19px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.015em;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .insp-title.route {
@@ -1188,7 +1278,6 @@ kbd.lead {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 8px;
-  font-size: 16px;
 }
 
 .route-arrow {
@@ -1197,8 +1286,8 @@ kbd.lead {
 }
 
 .insp-lead {
-  margin-top: 8px;
-  font-size: 13.5px;
+  margin-top: 6px;
+  font-size: 13px;
   line-height: 1.6;
   color: var(--muted);
 }
@@ -1210,7 +1299,7 @@ kbd.lead {
 }
 
 .insp-sec {
-  padding: 16px 20px;
+  padding: 12px 16px;
   border-top: 1px solid var(--rule);
 }
 
@@ -1252,7 +1341,7 @@ kbd.lead {
 
 textarea.ed {
   min-height: 1.55em;
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--ink-2);
 }
 
@@ -1267,10 +1356,9 @@ textarea.ed {
 
 .ed-title,
 textarea.ed-title {
-  font-size: 19px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.015em;
-  line-height: 1.3;
+  line-height: 1.35;
   color: var(--ink);
 }
 
@@ -1390,7 +1478,7 @@ code.ref-value {
 
 .insp-foot {
   margin-top: auto;
-  padding: 10px 20px 14px;
+  padding: 6px 16px 10px;
 }
 
 .list-row {
@@ -1436,8 +1524,9 @@ code.ref-value {
 }
 
 .decision-no {
-  font: 500 12px/1.5 var(--mono);
-  color: var(--decision);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--quiet);
 }
 
 .decision-body {
@@ -1466,10 +1555,8 @@ code.ref-value {
 }
 
 .decision-line em {
-  font: 600 10.5px var(--sans);
   font-style: normal;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 500;
   color: var(--quiet);
   margin-right: 6px;
 }
@@ -1479,9 +1566,8 @@ code.ref-value {
   width: 100%;
   margin-top: 8px;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--note);
-  color: var(--note-ink);
+  border-radius: 6px;
+  background: var(--hover);
   line-height: 1.5;
 }
 
@@ -1530,7 +1616,6 @@ code.ref-value {
   place-items: center;
   padding: 20px;
   background: rgb(10 10 12 / 0.32);
-  backdrop-filter: blur(3px);
   animation: fade 0.12s ease-out;
 }
 
@@ -1539,8 +1624,8 @@ code.ref-value {
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   padding: 18px 24px 22px;
-  border: 1px solid var(--glass-border);
-  border-radius: 16px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
   background: var(--panel);
   box-shadow: var(--lift);
   animation: rise 0.14s ease-out;
@@ -1640,6 +1725,7 @@ code.ref-value {
 
 .designs-tools .find-input {
   flex: 1;
+  box-shadow: none;
 }
 
 .designs-list {
@@ -1804,15 +1890,15 @@ code.ref-value {
 
 .toast {
   position: fixed;
-  top: 68px;
-  right: calc(var(--right, 0px) + 12px);
+  top: 60px;
+  right: 12px;
   z-index: 60;
   display: flex;
   align-items: flex-start;
   gap: 10px;
   max-width: 440px;
   padding: 10px 6px 10px 12px;
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--rule-strong);
   border-radius: 12px;
   background: var(--panel);
   box-shadow: var(--lift);
@@ -1901,8 +1987,7 @@ code.ref-value {
   align-items: baseline;
   gap: 8px;
   max-width: calc(100% - 20px);
-  padding: 3px 8px;
-  border: 1px solid currentColor;
+  padding: 2px 6px;
   border-radius: 6px;
   background: var(--canvas);
   white-space: nowrap;
@@ -1913,9 +1998,7 @@ code.ref-value {
 
 .boundary-kind {
   flex: none;
-  font: 500 11px var(--mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 12px;
 }
 
 .boundary-label {
@@ -1962,7 +2045,7 @@ code.ref-value {
   position: absolute;
   transform: translate(-50%, -50%);
   text-align: center;
-  line-height: 1.15;
+  line-height: 1.2;
   font-size: 13px;
   font-weight: 500;
   pointer-events: none;
@@ -1985,15 +2068,13 @@ code.ref-value {
   line-height: 1.4;
 }
 
-.note-text {
+.sketch .note-text {
   color: var(--note-ink);
 }
 
 .decision-kicker {
-  font: 500 11px var(--mono);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--decision);
+  font-size: 12px;
+  color: var(--quiet);
 }
 
 .decision-title {
@@ -2284,7 +2365,7 @@ code.ref-value {
   border-radius: 8px;
   color: #fff;
   background: var(--danger);
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--float);
   cursor: pointer;
 }
 
@@ -2358,15 +2439,13 @@ code.ref-value {
   display: flex;
   align-items: center;
   gap: 8px;
-  font: 11px var(--mono);
+  font-size: 12px;
   color: var(--quiet);
 }
 
 .comment-by {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--ink-2);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 .comment.agent .comment-by {
@@ -2376,7 +2455,7 @@ code.ref-value {
 .comment-meta .text-btn {
   height: 22px;
   margin-left: auto;
-  font: 500 11px var(--mono);
+  font-size: 12px;
 }
 
 .comment-meta .ref {
@@ -2409,20 +2488,22 @@ code.ref-value {
   height: 28px;
 }
 
-/* Find on sheet, in the top bar */
+/* Find on sheet: appears on Ctrl+F and goes when it loses focus. */
 .find {
-  position: relative;
-  width: min(320px, 28vw);
-  min-width: 140px;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(320px, 40vw);
+  min-width: 180px;
+  pointer-events: auto;
 }
 
 .find-input {
   width: 100%;
-  height: 32px;
+  height: 36px;
   padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  background: var(--hover);
+  border-radius: var(--radius);
 }
 
 .find-input::placeholder {
@@ -2435,14 +2516,11 @@ code.ref-value {
 }
 
 .find-menu {
-  top: calc(100% + 10px);
-  right: 0;
-  width: 300px;
+  width: 100%;
 }
 
 /* Present mode: the sheet alone, full screen, with a caption bar. */
-.app.presenting .topbar,
-.app.presenting .dock {
+.app.presenting .topbar {
   display: none;
 }
 
@@ -2462,7 +2540,9 @@ code.ref-value {
 
 .present-no {
   flex: none;
-  font: 600 18px/1 var(--mono);
+  font-size: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .present-no span {

@@ -1,10 +1,10 @@
-import { useContext, useState } from 'react';
+import { useCallback, useContext, useRef, useState } from 'react';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType } from '../core/schema.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SketchContext } from './canvas.tsx';
 import { ShapeDrawing } from './shape-drawing.tsx';
-import { GROUPS, KITS, NOTE_COLOR, SHAPES, kitsOf, searchRank, type Kit } from './shapes.ts';
-import { pad } from './format.ts';
+import { useDismiss } from './menus.tsx';
+import { GROUPS, KITS, SHAPES, kitsOf, searchRank, type Kit } from './shapes.ts';
 
 export type AddKind = ComponentType | 'note' | 'decision' | `boundary:${BoundaryKind}`;
 export const DRAG_MIME = 'application/x-system-design';
@@ -20,10 +20,12 @@ export function ShapePreview({ type, width = 56, height = 38 }: { type: Componen
 }
 
 export function BoundaryPreview({ kind }: { kind: BoundaryKind }) {
+  const sketch = useContext(SketchContext);
   const spec = BOUNDARY_SPECS[kind];
+  const color = sketch ? spec.color : 'var(--muted)';
   return (
     <svg width={40} height={26} aria-hidden="true" style={{ flex: 'none' }}>
-      <rect x={2} y={3} width={36} height={20} rx={2} style={{ fill: spec.color, fillOpacity: 0.08, stroke: spec.color, strokeWidth: 1.4 }} strokeDasharray={spec.dash && '4 3'} />
+      <rect x={2} y={3} width={36} height={20} rx={2} style={{ fill: color, fillOpacity: 0.08, stroke: color, strokeWidth: 1.4 }} strokeDasharray={spec.dash && '4 3'} />
     </svg>
   );
 }
@@ -37,7 +39,22 @@ function savedKit(): Kit {
   }
 }
 
-export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
+/** The + beside the sheet; the parts open over the sheet and close again once one is added. */
+export function AddMenu({ open, onOpen, onAdd }: { open: boolean; onOpen: (open: boolean) => void; onAdd: (kind: AddKind) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => onOpen(false), [onOpen]);
+  useDismiss(open, close, ref);
+  return (
+    <div className="add" ref={ref}>
+      <button className="icon-btn float" aria-expanded={open} aria-label="Add a part" title="Add a part (/)" onClick={() => onOpen(!open)}>
+        +
+      </button>
+      {open && <Palette onAdd={onAdd} />}
+    </div>
+  );
+}
+
+function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
   const [query, setQuery] = useState('');
   const [kit, setKitState] = useState<Kit>(savedKit);
   const setKit = (k: Kit) => {
@@ -91,14 +108,15 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
         <input
           className="palette-search"
           type="search"
+          autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Escape') setQuery('');
-            else if (e.key === 'Enter' && terms.length && first) {
-              onAdd(first);
+            // The first Esc clears the search; the next one closes the parts.
+            if (e.key === 'Escape' && query) {
+              e.stopPropagation();
               setQuery('');
-            }
+            } else if (e.key === 'Enter' && terms.length && first) onAdd(first);
           }}
           placeholder={{ system: 'Search: kafka, redis, s3…', network: 'Search: router, printer, wifi…', software: 'Search: use case, class, state…' }[kit]}
           aria-label="Search parts"
@@ -116,38 +134,25 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
           (g) =>
             g.types.length > 0 && (
               <section key={g.key}>
-                <h3 className="rule-head">
-                  <span className="swatch-sq" style={{ background: g.color }} />
-                  {g.title}
-                  <span className="rule-count">{pad(g.types.length)}</span>
-                </h3>
+                <h3 className="rule-head">{g.title}</h3>
                 {g.types.map((t) => row(t, SHAPES[t].name, <ShapePreview type={t} width={40} height={26} />))}
               </section>
             ),
         )}
         {boundaries.length > 0 && (
           <section>
-            <h3 className="rule-head">
-              <span className="swatch-sq hollow" />
-              Boundaries
-              <span className="rule-count">{pad(boundaries.length)}</span>
-            </h3>
+            <h3 className="rule-head">Boundaries</h3>
             {boundaries.map((k) => row(`boundary:${k}`, BOUNDARY_SPECS[k].name, <BoundaryPreview kind={k} />))}
           </section>
         )}
         {explain.length > 0 && (
           <section>
-            <h3 className="rule-head">
-              <span className="swatch-sq" style={{ background: NOTE_COLOR }} />
-              Annotate
-              <span className="rule-count">{pad(explain.length)}</span>
-            </h3>
+            <h3 className="rule-head">Annotate</h3>
             {explain.map((x) => row(x.kind, x.name, x.preview))}
           </section>
         )}
         {!groups.some((g) => g.types.length) && !boundaries.length && !explain.length && <p className="quiet pad">No part matches “{query}”.</p>}
       </div>
-      <p className="palette-foot">Drag onto the sheet or click to add; Enter adds the first match. Drag between items to connect.</p>
     </aside>
   );
 }

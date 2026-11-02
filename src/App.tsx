@@ -16,7 +16,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { toMermaid } from '../core/export.ts';
-import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { ApiError, api, shared, type LiveLoad, type Me, type Plugins, type Summary } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt } from './boundaries.ts';
@@ -24,20 +24,19 @@ import { EdgeContext, SketchContext, edgeTypes, nodeTypes } from './canvas.tsx';
 import type { Pt } from './edges.ts';
 import { layout, placeNew, type LayoutKind } from './layout.ts';
 import { SequenceView } from './sequence.tsx';
-import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES, guessType } from './shapes.ts';
-import { type AddKind, DRAG_MIME, Palette, ShapePreview } from './palette.tsx';
+import { DECISION_SIZE, NOTE_SIZE, SHAPES, guessType } from './shapes.ts';
+import { type AddKind, AddMenu, DRAG_MIME, ShapePreview } from './palette.tsx';
 import { type FlowAt } from './fields.tsx';
 import { errorText, type Editing, MAX_IMPORT } from './format.ts';
 import { type ExportKind, InlineEdit } from './menus.tsx';
 import { Designs } from './designs.tsx';
 import { PresentBar, ReviewBar } from './bars.tsx';
-import { Dock } from './dock.tsx';
 import { exportDesign, readSource } from './transfer.ts';
 import { TopBar } from './topbar.tsx';
 import { deriveSheet } from './derive.ts';
 import { useDesignStore } from './use-design-store.ts';
-import { DOCKS, useDocks, useSketch, useTheme } from './use-prefs.ts';
-import { Inspector } from './inspector.tsx';
+import { useMinimap, useSketch, useTheme } from './use-prefs.ts';
+import { Inspector, StepDetails } from './inspector.tsx';
 import { Connections } from './connections.tsx';
 import { NewDesign } from './new-design.tsx';
 
@@ -49,6 +48,8 @@ const isAddKind = (k: string): k is AddKind => k === 'note' || k === 'decision' 
 
 /** Marks clipboard content copied from this sheet. */
 const CLIP_MIME = 'application/x-system-design';
+/** Share of the window the step details may take; the stylesheet's .review-sheet max-height matches. */
+const DETAILS_HEIGHT = 0.42;
 /** Largest file a drop imports; bigger ones would hang the page while parsing. */
 
 
@@ -83,6 +84,8 @@ function Shell() {
   const [creating, setCreating] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [finding, setFinding] = useState(false);
   const [plugins, setPlugins] = useState<Plugins | null>(null);
   const [me, setMe] = useState<Me>(null);
   useEffect(() => void api.me().then(setMe, () => undefined), []);
@@ -98,7 +101,7 @@ function Shell() {
   const [presenting, setPresenting] = useState(false);
   const [theme, setTheme] = useTheme();
   const [sketch, setStyle] = useSketch();
-  const { docks, toggleDock, resizeDock, inset } = useDocks(presenting);
+  const [minimap, setMinimap] = useMinimap();
   const [flow, setFlow] = useState<FlowAt | null>(null);
   // Stops of a flow being drawn by clicking parts on the sheet.
   const [recording, setRecording] = useState<string[] | null>(null);
@@ -116,15 +119,8 @@ function Shell() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const findRef = useRef<HTMLInputElement>(null);
   const fittedFor = useRef<string | null>(null);
-  const { screenToFlowPosition, fitView, getNodes, getInternalNode } = useReactFlow();
-  // Floating panels cover the canvas edges, so fitting leaves room for them, the top bar and the review bar.
+  const { screenToFlowPosition, fitView, zoomIn, zoomOut, getNodes, getInternalNode } = useReactFlow();
   const fitOpts = useRef<FitViewOptions>({});
-  fitOpts.current = {
-    padding: { left: `${inset('left') + 40}px`, right: `${inset('right') + 40}px`, top: presenting ? '40px' : '84px', bottom: '120px' },
-    duration: 300,
-    maxZoom: 1.2,
-  };
-
 
   const refreshLists = useCallback(() => {
     api.designs().then(setDesigns).catch((e) => setError(errorText(e)));
@@ -264,6 +260,17 @@ function Shell() {
   const maxIndex = design ? (firstUnseen >= 0 ? firstUnseen : design.steps.length - 1) : 0;
   const view = Math.min(viewIndex, maxIndex);
   const current = design?.steps[view];
+  // A step that needs reading or a choice opens with its details; the reviewer's own choice for a step stands after that.
+  const [stepOpen, setStepOpen] = useState<Record<string, boolean>>({});
+  const detailsOpen = !!current && (stepOpen[current.id] ?? (!!current.options || design!.decisions.some((x) => x.step === current.id)));
+  // A selected item swaps the step details for its own card.
+  const focused = !!design && [...design.components, ...design.connections, ...design.notes, ...design.decisions, ...design.boundaries].some((x) => x.id === selected);
+  // The bars float over the sheet, so fitting leaves room for them and for the details unfolded above the review bar.
+  fitOpts.current = {
+    padding: { left: '40px', right: '40px', top: presenting ? '40px' : '72px', bottom: !presenting && detailsOpen ? `${Math.round(window.innerHeight * DETAILS_HEIGHT) + 88}px` : '96px' },
+    duration: 300,
+    maxZoom: 1.2,
+  };
 
   const inOption = useCallback(
     (x: { step: string; option?: string }) => !x.option || x.option === (optionView[x.step] ?? design?.steps.find((s) => s.id === x.step)?.options?.[0].id),
@@ -351,6 +358,7 @@ function Shell() {
       else newId = m.addComponent(d, { type: kind as keyof typeof SHAPES, label: SHAPES[kind as keyof typeof SHAPES].name, boundary: inside, position, step, reopen: false });
     });
     setSelected(newId);
+    setAdding(false);
   };
 
   // Dragging a boundary by its tab carries everything inside it along.
@@ -647,7 +655,7 @@ function Shell() {
   const seenNext = () => {
     if (!design || !current) return;
     if (current.seen) return goTo(view + 1);
-    if (current.options) return setError('Pick one of this step’s options first (details panel).');
+    if (current.options) return setError('Pick one of this step’s options first (step details).');
     change((d) => {
       d.steps[view].seen = true;
     });
@@ -678,6 +686,7 @@ function Shell() {
       const mod = e.ctrlKey || e.metaKey, key = e.key.toLowerCase();
       if (mod && key === 'f' && design) {
         e.preventDefault();
+        setFinding(true);
         findRef.current?.focus();
         return;
       }
@@ -686,6 +695,8 @@ function Shell() {
         if (key === 'z') undo(!e.shiftKey);
         else if (key === 'y') undo(false);
         else if (key === 'd') duplicate();
+        else if (design && (key === '+' || key === '=')) void zoomIn({ duration: 150 });
+        else if (design && key === '-') void zoomOut({ duration: 150 });
         else if (key === 'c' || key === 'x' || key === 'v') {
           // The browser follows with a clipboard event (handled below, so text travels to and from other apps);
           // where none comes, the key acts on the sheet's own clipboard.
@@ -709,6 +720,11 @@ function Shell() {
         setSelected(null);
         setRecording(null);
         setSequence(null);
+      }
+      if (e.key === '/' && design) {
+        e.preventDefault();
+        setAdding(true);
+        return;
       }
       if (selected) return;
       if (e.key === 'ArrowRight') {
@@ -779,20 +795,16 @@ function Shell() {
 
   return (
     <SketchContext.Provider value={sketch}>
-      <div
-        className={`app${presenting ? ' presenting' : ''}`}
-        style={{ '--left': `${inset('left')}px`, '--right': `${inset('right')}px` } as React.CSSProperties}
-      >
+      <div className={`app${presenting ? ' presenting' : ''}`}>
         <TopBar
           design={design}
           designs={designs}
           currentId={id}
           me={me}
-          docks={docks}
-          onToggleDock={toggleDock}
           canUndo={!!hist.current.past.length}
           canRedo={!!hist.current.future.length}
           onUndo={undo}
+          onFind={() => setFinding(true)}
           tag={tag}
           onTag={setTag}
           live={live}
@@ -803,6 +815,8 @@ function Shell() {
           exportExtras={pluginExports}
           onExport={exportAs}
           onPresent={() => present(true)}
+          minimap={minimap}
+          onMinimap={setMinimap}
           sketch={sketch}
           onSketch={setStyle}
           theme={theme}
@@ -811,7 +825,7 @@ function Shell() {
           onPickDesign={(x) => (setTrail([]), setId(x))}
           onBrowse={() => setBrowsing(true)}
           onConnections={() => setConnecting(true)}
-          find={design ? { design, visible: nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id)), onPick: findPick, inputRef: findRef } : null}
+          find={design && finding ? { design, visible: nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id)), onPick: findPick, inputRef: findRef, onClose: () => setFinding(false) } : null}
         />
 
         {design && current ? (
@@ -873,20 +887,18 @@ function Shell() {
                   minZoom={0.2}
                   proOptions={{ hideAttribution: true }}
                 >
-                  <Background gap={20} size={1.2} />
-                  {!presenting && <Controls showInteractive={false} position="top-left" fitViewOptions={fitOpts.current} />}
-                  {!presenting && (
+                  <Background gap={28} size={1} />
+                  {!presenting && <Controls showZoom={false} showInteractive={false} position="bottom-right" fitViewOptions={fitOpts.current} />}
+                  {!presenting && minimap && (
                     <MiniMap
                       position="top-right"
                       pannable
                       zoomable
                       ariaLabel="Overview"
                       style={{ width: 160, height: 104 }}
-                      nodeColor={(n) =>
-                        n.type === 'component' ? GROUP_COLOR[SHAPES[(n.data as { type: ComponentType }).type].group] : n.type === 'note' ? NOTE_COLOR : n.type === 'decision' ? 'var(--decision)' : 'transparent'
-                      }
-                      nodeStrokeColor={(n) => (n.type === 'boundary' ? BOUNDARY_SPECS[(n.data as { kind: BoundaryKind }).kind].color : 'transparent')}
-                      nodeStrokeWidth={3}
+                      nodeColor={(n) => (n.type === 'boundary' ? 'transparent' : 'var(--quiet)')}
+                      nodeStrokeColor={(n) => (n.type === 'boundary' ? 'var(--quiet)' : 'transparent')}
+                      nodeStrokeWidth={2}
                     />
                   )}
                   <ViewportPortal>{editing && <InlineEdit key={editing.id} {...editing} onDone={finishEdit} />}</ViewportPortal>
@@ -922,18 +934,21 @@ function Shell() {
                   onRequestChanges={requestChanges}
                   diff={diff}
                   onDiff={() => setDiff((x) => !x)}
-                />
+                  open={detailsOpen && !focused}
+                  onToggle={() => {
+                    setSelected(null);
+                    setStepOpen((o) => ({ ...o, [current.id]: focused || !detailsOpen }));
+                  }}
+                >
+                  <StepDetails design={design} stepId={current.id} flow={flow} onFlow={setFlow} recording={recording} onRecording={startRecording} onSequence={setSequence} inOption={inOption} optionView={optionView} onOption={(s, o) => setOptionView((v) => ({ ...v, [s]: o }))} onPickOption={pickOption} change={change} onSelect={setSelected} />
+                </ReviewBar>
               )}
             </div>
-            {docks.left.open && (
-              <Dock side="left" width={docks.left.w} onResize={(w) => resizeDock('left', w)} onReset={() => resizeDock('left', DOCKS.left.w)}>
-                <Palette onAdd={(k) => add(k)} />
-              </Dock>
-            )}
-            {docks.right.open && (
-              <Dock side="right" width={docks.right.w} onResize={(w) => resizeDock('right', w)} onReset={() => resizeDock('right', DOCKS.right.w)}>
-                <Inspector design={design} selected={selected} stepId={current.id} flow={flow} onFlow={setFlow} recording={recording} onRecording={startRecording} onSequence={setSequence} inOption={inOption} optionView={optionView} onOption={(s, o) => setOptionView((v) => ({ ...v, [s]: o }))} onPickOption={pickOption} designs={designs} onOpenInside={(c) => void drill(c.detail!, c.label)} onCreateInside={(c) => void createInside(c)} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
-              </Dock>
+            {!presenting && <AddMenu open={adding} onOpen={setAdding} onAdd={(k) => add(k)} />}
+            {!presenting && focused && (
+              <div className="card">
+                <Inspector design={design} selected={selected} stepId={current.id} inOption={inOption} designs={designs} onOpenInside={(c) => void drill(c.detail!, c.label)} onCreateInside={(c) => void createInside(c)} change={change} onSelect={setSelected} onDelete={(x) => (remove([x]), setSelected(null))} />
+              </div>
             )}
           </div>
         ) : (

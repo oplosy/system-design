@@ -35,6 +35,24 @@ export async function openCopy(page: Page, request: APIRequestContext, id: strin
   await expect.poll(async () => (await saved(request, id)).components.every((c) => c.position), { intervals: [300, 500, 800] }).toBe(true);
 }
 
+/** Picks an entry of the menu behind the ⋯ button. */
+export async function more(page: Page, name: string) {
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await page.getByRole('menu', { name: 'More' }).getByRole('menuitem', { name, exact: true }).click();
+}
+
+/** Opens the parts from the + beside the sheet and returns their search box. */
+export async function openParts(page: Page) {
+  await page.getByRole('button', { name: 'Add a part', exact: true }).click();
+  return page.getByPlaceholder(/^Search: /);
+}
+
+/** Unfolds the current step's details above the review bar. */
+export async function openDetails(page: Page) {
+  const title = page.getByRole('region', { name: 'Step review' }).locator('.review-title');
+  if ((await title.getAttribute('aria-expanded')) !== 'true') await title.click();
+}
+
 /**
  * The middle of an element on the page, once it has stopped moving: the sheet animates to fit its parts after a layout,
  * and a slower machine is still mid-animation when a test would otherwise aim at it.

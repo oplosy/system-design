@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { openCopy, saved } from './helpers.ts';
+import { more, openCopy, saved } from './helpers.ts';
 
 // The server loads examples/plugins/service-list.mjs: a "# services" importer, a CSV exporter and a ticket link.
 
 test('a plugin format appears in the Export menu and downloads its file', async ({ page, request }) => {
   await openCopy(page, request, 'plugin-export-copy');
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await more(page, 'Export');
   const [download] = await Promise.all([page.waitForEvent('download'), page.locator('.menu').getByText('Parts as CSV').click()]);
   expect(download.suggestedFilename()).toBe('plugin-export-copy.csv');
   const text = await (await import('node:fs/promises')).readFile((await download.path())!, 'utf8');

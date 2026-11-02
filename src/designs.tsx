@@ -4,7 +4,7 @@ import { api, type Me, type Summary, type Trashed } from './api.ts';
 import { useDismiss } from './menus.tsx';
 import { pad, errorText, MAX_IMPORT } from './format.ts';
 
-export function DesignSwitcher({ designs, current, meta, onPick, onAll, onConnections, user }: { designs: Summary[]; current: string | null; meta?: string; onPick: (id: string) => void; onAll?: () => void; onConnections?: () => void; user: Me }) {
+export function DesignSwitcher({ designs, current, meta, onPick, onCreate, onAll, onConnections, user }: { designs: Summary[]; current: string | null; meta?: string; onPick: (id: string) => void; onCreate?: () => void; onAll?: () => void; onConnections?: () => void; user: Me }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -38,6 +38,17 @@ export function DesignSwitcher({ designs, current, meta, onPick, onAll, onConnec
               {d.unseen ? <span className="new-count">{d.unseen} new</span> : <span className="menu-meta">{pad(d.steps)} steps</span>}
             </button>
           ))}
+          {onCreate && (
+            <button
+              className="menu-item menu-all"
+              onClick={() => {
+                setOpen(false);
+                onCreate();
+              }}
+            >
+              New design
+            </button>
+          )}
           {onAll && (
             <button
               className="menu-item menu-all"

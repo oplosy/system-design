@@ -139,28 +139,28 @@ The palette has three kits:
 
 ## Reviewing steps
 
-**Review queue.** Steps added by an agent start unseen. You walk them in order and cannot jump past the first unseen step. **Mark seen** moves to the next one.
+**Review queue.** Steps added by an agent start unseen. You walk them in order and cannot jump past the first unseen step. **Mark seen** moves to the next one. The bar at the bottom shows where you are; click the step's title to unfold its details. A step with decisions or options opens with them unfolded.
 
-**Step diff.** **Diff** outlines what a step added (orange) or changed (amber, with old and new values in the step panel), and draws what it removed as a struck-out ghost. Agent edits through `update_component`, `update_connection`, `place_in` and `remove_item` are recorded on the step they land in (the latest by default), which reopens that step for review. **Revert step** undoes the whole step: it removes what the step added, puts back what the step removed or changed, and the step goes too, unless it is the only one. Ctrl+Z brings it back.
+**Step diff.** **Diff** in the step details outlines what a step added (blue) or changed (amber, with old and new values in the details), and draws what it removed as a struck-out ghost. Agent edits through `update_component`, `update_connection`, `place_in` and `remove_item` are recorded on the step they land in (the latest by default), which reopens that step for review. **Revert step** undoes the whole step: it removes what the step added, puts back what the step removed or changed, and the step goes too, unless it is the only one. Ctrl+Z brings it back.
 
 **Request changes.** Send a step back to the agent with a comment, or comment on one item in it. Items with open comments get a badge. The agent reads them with `get_feedback`, fixes the step and answers with `resolve_feedback`, which hands the step back for review.
 
-**Options.** An agent can offer alternatives in one step. Switch between them in the step panel to compare them on the sheet, then pick one: the others go, and a decision records the pick with the rest as alternatives. A step with options can't be marked seen until one is picked. If you told the agent your choice, it can apply it with `pick_option`.
+**Options.** An agent can offer alternatives in one step. Switch between them in the step details to compare them on the sheet, then pick one: the others go, and a decision records the pick with the rest as alternatives. A step with options can't be marked seen until one is picked. If you told the agent your choice, it can apply it with `pick_option`.
 
-**Presenting.** **Present** walks the steps full screen, for a meeting or a walkthrough. Flows can be played there too.
+**Presenting.** **Present** in the ⋯ menu walks the steps full screen, for a meeting or a walkthrough. Flows can be played there too.
 
 ## Working on the canvas
 
-- **Add** a part by dragging it from the palette or clicking it. Search the palette with words like `kafka`, `redis` or `s3`. Parts with the word in their name come first, and Enter adds the first match.
+- **Add** a part with the **+** beside the sheet or the `/` key: drag one out or click it. Search with words like `kafka`, `redis` or `s3`. Parts with the word in their name come first, and Enter adds the first match.
 - **Connect** by dragging between two parts. Drag from a note or decision to a part to attach it.
 - **Group** by dropping a part into a box.
-- **Edit** by selecting an item and using the panel on the right. Double-click to rename. Press Delete or Backspace to remove.
-- **Find** anything on the sheet with **Find on sheet** (Ctrl+F).
-- **Layout** arranges the sheet: Layered, Tiers, Flow, Tree, Radial, Organic or Grid, for everything or only the selected items.
-- **Appearance** switches the theme (light, dark, system) and the drawing style. **Sketch** is hand-drawn, for a whiteboard feel; **Clean** is crisp, for docs. Both draw the same data.
+- **Edit** by selecting an item and using the card that opens on the right. Double-click to rename. Press Delete or Backspace to remove.
+- **Find** anything on the sheet with Ctrl+F, or **Find** in the ⋯ menu.
+- **Layout** in the ⋯ menu arranges the sheet: Layered, Tiers, Flow, Tree, Radial, Organic or Grid, for everything or only the selected items.
+- **Appearance** in the ⋯ menu switches the theme (light, dark, system) and the drawing style. **Clean**, the default, is crisp, for docs; **Sketch** is hand-drawn and colored by group, for a whiteboard feel. Both draw the same data. **Overview map** turns on the map of the whole sheet.
 - **Drill down.** A part can open another design that shows its insides, C4-style. Link one under **Opens**, or start an empty one with **New inside**. The badge on the part opens it and a breadcrumb leads back.
-- **Code links.** Under **Code**, a part can say where its code lives: a web address, or a path that opens against the design's **Repo** (set under **Design** in the step panel, such as `https://github.com/acme/shop/tree/main`). Parts with a link get a `</>` badge. Agents set `code` on parts and `repo` with `update_design`; a compose import fills `code` from each service's `build` path.
-- **Tag views.** Tag parts by concern under **Tags**: "payments", "pii", a team. **View** in the top bar then shows one tag at a time, and the other parts, their lines and notes, and boxes left empty step aside. One model gives a payments view, a PII view and a per-team view.
+- **Code links.** Under **Code**, a part can say where its code lives: a web address, or a path that opens against the design's **Repo** (set under **Design** in the step details, such as `https://github.com/acme/shop/tree/main`). Parts with a link get a `</>` badge. Agents set `code` on parts and `repo` with `update_design`; a compose import fills `code` from each service's `build` path.
+- **Tag views.** Tag parts by concern under **Tags**: "payments", "pii", a team. **View** in the ⋯ menu then shows one tag at a time, and the other parts, their lines and notes, and boxes left empty step aside. One model gives a payments view, a PII view and a per-team view.
 
 Edits save themselves. If you and an agent change the same design at once, your edits are replayed onto the agent's version instead of being dropped; where you both changed the same field, yours wins and a message says which.
 
@@ -173,6 +173,8 @@ Edits save themselves. If you and an agent change the same design at once, your 
 | Ctrl/Cmd+C, X, V | Copy, cut, paste. Copied parts also reach other apps as a Mermaid flowchart |
 | Ctrl/Cmd+D | Duplicate |
 | Ctrl/Cmd+F | Find on the sheet |
+| / | Add a part |
+| Ctrl/Cmd and + or - | Zoom in or out |
 | Delete, Backspace | Remove the selected item |
 | Right arrow | Mark the step seen and go to the next one |
 | Left arrow | Previous step |
@@ -183,13 +185,13 @@ While presenting: Right, Space or Page Down go forward, Left or Page Up go back,
 
 ## Understanding a design
 
-**Flows.** Play a flow from the step panel or while presenting: the path lights up and each hop is numbered. Draw one with **New flow** by clicking connected parts in order. **Sequence** shows a flow as a sequence diagram, with replies dashed, and copies it as Mermaid.
+**Flows.** Play a flow from the step details or while presenting: the path lights up and each hop is numbered. Draw one with **New flow** by clicking connected parts in order. **Sequence** shows a flow as a sequence diagram, with replies dashed, and copies it as Mermaid.
 
 **Capacity notes.** A line can carry its load (requests per second) and one-way latency (ms). Both show under the line, and a flow adds up its hops' latency. A reply counts its line again.
 
 **Capacity and failure.** A part can carry the requests per second it can take (**Capacity**, `capacity` for agents). The inspector shows the load on the lines into it as of the step on the sheet. **If it fails** shows the flows that pass through the part and the parts users and clients could no longer reach. Agents ask the same with `simulate_failure`.
 
-**Cost.** A part can carry its monthly cost (**Cost**, `cost` for agents) in the design's currency, USD unless changed under **Design**. The part shows the cost as of the step on the sheet. The step panel shows the total so far and how much the step moves it, counting the parts it adds, cost edits (yours and the agent's) and removals. An edit in the inspector is recorded on the step on the sheet without reopening it; a cost a later step changed is shown read-only there.
+**Cost.** A part can carry its monthly cost (**Cost**, `cost` for agents) in the design's currency, USD unless changed under **Design**. The part shows the cost as of the step on the sheet. The step details show the total so far and how much the step moves it, counting the parts it adds, cost edits (yours and the agent's) and removals. An edit in the inspector is recorded on the step on the sheet without reopening it; a cost a later step changed is shown read-only there.
 
 **Lint.** Amber badges flag likely problems. Hover a badge to read it. Agents run the same checks with `lint`.
 
@@ -233,7 +235,7 @@ Copied parts pasted back into the app keep every detail. A [plugin](#plugins) ca
 
 ## Taking things out
 
-**Export** in the top bar:
+**Export** in the ⋯ menu:
 
 | Format | Notes |
 |---|---|
@@ -391,9 +393,9 @@ This draws the design (boundaries, parts, lines and their load; light and dark) 
 
 ## Live load
 
-Set `PROMETHEUS_URL` (Prometheus or anything with its query API: Mimir, Thanos, VictoriaMetrics) before `start`, and **Live** in the top bar replaces the designed numbers on the lines with measured ones every 15 seconds: requests per second, one-way latency (half the caller's median) and the share of failed calls. A line with 5% or more failures turns red.
+Set `PROMETHEUS_URL` (Prometheus or anything with its query API: Mimir, Thanos, VictoriaMetrics) before `start`, and **Live load** in the ⋯ menu replaces the designed numbers on the lines with measured ones every 15 seconds: requests per second, one-way latency (half the caller's median) and the share of failed calls. A line with 5% or more failures turns red.
 
-It reads the service graph metrics (`traces_service_graph_*`) that the OpenTelemetry collector's servicegraph connector and Tempo write. A service matches the part whose **Links** has an `otel` entry with its name, else the part imported from its traces, else the part with its name. The button's tooltip lists the pairs no line matched. A metrics [plugin](#plugins) can feed Live too, with or without Prometheus.
+It reads the service graph metrics (`traces_service_graph_*`) that the OpenTelemetry collector's servicegraph connector and Tempo write. A service matches the part whose **Links** has an `otel` entry with its name, else the part imported from its traces, else the part with its name. The menu entry's tooltip lists the pairs no line matched. A metrics [plugin](#plugins) can feed Live too, with or without Prometheus.
 
 ## Connections
 
@@ -602,7 +604,7 @@ The app folder is the parent of the data folder: `%APPDATA%\system-design` on Wi
 - **`readOnlyHint`** is the MCP server's own claim. A server that lies about it isn't caught.
 - **Plugins** can't be stopped if they block the event loop, since they run in the app's process.
 - **MCP servers** using OAuth or the older SSE transport aren't supported.
-- **Phone width** has no layout of its own. At about 375px wide the parts and details panels open over each other; hide one with the buttons in the top bar. The app is meant for a desktop window.
+- **Phone width** has no layout of its own. The app is meant for a desktop window; at about 375px wide a selected item's card covers most of the sheet.
 - **Imports:** draw.io reads the first page only, Helm needs rendering first, and Structurizr is read at container level.
 
 ## Layout of this repository

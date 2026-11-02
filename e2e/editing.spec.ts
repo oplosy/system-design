@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { centerOf, openCopy, saved } from './helpers.ts';
+import { centerOf, more, openCopy, openDetails, openParts, saved } from './helpers.ts';
 
 const position = async (request: Parameters<typeof saved>[0], id: string, part: string) => (await saved(request, id)).components.find((c) => c.id === part)?.position;
 
@@ -35,6 +35,7 @@ test('a comment on the step is saved', async ({ page, request }) => {
   await openCopy(page, request, 'comment-copy');
   const count = async () => ((await saved(request, 'comment-copy')).comments ?? []).length;
   const before = await count();
+  await openDetails(page);
   await page.getByPlaceholder('Comment on this step for the agent').fill('Why a single server?');
   await page.getByRole('button', { name: 'Comment', exact: true }).click();
   await expect(page.getByText('Why a single server?')).toBeVisible();
@@ -64,7 +65,7 @@ test('adding a boundary from the palette puts a box on the sheet and saves it', 
   await openCopy(page, request, 'box-copy');
   const boxes = async () => ((await saved(request, 'box-copy')).boundaries ?? []).length;
   const before = await boxes();
-  await page.getByPlaceholder(/^Search: /).fill('vpc');
+  await (await openParts(page)).fill('vpc');
   await page.getByRole('button', { name: /^VPC/ }).first().click();
   await expect(page.locator('.react-flow__node-boundary')).toHaveCount(1);
   await expect.poll(boxes).toBe(before + 1);
@@ -84,7 +85,7 @@ test('Ctrl-click selects several parts and Delete removes them together', async 
 
 test('presenting walks the steps with the arrow keys and Escape leaves', async ({ page, request }) => {
   await openCopy(page, request, 'present-copy', { seen: true });
-  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  await more(page, 'Present');
   const counter = page.getByRole('region', { name: 'Presentation' }).locator('.present-no');
   await expect(counter).toHaveText('03/03');
   await page.keyboard.press('ArrowLeft');
@@ -99,7 +100,7 @@ test('presenting walks the steps with the arrow keys and Escape leaves', async (
 
 test('palette search lists name matches first and Enter adds the closest one', async ({ page, request }) => {
   await openCopy(page, request, 'search-copy');
-  const search = page.getByPlaceholder(/^Search: /);
+  const search = await openParts(page);
   await search.fill('gateway');
   // Inside each group the parts with the word in their name come before the ones that only list it as a keyword.
   const groups = await page.locator('.palette-scroll section').evaluateAll((sections) => sections.map((s) => [...s.querySelectorAll('.part-name')].map((n) => n.textContent ?? '')));
@@ -117,7 +118,7 @@ test('palette search lists name matches first and Enter adds the closest one', a
   await search.fill('queue');
   await expect(page.locator('.palette .part-name').first()).toHaveText('Queue');
   await search.press('Enter');
-  await expect(search).toHaveValue('');
+  await expect(search).toHaveCount(0);
   await expect.poll(parts).toBe(before + 1);
 });
 
@@ -141,6 +142,7 @@ test('double-clicking a part renames it in place and the name is saved', async (
 test('a flow is drawn by clicking connected parts in order, then saved', async ({ page, request }) => {
   await openCopy(page, request, 'flow-copy');
   const flows = async () => (await saved(request, 'flow-copy')).flows ?? [];
+  await openDetails(page);
   await page.getByRole('button', { name: 'New flow' }).click();
   await page.getByLabel('Flow title').fill('Open the app');
   for (const name of ['Browser', 'App server', 'Database']) await page.locator('.react-flow__node', { hasText: name }).click();
