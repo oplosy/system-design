@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { COMPONENT_TYPES } from '../core/schema.ts';
-import { GROUPS, KITS, SHAPES, drawShape, guessType, kitsOf, searchRank, searchText } from './shapes.ts';
+import { GROUPS, KITS, SHAPES, drawShape, guessType, insideOf, kitsOf, searchRank, searchText } from './shapes.ts';
 import type { ComponentType } from '../core/schema.ts';
 
 test('every component type draws cleanly in both styles and sits in a palette group', () => {
@@ -70,4 +70,12 @@ test('a search ranks names before keywords', () => {
   assert.equal(searchRank('stream', ['kafka']), 2);
   assert.equal(searchRank('queue', ['kafka']), undefined);
   assert.equal(searchRank('queue', []), undefined);
+});
+
+test('every hand-drawn hatch has an inside to be clipped to, so it cannot spill past the outline', () => {
+  for (const t of COMPONENT_TYPES) {
+    const hatched = drawShape(t, true, 3).some((p) => p.hatch);
+    if (hatched) assert.ok(insideOf(t).length > 0, `${t}: hatching with nothing to clip it to`);
+    assert.ok(!drawShape(t, false, 3).some((p) => p.hatch), `${t}: the clean style has no hatching`);
+  }
 });

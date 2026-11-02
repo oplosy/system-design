@@ -1,8 +1,9 @@
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useState } from 'react';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType } from '../core/schema.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SketchContext } from './canvas.tsx';
-import { GROUPS, KITS, NOTE_COLOR, SHAPES, drawShape, kitsOf, searchRank, type Kit } from './shapes.ts';
+import { ShapeDrawing } from './shape-drawing.tsx';
+import { GROUPS, KITS, NOTE_COLOR, SHAPES, kitsOf, searchRank, type Kit } from './shapes.ts';
 import { pad } from './format.ts';
 
 export type AddKind = ComponentType | 'note' | 'decision' | `boundary:${BoundaryKind}`;
@@ -11,12 +12,9 @@ export const DRAG_MIME = 'application/x-system-design';
 export function ShapePreview({ type, width = 56, height = 38 }: { type: ComponentType; width?: number; height?: number }) {
   const sketch = useContext(SketchContext);
   const spec = SHAPES[type];
-  const paths = useMemo(() => drawShape(type, sketch, 7), [type, sketch]);
   return (
     <svg width={width} height={height} viewBox={`-4 -4 ${spec.w + 8} ${spec.h + 8}`} aria-hidden="true" style={{ flex: 'none' }}>
-      {paths.map((p, i) => (
-        <path key={i} d={p.d} vectorEffect="non-scaling-stroke" style={{ stroke: p.stroke, strokeWidth: 1.1, fill: p.fill ?? 'none' }} />
-      ))}
+      <ShapeDrawing type={type} sketch={sketch} seed={7} width={1.1} fixed />
     </svg>
   );
 }

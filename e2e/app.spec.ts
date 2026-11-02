@@ -98,3 +98,11 @@ test('pasting a Mermaid flowchart adds a step, and undo removes it', async ({ pa
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(steps).toBe(before);
 });
+
+test('sketch hatching is clipped to the shape, and the clean style has none', async ({ page }) => {
+  const hatched = page.locator('.react-flow__node path[clip-path]');
+  await expect(hatched.first()).toBeAttached();
+  await page.getByRole('button', { name: 'Appearance', exact: true }).click();
+  await page.getByRole('radio', { name: 'Clean' }).click();
+  await expect(hatched).toHaveCount(0);
+});

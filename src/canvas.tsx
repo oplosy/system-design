@@ -1,11 +1,11 @@
 import { createContext, memo, useContext, useMemo, useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, Handle, NodeToolbar, Position, useInternalNode, useNodeId, useReactFlow, type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps } from '@xyflow/react';
-import type { PathInfo } from 'roughjs/bin/core';
 import { money } from '../core/export.ts';
 import type { BoundaryKind, ComponentType, ConnectionKind } from '../core/schema.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { edgeGeometry, type Pt, type Route } from './edges.ts';
-import { DECISION_SIZE, NOTE_COLOR, NOTE_SIZE, SHAPES, drawShape, gen, hash, options, toPaths } from './shapes.ts';
+import { Paths, ShapeDrawing } from './shape-drawing.tsx';
+import { DECISION_SIZE, NOTE_COLOR, NOTE_SIZE, SHAPES, gen, hash, options, toPaths } from './shapes.ts';
 
 export const SketchContext = createContext(true);
 /** What edges and nodes need from the app: whether editing is allowed, how to save a bend, start a label edit, delete, or open a part's inner design. */
@@ -47,18 +47,6 @@ export type DecisionNode = Node<Common & { title: string; why: string }, 'decisi
 export type BoundaryNode = Node<Common & { kind: BoundaryKind; label: string; detail?: string; w: number; h: number }, 'boundary'>;
 export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; relation?: ConnectionKind; route?: Route; bend?: number; qps?: number; latency?: number; errors?: number; live?: boolean; unseen: boolean; faded: boolean; added?: boolean; hops?: number[]; hopOn?: boolean }, 'rough'>;
 
-function Paths({ paths, dashed }: { paths: PathInfo[]; dashed?: boolean }) {
-  return paths.map((p, i) => (
-    <path
-      key={i}
-      d={p.d}
-      style={{ stroke: p.stroke, strokeWidth: p.strokeWidth, fill: p.fill ?? 'none' }}
-      strokeDasharray={dashed && p.stroke === 'currentColor' ? '7 5' : undefined}
-      strokeLinecap="round"
-    />
-  ));
-}
-
 function Frame({ w, h, data, children }: { w: number; h: number; data: Common; children: React.ReactNode }) {
   return (
     <div className={`sd-node${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}${data.changed ? ' changed' : ''}${data.removed ? ' removed' : ''}`} style={{ width: w, height: h }}>
@@ -85,11 +73,10 @@ export const ComponentNodeView = memo(function ComponentNodeView({ id, data }: N
   const sketch = useContext(SketchContext);
   const { onOpen } = useContext(EdgeContext);
   const spec = SHAPES[data.type];
-  const paths = useMemo(() => drawShape(data.type, sketch, hash(id)), [data.type, sketch, id]);
   return (
     <Frame w={spec.w} h={spec.h} data={data}>
       <svg width={spec.w} height={spec.h} overflow="visible">
-        <Paths paths={paths} dashed={spec.dashed} />
+        <ShapeDrawing type={data.type} sketch={sketch} seed={hash(id)} dashed={spec.dashed} />
       </svg>
       <div className="node-label" style={{ left: spec.labelX ?? spec.w / 2, top: spec.labelY, maxWidth: spec.w + 30 }}>
         <div>{data.label}</div>

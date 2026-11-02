@@ -49,9 +49,22 @@ export function options(sketch: boolean, fill: string | undefined, seed: number,
 
 export const toPaths = (drawables: Drawable[]): PathInfo[] => drawables.flatMap((d) => gen.toPaths(d));
 
-export function drawShape(type: ComponentType, sketch: boolean, seed: number) {
+/** A path rough.js drew; `hatch` marks the lines of a sketch-style fill, as opposed to the outline. */
+export type ShapePath = PathInfo & { hatch?: boolean };
+
+export function drawShape(type: ComponentType, sketch: boolean, seed: number): ShapePath[] {
   const s = SHAPES[type];
-  return toPaths(s.draw(options(sketch, GROUP_COLOR[s.group], seed), s.w, s.h));
+  const color = GROUP_COLOR[s.group];
+  // The outline is drawn in the ink colour; only the hatching takes the group's.
+  return toPaths(s.draw(options(sketch, color, seed), s.w, s.h)).map((p) => (sketch && p.stroke === color ? { ...p, hatch: true } : p));
+}
+
+/** The exact inside of a part, one path per filled piece: what hand-drawn hatching is clipped to. Empty when the part has no fill. */
+export function insideOf(type: ComponentType): string[] {
+  const s = SHAPES[type];
+  return toPaths(s.draw(options(false, GROUP_COLOR[s.group], 1), s.w, s.h))
+    .filter((p) => p.fill && p.fill !== 'none')
+    .map((p) => p.d);
 }
 
 export { gen };
