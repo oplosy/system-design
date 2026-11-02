@@ -1788,7 +1788,7 @@ export const SHAPES: Record<ComponentType, Spec> = {
   },
   timer: tiled('Timer / wait', 'sw-flow', 'timer wait delay timeout schedule sleep time event', glyph.clock, 160),
 
-  // Added later; keeps the earlier parts first when guessType meets a shared word.
+  // Parts added after the first release; guessType ranks them last (see FALLBACK).
   'policy-engine': tiled('Policy engine', 'edge', 'opa open policy agent kyverno cedar authz authorization policy as code rego pdp pep gatekeeper access control abac rbac', glyph.gear, 170),
   autoscaler: tiled('Autoscaler', 'compute', 'autoscaling hpa vpa keda cluster autoscaler karpenter asg auto scaling group scale out scale in elastic capacity', glyph.updown, 160),
   'dead-letter-queue': {
@@ -1942,7 +1942,18 @@ export { gen };
 
 // Words too common across parts to say anything about the type.
 const GENERIC = new Set('api app apps server servers web data service services system the and for with main core new application node'.split(' '));
-const WORDS = Object.entries(SHAPES).map(([type, s]) => [type, new Set(`${s.name} ${s.keywords}`.toLowerCase().split(/\s+/))] as const);
+/**
+ * Parts whose words only count when no other part has them, so a name like "Status page" or "Schema registry" never
+ * takes "page" from UI or "registry" from the container registry. Every other tie goes to the part listed first above.
+ */
+const FALLBACK = new Set<ComponentType>([
+  'policy-engine', 'transit-gateway', 'private-link', 'autoscaler', 'dead-letter-queue', 'schema-registry', 'status-page',
+  'vulnerability-scanner', 'data-catalog', 'llm-gateway', 'mcp-server', 'object', 'enum', 'deployment-node', 'lifeline',
+  'subprocess', 'document', 'data-store',
+]);
+const WORDS = Object.entries(SHAPES)
+  .map(([type, s]) => [type, new Set(`${s.name} ${s.keywords}`.toLowerCase().split(/\s+/))] as const)
+  .sort(([a], [b]) => Number(FALLBACK.has(a as ComponentType)) - Number(FALLBACK.has(b as ComponentType)));
 
 // Products listed under several parts, and the one they are usually drawn as.
 const PREFER: Record<string, ComponentType> = { redis: 'cache', database: 'sql-db', spring: 'service' };

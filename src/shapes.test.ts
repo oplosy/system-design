@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { COMPONENT_TYPES } from '../core/schema.ts';
-import { GROUPS, KITS, SHAPES, drawShape, kitsOf, searchText } from './shapes.ts';
+import { GROUPS, KITS, SHAPES, drawShape, guessType, kitsOf, searchText } from './shapes.ts';
+import type { ComponentType } from '../core/schema.ts';
 
 test('every component type draws cleanly in both styles and sits in a palette group', () => {
   const groups = new Set<string>(GROUPS.map((g) => g.key));
@@ -35,4 +36,21 @@ test('the software kit has diagram parts plus actors, services and stores', () =
   const software = COMPONENT_TYPES.filter((t) => kitsOf(t).includes('software'));
   for (const t of ['use-case', 'class', 'port', 'aggregate', 'choice', 'state', 'user', 'service', 'sql-db'] as const) assert.ok(software.includes(t), `${t} missing from software kit`);
   assert.ok(!software.includes('router'), 'network gear stays out of the software kit');
+});
+
+test('a word that several parts list is never guessed as a part that does not list it, and later parts do not take old words', () => {
+  const words = (t: ComponentType) => new Set(`${SHAPES[t].name} ${SHAPES[t].keywords}`.toLowerCase().split(/\s+/));
+  for (const t of COMPONENT_TYPES) {
+    for (const w of words(t)) {
+      // guessType splits on punctuation, so "anti-ddos" is looked up as the words "anti" and "ddos".
+      for (const p of w.split(/[^p{L}p{N}]+/u).filter((x) => x.length >= 3)) {
+        const owner = guessType(p);
+        if (owner) assert.ok(words(owner).has(p) || [...words(owner)].some((x) => x.split(/[^p{L}p{N}]+/u).includes(p)), `"${p}" guesses ${owner}, which does not list it`);
+      }
+    }
+  }
+  assert.equal(guessType('Single-Page App'), 'ui');
+  assert.equal(guessType('Container registry'), 'registry');
+  assert.equal(guessType('Schema registry'), 'registry');
+  assert.equal(guessType('uptime-kuma'), 'status-page');
 });
