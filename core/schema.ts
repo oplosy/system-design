@@ -292,6 +292,7 @@ export type RefKind = (typeof REF_KINDS)[number];
 export const RefSchema = z.object({
   kind: z.enum(REF_KINDS),
   /** A web address, or an identifier such as "checkout" (otel), "shop/deployment/api" (k8s) or an ARN (cloud). */
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: refusing them is the point
   value: z.string().trim().min(1).max(500).regex(/^[^\u0000-\u001f]*$/, 'no control characters'),
   label: z.string().trim().max(80).optional(),
 });

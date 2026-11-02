@@ -13,6 +13,9 @@ export type User = { email: string; name: string; canEdit: boolean };
 const SESSION_HOURS = 12;
 const LOGIN_MINUTES = 10;
 const SESSION = 'sd_session';
+// Keeps a #link through sign-in. The page's one inline script, allowed by its hash and nothing else.
+const SIGN_IN_SCRIPT = `location.replace('/auth/login?next=' + encodeURIComponent(location.hash))`;
+const SIGN_IN_POLICY = `default-src 'none'; script-src 'sha256-${createHash('sha256').update(SIGN_IN_SCRIPT).digest('base64')}'`;
 const LOGIN = 'sd_login';
 /** First path segment after /api or /api/v1 that only the machine's owner may reach. */
 const OWNER_ONLY = new Set(['hooks', 'mcp']);
@@ -178,8 +181,8 @@ export function createHub(config: HubConfig) {
       if (api) deny(res, 401, 'Sign in first.');
       else if (req.method === 'GET') {
         // The server never sees the #design/item part of an address, so the page passes it along.
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-        res.end(`<!doctype html><meta charset="utf-8"><title>Sign in</title><script>location.replace('/auth/login?next=' + encodeURIComponent(location.hash))</script><a href="/auth/login">Sign in</a>`);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': SIGN_IN_POLICY });
+        res.end(`<!doctype html><meta charset="utf-8"><title>Sign in</title><script>${SIGN_IN_SCRIPT}</script><a href="/auth/login">Sign in</a>`);
       } else redirect(res, '/auth/login');
       return true;
     }

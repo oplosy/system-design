@@ -14,12 +14,12 @@ export function NoDesigns({ onCreate, onBrowse }: { onCreate: () => void; onBrow
         <ShapePreview type="sql-db" width={64} height={48} />
       </div>
       <h2>No designs yet</h2>
-      <button className="btn ink lg" onClick={onCreate}>
+      <button type="button" className="btn ink lg" onClick={onCreate}>
         <Icon name="plus" />
         New design
       </button>
       {!shared && (
-        <button className="text-btn" onClick={onBrowse}>
+        <button type="button" className="text-btn" onClick={onBrowse}>
           <Icon name="folder" />
           All designs
         </button>

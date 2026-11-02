@@ -23,10 +23,11 @@ export class CrashGuard extends Component<Props, { error: Error | null }> {
         <p>{this.props.hint}</p>
         <code className="crash-detail">{error.message}</code>
         <div className="crash-actions">
-          <button className="btn" onClick={() => this.setState({ error: null })}>
+          <button type="button" className="btn" onClick={() => this.setState({ error: null })}>
             Try again
           </button>
           <button
+            type="button"
             className="btn"
             onClick={() => {
               // The address and the last-opened note both name the design, so a plain reload lands on the same failure.
@@ -41,7 +42,7 @@ export class CrashGuard extends Component<Props, { error: Error | null }> {
           >
             Leave this design
           </button>
-          <button className="btn ink" onClick={() => location.reload()}>
+          <button type="button" className="btn ink" onClick={() => location.reload()}>
             Reload
           </button>
         </div>

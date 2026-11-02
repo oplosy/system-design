@@ -67,7 +67,7 @@ const expandAll = (o: Record<string, string> = {}) => Object.fromEntries(Object.
 const WORDS = ['id', 'label', 'tech', 'tag', ...REF_KINDS];
 const HOLE = new RegExp(`\\{(${WORDS.join('|')})\\}`, 'g');
 
-const valueOf = (part: PartContext, word: string) => {
+const partValue = (part: PartContext, word: string) => {
   if (word === 'id' || word === 'label' || word === 'tech') return part[word];
   if (word === 'tag') return part.tags?.[0];
   return part.refs?.find((r) => r.kind === word)?.value;
@@ -79,7 +79,7 @@ export function fillArgs(args: Record<string, unknown>, part: PartContext) {
   const fill = (x: unknown): unknown => {
     if (typeof x === 'string') {
       return x.replace(HOLE, (_, word: string) => {
-        const value = valueOf(part, word);
+        const value = partValue(part, word);
         if (value === undefined) complete = false;
         return value ?? '';
       });

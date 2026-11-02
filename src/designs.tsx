@@ -16,6 +16,7 @@ export function DesignSwitcher({ designs, current, onPick, onCreate, onAll }: { 
   /** Closes the menu, then acts. */
   const item = (name: string, icon: IconName, onClick: () => void) => (
     <button
+      type="button"
       className="menu-row"
       onClick={() => {
         setOpen(false);
@@ -27,7 +28,7 @@ export function DesignSwitcher({ designs, current, onPick, onCreate, onAll }: { 
   );
   return (
     <div className="switcher" ref={ref} {...hover.area}>
-      <button className="switcher-btn" aria-haspopup="listbox" aria-expanded={open} {...hover.trigger} onClick={() => setOpen((o) => !o)}>
+      <button type="button" className="switcher-btn" aria-haspopup="listbox" aria-expanded={open} {...hover.trigger} onClick={() => setOpen((o) => !o)}>
         <span className="switcher-title">{cur?.title ?? 'Select a design'}</span>
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 3.5 5 7l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" /></svg>
       </button>
@@ -36,6 +37,7 @@ export function DesignSwitcher({ designs, current, onPick, onCreate, onAll }: { 
           <div role="listbox" aria-label="Designs">
             {designs.map((d) => (
               <button
+                type="button"
                 key={d.id}
                 role="option"
                 aria-selected={d.id === current}
@@ -137,7 +139,7 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
         <DialogHead id="designs-title" title="Designs" onClose={onClose} />
         <div className="designs-tools">
           <input className="find-input" autoFocus value={query} placeholder="Search designs" aria-label="Search designs" onChange={(e) => setQuery(e.target.value)} />
-          <button className="text-btn" onClick={() => setByName((x) => !x)} title="Change the order">
+          <button type="button" className="text-btn" onClick={() => setByName((x) => !x)} title="Change the order">
             <Icon name="sort" />
             {byName ? 'By name' : 'Recent'}
           </button>
@@ -159,16 +161,16 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
                   onBlur={(e) => rename(d.id, e.currentTarget.value)}
                 />
               ) : (
-                <button className="designs-open" title={d.description} onClick={() => onOpen(d.id)}>
+                <button type="button" className="designs-open" title={d.description} onClick={() => onOpen(d.id)}>
                   <span className="menu-name">{d.title}</span>
                   {d.unseen ? <span className="new-count">{d.unseen} new</span> : <span className="menu-meta">{ago(d.updated)}</span>}
                 </button>
               )}
               <span className="designs-actions">
-                <button className="text-btn" onClick={() => setRenaming(d.id)}><Icon name="sketch" />Rename</button>
-                <button className="text-btn" onClick={() => copy(d)}><Icon name="copy" />Copy</button>
-                <button className="text-btn" onClick={() => download(d.id)} title="Download as a .json file"><Icon name="export" />Download</button>
-                <button className="text-btn danger" onClick={() => run(() => api.trash(d.id))} title="Move to the trash; it can be restored"><Icon name="trash" />Delete</button>
+                <button type="button" className="text-btn" onClick={() => setRenaming(d.id)}><Icon name="sketch" />Rename</button>
+                <button type="button" className="text-btn" onClick={() => copy(d)}><Icon name="copy" />Copy</button>
+                <button type="button" className="text-btn" onClick={() => download(d.id)} title="Download as a .json file"><Icon name="export" />Download</button>
+                <button type="button" className="text-btn danger" onClick={() => run(() => api.trash(d.id))} title="Move to the trash; it can be restored"><Icon name="trash" />Delete</button>
               </span>
             </li>
           ))}
@@ -176,7 +178,7 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
         </ul>
         {trashed.length > 0 && (
           <div className="contents" {...hover.area}>
-            <button className="text-btn" aria-expanded={showTrash} {...hover.trigger} onClick={() => setShowTrash((x) => !x)}>
+            <button type="button" className="text-btn" aria-expanded={showTrash} {...hover.trigger} onClick={() => setShowTrash((x) => !x)}>
               <Icon name="trash" />
               Trash {trashed.length}
             </button>
@@ -189,7 +191,7 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
                     </span>
                     <span className="menu-meta">{ago(t.deleted)}</span>
                     <span className="designs-actions">
-                      <button className="text-btn" onClick={() => run(async () => (await api.restore(t.entry), loadTrash()))}><Icon name="undo" />Restore</button>
+                      <button type="button" className="text-btn" onClick={() => run(async () => (await api.restore(t.entry), loadTrash()))}><Icon name="undo" />Restore</button>
                     </span>
                   </li>
                 ))}
@@ -199,13 +201,13 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
         )}
         <footer className="dialog-foot designs-foot">
           {dir && (
-            <button className="text-btn" title={dir} onClick={() => navigator.clipboard?.writeText(dir)}>
+            <button type="button" className="text-btn" title={dir} onClick={() => navigator.clipboard?.writeText(dir)}>
               <Icon name="folder" />
               Copy folder path
             </button>
           )}
           <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => (e.target.files?.[0] && upload(e.target.files[0]), (e.target.value = ''))} />
-          <button className="btn" onClick={() => fileRef.current?.click()}><Icon name="upload" />Add from file</button>
+          <button type="button" className="btn" onClick={() => fileRef.current?.click()}><Icon name="upload" />Add from file</button>
         </footer>
       </div>
     </div>

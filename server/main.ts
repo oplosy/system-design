@@ -7,6 +7,7 @@ import { gzip } from 'node:zlib';
 import { closeMcp } from '../core/mcp-client.ts';
 import { createApi } from './api.ts';
 import { createHub, hubConfig } from './auth.ts';
+import { SECURITY_HEADERS } from './headers.ts';
 import { DIST } from './share.ts';
 
 const PORT = Number(process.env.PORT ?? 5180);
@@ -71,6 +72,7 @@ async function serveFile(pathname: string, accepts: string | undefined, res: htt
 }
 
 const server = http.createServer(async (req, res) => {
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(name, value);
   const { pathname } = new URL(req.url ?? '/', 'http://local');
   try {
     if (await gate?.(req, res)) return;

@@ -1,0 +1,143 @@
+/* Comments in the inspector */
+.comment {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.comment.resolved .comment-text {
+  color: var(--quiet);
+  text-decoration: line-through;
+  text-decoration-color: var(--rule-strong);
+}
+
+.comment.agent .comment-text {
+  color: var(--muted);
+}
+
+.comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--quiet);
+}
+
+.comment-by {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.comment.agent .comment-by {
+  color: var(--select);
+}
+
+.comment-meta .text-btn {
+  height: 22px;
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.comment-meta .ref {
+  font: 12px var(--sans);
+}
+
+.comment-text {
+  margin-top: 2px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.comment-new {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.comment-new .btn {
+  height: 28px;
+}
+
+/* Find on sheet: appears on Ctrl+F and goes when it loses focus. */
+.find {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(320px, 40vw);
+  min-width: 180px;
+  pointer-events: auto;
+}
+
+.find-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+}
+
+.find-input::placeholder {
+  color: var(--quiet);
+}
+
+.find-input:focus {
+  outline: none;
+  border-color: var(--select);
+}
+
+.find-menu {
+  width: 100%;
+}
+
+/* Present mode: the sheet alone, full screen, with a caption bar. */
+.app.presenting .topbar {
+  display: none;
+}
+
+.present-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(860px, calc(100% - 48px));
+  padding: 10px 10px 10px 20px;
+  border-radius: 16px;
+}
+
+.present-no {
+  flex: none;
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.present-no span {
+  color: var(--quiet);
+  font-weight: 400;
+}
+
+.present-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 2px 16px;
+}
+
+.present-text strong {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.present-text span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}

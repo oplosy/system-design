@@ -49,7 +49,7 @@ async function saveHooks(hooks: Hook[]) {
   await fs.mkdir(path.dirname(HOOKS_FILE), { recursive: true });
   const tmp = `${HOOKS_FILE}.${process.pid}.tmp`;
   // Owner-only: the file holds signing secrets.
-  await fs.writeFile(tmp, JSON.stringify(hooks, null, 2) + '\n', { mode: 0o600 });
+  await fs.writeFile(tmp, `${JSON.stringify(hooks, null, 2)}\n`, { mode: 0o600 });
   await fs.rename(tmp, HOOKS_FILE);
 }
 

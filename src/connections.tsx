@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { type Design } from '../core/schema.ts';
+import type { Design } from '../core/schema.ts';
 import { api, type Hook, type HookFormat, type McpServers, type Plugins } from './api.ts';
 import { Prop } from './fields.tsx';
 import { Icon, type IconName } from './icons.tsx';
@@ -94,7 +94,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
         {value}
       </code>
       <span className="designs-actions">
-        <button className="text-btn" onClick={() => copy(name, value)}>
+        <button type="button" className="text-btn" onClick={() => copy(name, value)}>
           <Icon name={copied === name ? 'check' : 'copy'} />
           {copied === name ? 'Copied' : 'Copy'}
         </button>
@@ -107,7 +107,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
         <DialogHead id="connections-title" title="Connections" onClose={onClose} />
         <div className="seg" role="tablist" aria-label="Connections">
           {TABS.map((t) => (
-            <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+            <button type="button" key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
               <Icon name={TAB_ICONS[t]} />
               {t}
             </button>
@@ -162,11 +162,11 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
                         <span>{[{ cloudevents: 'CloudEvents', chat: 'Chat message', slack: 'Slack with buttons' }[h.format], what(h), h.designs?.length ? h.designs.join(', ') : 'all designs', h.signed && 'signed', results[h.id]].filter(Boolean).join(', ')}</span>
                       </span>
                       <span className="designs-actions">
-                        <button className="text-btn" onClick={() => test(h)}>
+                        <button type="button" className="text-btn" onClick={() => test(h)}>
                           <Icon name="send" />
                           Test
                         </button>
-                        <button className="text-btn danger" onClick={() => run(() => api.removeHook(h.id))}>
+                        <button type="button" className="text-btn danger" onClick={() => run(() => api.removeHook(h.id))}>
                           <Icon name="trash" />
                           Remove
                         </button>
@@ -176,7 +176,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
                   {!hooks.length && <li className="designs-empty">No webhooks</li>}
                 </ul>
                 <footer className="dialog-foot">
-                  <button className="btn ink" onClick={() => setAdding(true)}>
+                  <button type="button" className="btn ink" onClick={() => setAdding(true)}>
                     <Icon name="plus" />
                     Add webhook
                   </button>
@@ -197,7 +197,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
                       <span>{[s.queries.length ? s.queries.join(', ') : 'No queries', results[s.name]].filter(Boolean).join(', ')}</span>
                     </span>
                     <span className="designs-actions">
-                      <button className="text-btn" onClick={() => testMcp(s.name)}>
+                      <button type="button" className="text-btn" onClick={() => testMcp(s.name)}>
                         <Icon name="send" />
                         Test
                       </button>

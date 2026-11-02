@@ -8,6 +8,9 @@ Newest first. Versions follow [semantic versioning](https://semver.org).
 
 - A failed sheet or app render now shows what happened and a way back instead of a blank window.
 - Dialogs keep Tab inside, close on Escape and give focus back.
+- The production server sends a Content Security Policy and other security headers.
+- `npm run lint` (Biome) and coverage thresholds run in CI.
+- Browser tests also run on Firefox and WebKit.
 - Browser tests scan the sheet, menu, selected part and Designs dialog with axe in both themes.
 - Panels and bars are translucent over the sheet.
 - Box text follows one format: headings start with a capital, descriptions with a small letter.
@@ -19,9 +22,12 @@ Newest first. Versions follow [semantic versioning](https://semver.org).
 - Design files are flushed to disk before they replace the old file.
 - Quiet text has enough contrast in both themes.
 - Type sizes and corner radii use one scale.
+- `src/styles.css` and the core tests are split by area.
 
 ### Fixed
 
+- Unfolding a step's details moves the parts out from under them.
+- Copying and pasting parts in Firefox no longer adds them as a new step.
 - The theme and style choices in the menu use valid menu roles.
 - Each panel landmark has its own name for screen readers.
 

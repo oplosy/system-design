@@ -48,7 +48,7 @@ export function AddMenu({ open, onOpen, onAdd }: { open: boolean; onOpen: (open:
   const hover = useHoverOpen(open, onOpen);
   return (
     <div className="add" ref={ref} {...hover.area}>
-      <button className="icon-btn float" aria-expanded={open} aria-label="Add a part" title="Add a part (/)" {...hover.trigger} onClick={() => onOpen(!open)}>
+      <button type="button" className="icon-btn float" aria-expanded={open} aria-label="Add a part" title="Add a part (/)" {...hover.trigger} onClick={() => onOpen(!open)}>
         <Icon name="plus" />
       </button>
       {open && <Palette onAdd={onAdd} />}
@@ -72,6 +72,7 @@ function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
   const match = (text: string) => terms.every((t) => text.toLowerCase().includes(t));
   const row = (kind: AddKind, name: string, preview: React.ReactNode) => (
     <button
+      type="button"
       key={kind}
       className="part"
       draggable
@@ -125,7 +126,7 @@ function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
         />
         <div className="seg" role="radiogroup" aria-label="Part kit">
           {KITS.map((k) => (
-            <button key={k.key} role="radio" aria-checked={kit === k.key} onClick={() => setKit(k.key)}>
+            <button type="button" key={k.key} role="radio" aria-checked={kit === k.key} onClick={() => setKit(k.key)}>
               {k.title}
             </button>
           ))}

@@ -54,7 +54,7 @@ export function Inspector({
   const stepNo = (id: string) => design.steps.findIndex((s) => s.id === id) + 1;
   const stepTitle = (id: string) => design.steps.find((s) => s.id === id)?.title;
   const ref = (id: string) => (
-    <button key={id} className="ref" onClick={() => onSelect(id)}>
+    <button type="button" key={id} className="ref" onClick={() => onSelect(id)}>
       {labelOf(id) ?? id}
     </button>
   );
@@ -80,7 +80,7 @@ export function Inspector({
           <span className="tag" title={item.id}>
             {kind}
           </span>
-          <button className="icon-btn close" onClick={() => onSelect(null)} aria-label="Close" title="Close (Esc)">
+          <button type="button" className="icon-btn close" onClick={() => onSelect(null)} aria-label="Close" title="Close (Esc)">
             <Icon name="close" />
           </button>
         </div>
@@ -192,10 +192,10 @@ export function Inspector({
             <Prop label="Opens">
               {component.detail ? (
                 <>
-                  <button className="ref" onClick={() => onOpenInside(component)} title="Open the design of what is inside">
+                  <button type="button" className="ref" onClick={() => onOpenInside(component)} title="Open the design of what is inside">
                     {designs.find((x) => x.id === component.detail)?.title ?? component.detail}
                   </button>
-                  <button className="text-btn" onClick={() => edit((d: Design) => d.components, { detail: undefined })}>
+                  <button type="button" className="text-btn" onClick={() => edit((d: Design) => d.components, { detail: undefined })}>
                     <Icon name="unlink" />
                     Unlink
                   </button>
@@ -262,11 +262,11 @@ export function Inspector({
           </Prop>
           <Prop label="Mode">
             <div className="toggle" role="radiogroup" aria-label="Mode">
-              <button role="radio" aria-checked={!connection.async} onClick={() => edit((d: Design) => d.connections, { async: undefined })}>
+              <button type="button" role="radio" aria-checked={!connection.async} onClick={() => edit((d: Design) => d.connections, { async: undefined })}>
                 <Icon name="sync" />
                 Sync
               </button>
-              <button role="radio" aria-checked={!!connection.async} onClick={() => edit((d: Design) => d.connections, { async: true })}>
+              <button type="button" role="radio" aria-checked={!!connection.async} onClick={() => edit((d: Design) => d.connections, { async: true })}>
                 <Icon name="async" />
                 Async
               </button>
@@ -275,14 +275,14 @@ export function Inspector({
           <Prop label="Line">
             <div className="toggle" role="radiogroup" aria-label="Line">
               {(['curve', 'straight', 'elbow'] as const).map((r) => (
-                <button key={r} role="radio" aria-checked={(connection.route ?? 'curve') === r} onClick={() => edit((d: Design) => d.connections, { route: r === 'curve' ? undefined : r, bend: undefined })}>
+                <button type="button" key={r} role="radio" aria-checked={(connection.route ?? 'curve') === r} onClick={() => edit((d: Design) => d.connections, { route: r === 'curve' ? undefined : r, bend: undefined })}>
                   <Icon name={r as IconName} />
                   {r[0].toUpperCase() + r.slice(1)}
                 </button>
               ))}
             </div>
             {connection.bend !== undefined && (
-              <button className="text-btn" onClick={() => edit((d: Design) => d.connections, { bend: undefined })}>
+              <button type="button" className="text-btn" onClick={() => edit((d: Design) => d.connections, { bend: undefined })}>
                 <Icon name="undo" />
                 Reset bend
               </button>
@@ -329,7 +329,7 @@ export function Inspector({
       <Comments design={design} step={item.step} target={item.id} change={change} onSelect={onSelect} />
 
       <footer className="insp-foot">
-        <button className="text-btn danger" onClick={() => onDelete(item.id)}>
+        <button type="button" className="text-btn danger" onClick={() => onDelete(item.id)}>
           <Icon name="trash" />
           Delete
         </button>
@@ -397,7 +397,7 @@ export function StepDetails({
             </p>
           )}
         </div>
-        <button className="chip" aria-pressed={diff} onClick={onDiff} title="Outline what this step added or changed, show what it removed, and dim the rest">
+        <button type="button" className="chip" aria-pressed={diff} onClick={onDiff} title="Outline what this step added or changed, show what it removed, and dim the rest">
           <Icon name="diff" />
           Show changes
         </button>
@@ -413,7 +413,7 @@ export function StepDetails({
                   const on = o.id === viewed;
                   return (
                     <div key={o.id} className={`option-entry${on ? ' on' : ''}`}>
-                      <button className="list-row" aria-pressed={on} onClick={() => onOption(stepId, o.id)} title="Show this option on the sheet">
+                      <button type="button" className="list-row" aria-pressed={on} onClick={() => onOption(stepId, o.id)} title="Show this option on the sheet">
                         <span className="flow-play" aria-hidden="true">
                           {on ? '●' : '○'}
                         </span>
@@ -423,7 +423,7 @@ export function StepDetails({
                       {o.summary && <p className="option-why">{o.summary}</p>}
                       {on && (
                         <div className="flow-steps">
-                          <button className="btn ink" onClick={() => onPickOption(stepId, o.id)}>
+                          <button type="button" className="btn ink" onClick={() => onPickOption(stepId, o.id)}>
                             <Icon name="check" />
                             Pick {o.title}
                           </button>
@@ -439,7 +439,7 @@ export function StepDetails({
               <section className="insp-sec">
                 <h3 className="rule-head"><Icon name="branch" />Decisions</h3>
                 {decisions.map((x) => (
-                  <button key={x.id} className="decision-entry" onClick={() => onSelect(x.id)}>
+                  <button type="button" key={x.id} className="decision-entry" onClick={() => onSelect(x.id)}>
                     <span className="decision-body">
                       <strong>{asTitle(x.title)}</strong>
                       <span className="decision-why">{asDetail(x.why)}</span>
@@ -463,7 +463,7 @@ export function StepDetails({
               <section className="insp-sec">
                 <h3 className="rule-head"><Icon name="note" />Notes</h3>
                 {notes.map((n) => (
-                  <button key={n.id} className="note-entry" onClick={() => onSelect(n.id)}>
+                  <button type="button" key={n.id} className="note-entry" onClick={() => onSelect(n.id)}>
                     {asDetail(n.text)}
                   </button>
                 ))}
@@ -477,7 +477,7 @@ export function StepDetails({
             <section className="insp-sec">
               <h3 className="rule-head"><Icon name="plus" />Added</h3>
               {boundaries.map((b) => (
-                <button key={b.id} className="list-row" onClick={() => onSelect(b.id)}>
+                <button type="button" key={b.id} className="list-row" onClick={() => onSelect(b.id)}>
                   <BoundaryPreview kind={b.kind} />
                   <span className="list-text">
                     <span className="list-main">{asTitle(b.label)}</span>
@@ -486,7 +486,7 @@ export function StepDetails({
                 </button>
               ))}
               {components.map((c) => (
-                <button key={c.id} className="list-row" onClick={() => onSelect(c.id)}>
+                <button type="button" key={c.id} className="list-row" onClick={() => onSelect(c.id)}>
                   <ShapePreview type={c.type} width={30} height={20} />
                   <span className="list-text">
                     <span className="list-main">{asTitle(c.label)}</span>
@@ -501,7 +501,7 @@ export function StepDetails({
             <section className="insp-sec">
               <h3 className="rule-head"><Icon name="sketch" />Changed</h3>
               {step.changed.map((c) => (
-                <button key={`${c.id}:${c.field}`} className="list-row change-row" onClick={() => onSelect(c.id)} disabled={!labelOf(c.id)}>
+                <button type="button" key={`${c.id}:${c.field}`} className="list-row change-row" onClick={() => onSelect(c.id)} disabled={!labelOf(c.id)}>
                   <span className="list-main">
                     {labelOf(c.id) ?? c.id} <span className="quiet">{c.field}</span>
                   </span>
@@ -531,6 +531,7 @@ export function StepDetails({
 
           <footer className="insp-foot">
             <button
+              type="button"
               className="text-btn danger"
               title="Remove everything this step added (Ctrl+Z brings it back)"
               onClick={() =>

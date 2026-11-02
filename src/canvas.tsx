@@ -31,7 +31,7 @@ function Trash() {
   if (locked || !id) return null;
   return (
     <NodeToolbar position={Position.Top} align="end" offset={6}>
-      <button className="node-trash" onClick={() => onDelete(id)} title="Delete (Del)" aria-label="Delete">
+      <button type="button" className="node-trash" onClick={() => onDelete(id)} title="Delete (Del)" aria-label="Delete">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M2.5 4h11M6.5 4V2.5h3V4M4 4l.7 9.5h6.6L12 4M6.8 6.5v4.5M9.2 6.5v4.5" />
         </svg>
@@ -59,7 +59,7 @@ function Frame({ w, h, data, selected, title, children }: { w: number; h: number
         </span>
       )}
       {!!data.issues && (
-        <span className="lint-badge" title={data.issues.join('\n')} aria-label={`Warning: ${data.issues.join(' ')}`}>
+        <span className="lint-badge" role="img" title={data.issues.join('\n')} aria-label={`Warning: ${data.issues.join(' ')}`}>
           !
         </span>
       )}
@@ -82,7 +82,7 @@ export const ComponentNodeView = memo(function ComponentNodeView({ id, data, sel
   const fromTop = caption || spec.labelY <= spec.h * 0.35;
   return (
     <Frame w={spec.w} h={spec.h} data={data} selected={selected} title={data.tech ? `${asTitle(data.label)}\n${asDetail(data.tech)}` : asTitle(data.label)}>
-      <svg width={spec.w} height={spec.h} overflow="visible">
+      <svg width={spec.w} height={spec.h} overflow="visible" aria-hidden="true">
         <ShapeDrawing type={data.type} sketch={sketch} seed={hash(id)} dashed={spec.dashed} />
       </svg>
       <div className={`node-label${fromTop ? ' from-top' : ''}`} style={{ left: labelX, top: spec.labelY, maxWidth }}>
@@ -96,7 +96,7 @@ export const ComponentNodeView = memo(function ComponentNodeView({ id, data, sel
         </a>
       )}
       {data.detail && (
-        <button className="node-open nodrag" onClick={() => onOpen(data.detail!, data.label)} title="Open what is inside" aria-label={`Open the inside of ${data.label}`}>
+        <button type="button" className="node-open nodrag" onClick={() => onOpen(data.detail!, data.label)} title="Open what is inside" aria-label={`Open the inside of ${data.label}`}>
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M6 3H3v10h10v-3M9 3h4v4M13 3L7.5 8.5" />
           </svg>
@@ -115,7 +115,7 @@ export const NoteNodeView = memo(function NoteNodeView({ id, data, selected }: N
   );
   return (
     <Frame w={w} h={h} data={data} selected={selected}>
-      <svg width={w} height={h} overflow="visible">
+      <svg width={w} height={h} overflow="visible" aria-hidden="true">
         <Paths paths={paths} />
       </svg>
       <div className="note-text">{asDetail(data.text)}</div>
@@ -131,7 +131,7 @@ export const DecisionNodeView = memo(function DecisionNodeView({ id, data, selec
   const paths = useMemo(() => toPaths([gen.path(outline, options(sketch, undefined, hash(id), { stroke: sketch ? NOTE_COLOR : 'var(--rule-strong)', strokeWidth: sketch ? 1.6 : 1.2 }))]), [sketch, id, outline]);
   return (
     <Frame w={w} h={h} data={data} selected={selected}>
-      <svg width={w} height={h} overflow="visible">
+      <svg width={w} height={h} overflow="visible" aria-hidden="true">
         <path d={outline} style={{ fill: 'var(--panel)', stroke: 'none' }} />
         <Paths paths={paths} dashed={sketch} />
       </svg>
@@ -158,7 +158,7 @@ export const BoundaryNodeView = memo(function BoundaryNodeView({ id, data, selec
   const roomy = w > 7.5 * (spec.name.length + data.label.length + (data.detail?.length ?? 0)) + 70;
   return (
     <div className={`sd-boundary${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}${data.changed ? ' changed' : ''}`} style={{ width: w, height: h, color }}>
-      <svg width={w} height={h} overflow="visible">
+      <svg width={w} height={h} overflow="visible" aria-hidden="true">
         <rect x={1} y={1} width={w - 2} height={h - 2} rx={sketch ? 0 : 6} style={{ fill: color, fillOpacity: sketch ? 0.05 : 0.03, stroke: 'none' }} />
         {paths.map((p, i) => (
           <path key={i} d={p.d} style={{ stroke: p.stroke, strokeWidth: p.strokeWidth, fill: 'none' }} strokeDasharray={spec.dash} strokeLinecap="round" />

@@ -6,7 +6,7 @@ Requires Node 24+, which runs TypeScript directly.
 
 ```bash
 npm ci
-npx playwright install chromium
+npx playwright install chromium firefox webkit
 npm run dev
 ```
 
@@ -15,13 +15,14 @@ The app opens on http://localhost:5180.
 ## Before a pull request
 
 ```bash
+npm run lint
 npm run typecheck
 npm test
 npm run test:e2e
 npm run build
 ```
 
-`npm run test:coverage` prints line coverage for the unit tests.
+`npm run test:coverage` prints coverage for the unit tests and fails below the thresholds in `package.json`. The first browser run needs `npx playwright install chromium firefox webkit`.
 
 ## Where things go
 

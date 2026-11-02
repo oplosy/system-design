@@ -174,7 +174,7 @@ export function RefsEditor({ refs = [], onChange }: { refs?: Ref[]; onChange: (r
               {r.value}
             </code>
           )}
-          <button className="icon-btn ref-remove" onClick={() => set(refs.filter((_, j) => j !== i))} aria-label={`Remove ${REF_NAMES[r.kind]} ${r.value}`} title="Remove">
+          <button type="button" className="icon-btn ref-remove" onClick={() => set(refs.filter((_, j) => j !== i))} aria-label={`Remove ${REF_NAMES[r.kind]} ${r.value}`} title="Remove">
             <Icon name="close" />
           </button>
         </div>

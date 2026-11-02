@@ -1,0 +1,50 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
+  "files": { "includes": ["core/**", "server/**", "mcp/**", "cli/**", "src/**", "e2e/**"] },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "correctness": {
+        // Effects here run on chosen triggers and read refs on purpose. Kept visible as warnings.
+        "useExhaustiveDependencies": "warn"
+      },
+      "style": {
+        // Ids in a checked design are known to exist; schema validation is what guarantees it.
+        "noNonNullAssertion": "off",
+        // Selectors stay next to the thing they style, not in specificity order.
+        "noDescendingSpecificity": "off"
+      },
+      "complexity": {
+        // `(e.preventDefault(), close())` in a one-line handler is the house style.
+        "noCommaOperator": "off",
+        // Reduced motion has to beat every animation.
+        "noImportantStyles": "off"
+      },
+      "suspicious": {
+        // `void (x = y)` marks an arrow that assigns on purpose.
+        "noAssignInExpressions": "off",
+        "useIterableCallbackReturn": "off",
+        // Drawn paths and steps have no identity of their own, and their order never changes under them.
+        "noArrayIndexKey": "off",
+        // ${NAME} in MCP configs is a feature, not a mistake.
+        "noTemplateCurlyInString": "off",
+        // Shape coordinates, not math constants.
+        "noApproximativeNumericConstant": "off"
+      },
+      "a11y": {
+        // Dialogs and menus move focus to their first field; the axe browser tests cover them.
+        "noAutofocus": "off",
+        // role="radio" on a button is the segmented control; a native input can't be drawn this way.
+        "useSemanticElements": "off",
+        // The overlay's and canvas's mouse handlers have keyboard paths elsewhere (Escape, shortcuts).
+        "noStaticElementInteractions": "off",
+        // Select keeps focus on its search box and moves through options by key, as a listbox with an active option does.
+        "useFocusableInteractive": "off",
+        "useKeyWithClickEvents": "off"
+      }
+    }
+  }
+}

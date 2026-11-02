@@ -18,6 +18,8 @@ export function seedCopy(id: string, { seen = false, edit }: CopyOptions = {}) {
   const template = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'templates', 'three-tier.json'), 'utf8')) as Template;
   const design: Template = { ...template, id, title: `Copy ${id}`, steps: template.steps.map((s) => ({ ...s, seen })) };
   edit?.(design);
+  // Each browser runs the same tests on this folder, so what an earlier run created must not change the ids handed out.
+  for (const f of fs.readdirSync(DATA_DIR)) if (f.startsWith(`${id}-`)) fs.rmSync(path.join(DATA_DIR, f));
   fs.writeFileSync(path.join(DATA_DIR, `${id}.json`), JSON.stringify(design));
 }
 

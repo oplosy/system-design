@@ -37,7 +37,7 @@ export function toMermaid(d: Design) {
     const arrow = c.async || c.kind === 'implementation' || c.kind === 'include' || c.kind === 'extend' ? '-.->' : '-->';
     out.push(`  ${mid(c.from)} ${arrow}${c.label ? `|${text(c.label)}|` : ''} ${mid(c.to)}`);
   }
-  return out.join('\n') + '\n';
+  return `${out.join('\n')}\n`;
 }
 
 /**
@@ -134,7 +134,7 @@ export function toMermaidSequence(d: Design, flow: Flow) {
     out.push(`  ${mid(x.from)}${arrow}${mid(x.to)}: ${(x.label ?? (x.reply ? 'reply' : 'call')).replace(/[\n;]/g, ' ')}`);
     for (const _ of frames.filter((g) => g.to === i)) out.push('  end');
   });
-  return out.join('\n') + '\n';
+  return `${out.join('\n')}\n`;
 }
 
 export function toDecisionRecord(d: Design) {

@@ -30,11 +30,11 @@ export function SequenceView({ design, flow, at, onClose }: { design: Design; fl
             {time.total} ms
           </span>
         )}
-        <button className="text-btn" onClick={() => navigator.clipboard?.writeText(toMermaidSequence(design, flow))} title="Copy as a Mermaid sequence diagram">
+        <button type="button" className="text-btn" onClick={() => navigator.clipboard?.writeText(toMermaidSequence(design, flow))} title="Copy as a Mermaid sequence diagram">
           <Icon name="copy" />
           Copy Mermaid
         </button>
-        <button className="icon-btn" onClick={onClose} aria-label="Close" title="Close (Esc)">
+        <button type="button" className="icon-btn" onClick={onClose} aria-label="Close" title="Close (Esc)">
           <Icon name="close" />
         </button>
       </div>

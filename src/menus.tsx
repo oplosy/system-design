@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { type Design } from '../core/schema.ts';
+import type { Design } from '../core/schema.ts';
 import { shared, type LiveLoad, type Me } from './api.ts';
 import { LAYOUTS, type LayoutKind } from './layout.ts';
-import { type Editing, type Theme } from './format.ts';
+import type { Editing, Theme } from './format.ts';
 import { CURRENCIES, Ed, Prop, type Change } from './fields.tsx';
 import { Icon, type IconName } from './icons.tsx';
 import { Select } from './select.tsx';
@@ -125,7 +125,7 @@ function Seg<T extends string>({ label, value, options, onPick }: { label: strin
   return (
     <div className="seg" role="group" aria-label={label}>
       {options.map((o) => (
-        <button key={o.key} role="menuitemradio" aria-checked={value === o.key} onClick={() => onPick(o.key)}>
+        <button type="button" key={o.key} role="menuitemradio" aria-checked={value === o.key} onClick={() => onPick(o.key)}>
           <Icon name={o.icon} />
           {o.title}
         </button>
@@ -184,11 +184,11 @@ function tagCounts(design: Design | null) {
 function TagList({ counts, tag, onPick }: { counts: Map<string, number>; tag: string | null; onPick: (tag: string | null) => void }) {
   return (
     <>
-      <button role="menuitemradio" aria-checked={!tag} className="menu-row" onClick={() => onPick(null)}>
+      <button type="button" role="menuitemradio" aria-checked={!tag} className="menu-row" onClick={() => onPick(null)}>
         Everything
       </button>
       {[...counts].sort(([a], [b]) => a.localeCompare(b)).map(([t, n]) => (
-        <button key={t} role="menuitemradio" aria-checked={tag === t} className="menu-row" onClick={() => onPick(t)}>
+        <button type="button" key={t} role="menuitemradio" aria-checked={tag === t} className="menu-row" onClick={() => onPick(t)}>
           {t}
           <span className="menu-hint">{n}</span>
         </button>
@@ -210,7 +210,7 @@ function LayoutList({ selected, onPick }: { selected: number; onPick: (kind: Lay
       )}
       <div className="menu-grid">
         {LAYOUTS.map((x) => (
-          <button key={x.key} role="menuitem" className="menu-tile" title={x.desc} onClick={() => onPick(x.key, scoped)}>
+          <button type="button" key={x.key} role="menuitem" className="menu-tile" title={x.desc} onClick={() => onPick(x.key, scoped)}>
             <Icon name={x.key} />
             {x.title}
           </button>
@@ -238,7 +238,7 @@ function ExportList({ extra, onPick }: { extra: { kind: string; name: string; ex
   return (
     <div className="menu-grid">
       {items.map((x) => (
-        <button key={x.kind} role="menuitem" className="menu-tile" title={x.desc} onClick={() => onPick(x.kind)}>
+        <button type="button" key={x.kind} role="menuitem" className="menu-tile" title={x.desc} onClick={() => onPick(x.kind)}>
           <Icon name={x.icon} />
           {x.title}
         </button>
@@ -279,7 +279,7 @@ function MenuSub({ name, icon, hint, open, onOpen, disabled, children }: { name:
   const hover = useHoverOpen(open, onOpen, disabled);
   return (
     <div className="contents" {...hover.area}>
-      <button role="menuitem" className="menu-row" aria-expanded={open} disabled={disabled} {...hover.trigger} onClick={() => onOpen(!open)}>
+      <button type="button" role="menuitem" className="menu-row" aria-expanded={open} disabled={disabled} {...hover.trigger} onClick={() => onOpen(!open)}>
         <MenuLabel name={name} icon={icon} />
         <span className="menu-hint" aria-hidden="true">
           {hint} <span className="menu-chevron">›</span>
@@ -313,7 +313,7 @@ export function MoreMenu(p: MoreMenuProps) {
     fn(...args);
   };
   const action = (name: string, icon: IconName, onClick: () => void, keys?: string, disabled?: boolean) => (
-    <button role="menuitem" className="menu-row" title={keys} disabled={disabled} onClick={act(onClick)}>
+    <button type="button" role="menuitem" className="menu-row" title={keys} disabled={disabled} onClick={act(onClick)}>
       <MenuLabel name={name} icon={icon} />
     </button>
   );
@@ -323,7 +323,7 @@ export function MoreMenu(p: MoreMenuProps) {
     </MenuSub>
   );
   const check = (name: string, icon: IconName, on: boolean, onClick: () => void, title?: string) => (
-    <button role="menuitemcheckbox" aria-checked={on} className="menu-row" title={title} onClick={onClick}>
+    <button type="button" role="menuitemcheckbox" aria-checked={on} className="menu-row" title={title} onClick={onClick}>
       <MenuLabel name={name} icon={icon} />
       {on && <span className="menu-hint" aria-hidden="true">On</span>}
     </button>
@@ -336,7 +336,7 @@ export function MoreMenu(p: MoreMenuProps) {
   };
   return (
     <div className="switcher" ref={ref} {...hover.area}>
-      <button className="icon-btn float" aria-haspopup="menu" aria-expanded={open} aria-label="More" title="More" {...hover.trigger} onClick={() => (open ? close() : setOpen(true))}>
+      <button type="button" className="icon-btn float" aria-haspopup="menu" aria-expanded={open} aria-label="More" title="More" {...hover.trigger} onClick={() => (open ? close() : setOpen(true))}>
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M3 8h.01M8 8h.01M13 8h.01" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>

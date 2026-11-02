@@ -115,7 +115,7 @@ export async function writeDesign(design: Design, { create = false, actor = 'age
   try {
     const out = await fs.open(tmp, 'w');
     try {
-      await out.writeFile(JSON.stringify(next, null, 2) + '\n');
+      await out.writeFile(`${JSON.stringify(next, null, 2)}\n`);
       await out.sync();
     } finally {
       await out.close();

@@ -78,7 +78,7 @@ export async function designSvg(design: Design) {
     );
   }
   out.push('</svg>');
-  return out.join('\n') + '\n';
+  return `${out.join('\n')}\n`;
 }
 
 /** A shields-style badge: "<label> | <value>", the value on `color`. Widths are estimated, as no font is measured. */

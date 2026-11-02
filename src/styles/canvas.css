@@ -1,0 +1,504 @@
+/* Canvas items */
+
+.sd-node {
+  position: relative;
+  color: var(--ink);
+  transition: opacity 0.2s;
+}
+
+.sd-node svg {
+  position: absolute;
+  inset: 0;
+}
+
+.sd-node.faded,
+.rough-edge.faded,
+.edge-label.faded {
+  opacity: 0.4;
+}
+
+.react-flow__node.selected > .sd-node {
+  outline: 1.5px dashed var(--select);
+  outline-offset: 5px;
+  border-radius: 4px;
+}
+
+/* Boundaries: the box ignores the pointer so parts and edges inside stay clickable; the tab is the handle. */
+.react-flow__node.boundary-node {
+  pointer-events: none !important;
+}
+
+.sd-boundary {
+  position: relative;
+  transition: opacity 0.2s;
+}
+
+.sd-boundary svg {
+  position: absolute;
+  inset: 0;
+}
+
+.sd-boundary.faded {
+  opacity: 0.45;
+}
+
+.boundary-tab {
+  position: absolute;
+  top: 9px;
+  left: 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: calc(100% - 20px);
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--canvas);
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: all;
+  cursor: grab;
+}
+
+.boundary-kind {
+  flex: none;
+  font-size: 12px;
+}
+
+.boundary-label {
+  flex: 0 1 auto;
+  min-width: 3ch;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The detail gives way first when the tab runs out of room. */
+.boundary-detail {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font: 11px var(--mono);
+}
+
+.unseen-dot.inline {
+  position: static;
+  flex: none;
+  align-self: center;
+  box-shadow: none;
+}
+
+.react-flow__node.selected .boundary-tab {
+  outline: 1.5px dashed var(--select);
+  outline-offset: 3px;
+}
+
+.rough-edge {
+  color: var(--muted);
+}
+
+.rough-edge.selected {
+  color: var(--select);
+}
+
+/* A part's size comes from its type, so its text fits the shape: the name takes two lines, the rest one. */
+.node-label {
+  position: absolute;
+  width: max-content;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  line-height: 1.2;
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.node-label.from-top {
+  transform: translate(-50%, -10px);
+}
+
+.node-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.node-tech {
+  font: 11px var(--mono);
+  color: var(--muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-text,
+.decision-text {
+  position: absolute;
+  inset: 0;
+  padding: 10px 12px;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.sketch .note-text {
+  color: var(--note-ink);
+}
+
+.decision-kicker {
+  font-size: 12px;
+  color: var(--quiet);
+}
+
+.decision-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.decision-text .decision-why {
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.edge-label {
+  position: absolute;
+  width: max-content;
+  max-width: 170px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  font: 11px var(--mono);
+  padding: 1px 5px;
+  background: var(--canvas);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.unseen-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 0 2px var(--canvas);
+}
+
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  background: var(--select);
+  border: 1.5px solid var(--panel);
+  opacity: 0;
+}
+
+.sd-node:hover .react-flow__handle,
+.react-flow__node.selected .react-flow__handle {
+  opacity: 1;
+}
+
+/* Sketch mode swaps the canvas typography to handwriting. */
+.sketch .node-label {
+  font-family: var(--hand);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sketch .node-tech {
+  font: 400 12px var(--hand);
+}
+
+.sketch .note-text,
+.sketch .decision-text {
+  font-family: var(--hand);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.sketch .decision-title {
+  font-size: 14px;
+}
+
+.sketch .edge-label,
+.sketch .boundary-label {
+  font-family: var(--hand);
+}
+
+.sketch .edge-label {
+  font-size: 12px;
+}
+
+/* Step diff: outline what the current step added. */
+.sd-node.added {
+  outline: 1.5px solid var(--signal);
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+.sd-boundary.added .boundary-tab {
+  outline: 1.5px solid var(--signal);
+}
+
+/* Changed in this step: amber; removed: a struck-out ghost where it stood. */
+.sd-node.changed {
+  outline: 1.5px solid var(--decision);
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+.sd-boundary.changed .boundary-tab {
+  outline: 1.5px solid var(--decision);
+}
+
+.sd-node.removed {
+  opacity: 0.45;
+  outline: 1.5px dashed var(--danger);
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+.sd-node.removed .node-label {
+  text-decoration: line-through;
+}
+
+.removed-row {
+  cursor: default;
+  color: var(--muted);
+}
+
+.change-row .list-meta s,
+.removed-row s {
+  color: var(--danger);
+}
+
+.comment-badge {
+  position: absolute;
+  top: -9px;
+  left: -9px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  font: 600 11px/1 var(--mono);
+  color: var(--panel);
+  background: var(--select);
+  border-radius: 9px 9px 9px 2px;
+  box-shadow: 0 0 0 2px var(--canvas);
+}
+
+/* Load under a line's label: latency and requests per second. */
+.edge-meta {
+  display: block;
+  font-size: 10px;
+  color: var(--quiet);
+  text-align: center;
+}
+
+.edge-meta.live::before {
+  content: '● ';
+  color: #2f9e44;
+}
+
+.rough-edge.failing,
+.edge-meta.failing {
+  color: #e03131;
+}
+
+.num {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.num .ed {
+  width: 96px;
+}
+
+/* Lint warning: hover shows what looks wrong. */
+.lint-badge {
+  position: absolute;
+  bottom: -9px;
+  left: -9px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  font: 700 11px/1 var(--mono);
+  color: var(--panel);
+  background: var(--decision);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--canvas);
+  cursor: help;
+}
+
+/* A playing flow: its path takes the signal colour and each hop shows its number. */
+.rough-edge.on-path {
+  color: var(--signal);
+}
+
+.rough-edge.on-path:not(.hop-on) {
+  opacity: 0.55;
+}
+
+.hop-badge {
+  position: absolute;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  font: 600 11px/1 var(--mono);
+  color: var(--signal);
+  background: var(--canvas);
+  border: 1.5px solid var(--signal);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.hop-badge.on {
+  color: var(--panel);
+  background: var(--signal);
+}
+
+.flow-entry.on {
+  background: var(--hover);
+  border-radius: 8px;
+}
+
+.flow-play {
+  display: inline-flex;
+  justify-content: center;
+  width: 30px;
+  font-size: 11px;
+  color: var(--signal);
+}
+
+.flow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 8px;
+}
+
+.option-entry.on {
+  background: var(--hover);
+  border-radius: 8px;
+}
+
+.option-why {
+  margin: -4px 0 6px;
+  padding: 0 8px 0 38px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.flow-record {
+  display: grid;
+  gap: 6px;
+  padding: 2px 8px 8px;
+}
+
+.flow-record p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.present-flows {
+  flex: none;
+  width: 150px;
+  height: 32px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--hover);
+  border: 0;
+  border-radius: 8px;
+}
+
+.flow-hop {
+  order: -1;
+  flex: 1 0 100%;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+/* Delete button over a selected item; it keeps its size at any zoom. */
+.node-trash {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--danger);
+  box-shadow: var(--float);
+  cursor: pointer;
+}
+
+.node-trash:hover {
+  filter: brightness(1.08);
+}
+
+.node-trash:focus-visible {
+  outline: 2px solid var(--select);
+  outline-offset: 2px;
+}
+
+/* Bending a selected connection */
+.bend-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 2px solid var(--select);
+  pointer-events: all;
+  cursor: grab;
+}
+
+.edge-label.grab {
+  pointer-events: all;
+  cursor: grab;
+  outline: 1.5px solid var(--select);
+}
+
+.bend-handle:active,
+.edge-label.grab:active {
+  cursor: grabbing;
+}
+
+/* In-place rename on the canvas */
+.inline-edit {
+  position: absolute;
+  z-index: 1000;
+  min-width: 160px;
+  max-width: 280px;
+  padding: 6px 8px;
+  font: 500 13px/1.4 var(--sans);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1.5px solid var(--select);
+  border-radius: 4px;
+  box-shadow: var(--lift);
+  outline: none;
+  pointer-events: all;
+  resize: none;
+}

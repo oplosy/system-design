@@ -5,6 +5,7 @@ import type { ComponentType } from './schema.ts';
 // databases, queues and outside hosts, become lines carrying the observed rate and latency; each kind of request
 // (root span) becomes a flow, walked from one sample trace.
 
+// biome-ignore lint/suspicious/noExplicitAny: a foreign file, read defensively field by field
 type Doc = Record<string, any>;
 type Kind = 'server' | 'client' | 'producer' | 'consumer' | 'internal';
 type Span = { trace: string; id: string; parent?: string; service: string; name: string; kind: Kind; start: number; dur: number; attrs: Record<string, unknown> };

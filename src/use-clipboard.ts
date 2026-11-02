@@ -26,6 +26,8 @@ type Options = {
 /** Copy, cut and paste on the sheet, and bringing in diagrams and infrastructure files from elsewhere. */
 export function useClipboard({ store: { design, designRef, change }, active, stepId, selectedIds, remove, selectPasted, showImported, setError }: Options) {
   const clip = useRef<{ items: m.Clip; pastes: number } | null>(null);
+  /** The text last copied from this sheet: Firefox drops the custom type, so this is how a paste knows it as ours. */
+  const copiedText = useRef<string | null>(null);
   /** A copy, cut or paste key still waiting for its clipboard event. */
   const clipKey = useRef<string | null>(null);
 
@@ -85,6 +87,7 @@ export function useClipboard({ store: { design, designRef, change }, active, ste
         components: c.components.map((x) => (x.boundary && inside.has(x.boundary) ? x : { ...x, boundary: undefined })),
         boundaries: c.boundaries.map((b) => (b.parent && inside.has(b.parent) ? b : { ...b, parent: undefined })),
       });
+      copiedText.current = text;
       e.clipboardData?.setData('text/plain', text);
       e.clipboardData?.setData(CLIP_MIME, '1');
       e.preventDefault();
@@ -94,7 +97,7 @@ export function useClipboard({ store: { design, designRef, change }, active, ste
       clipKey.current = null;
       if (ignore(e) || !stepId) return;
       const text = e.clipboardData?.getData('text/plain') ?? '';
-      const ours = e.clipboardData?.types.includes(CLIP_MIME);
+      const ours = e.clipboardData?.types.includes(CLIP_MIME) || text === copiedText.current;
       e.preventDefault();
       if (ours || !text.trim()) return void (clip.current && pasteClip(clip.current));
       await importSource(text, 'paste');

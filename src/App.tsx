@@ -468,7 +468,7 @@ function Shell() {
         {error && (
           <div className="toast" role="alert">
             <span className="toast-msg">{error}</span>
-            <button className="text-btn" onClick={() => setError(null)} aria-label="Dismiss">
+            <button type="button" className="text-btn" onClick={() => setError(null)} aria-label="Dismiss">
               <Icon name="close" />
             </button>
           </div>

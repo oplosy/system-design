@@ -21,6 +21,9 @@ export default defineConfig({
   use: { viewport: { width: 1400, height: 900 }, trace: 'retain-on-failure' },
   projects: [
     { name: 'chromium', testMatch: ['app.spec.ts', 'editing.spec.ts', 'plugins.spec.ts', 'resilience.spec.ts', 'a11y.spec.ts'], use: { browserName: 'chromium', baseURL: `http://127.0.0.1:${PORT}` } },
+    // The everyday paths on the other engines; canvas drawing and dragging differ most between them.
+    { name: 'firefox', testMatch: ['app.spec.ts', 'editing.spec.ts'], use: { browserName: 'firefox', baseURL: `http://127.0.0.1:${PORT}` } },
+    { name: 'webkit', testMatch: ['app.spec.ts', 'editing.spec.ts'], use: { browserName: 'webkit', baseURL: `http://127.0.0.1:${PORT}` } },
     { name: 'hub', testMatch: 'hub.spec.ts', use: { browserName: 'chromium', baseURL: `http://127.0.0.1:${HUB_PORT}` } },
   ],
   webServer: [

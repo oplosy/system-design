@@ -8,14 +8,14 @@ import type { Design } from './schema.ts';
 const MAX_AGE = 300;
 const MAX_STEPS = 10;
 
-const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escapeText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** A message with buttons for each new step (Block Kit). */
 export function slackMessage(design: Design, text: string, steps: { id: string; title: string }[]) {
-  const blocks: unknown[] = [{ type: 'section', text: { type: 'mrkdwn', text: escape(text) } }];
+  const blocks: unknown[] = [{ type: 'section', text: { type: 'mrkdwn', text: escapeText(text) } }];
   for (const s of steps.slice(0, MAX_STEPS)) {
     const value = `${design.id}/${s.id}`;
-    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*${escape(s.title)}*` } });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*${escapeText(s.title)}*` } });
     blocks.push({
       type: 'actions',
       elements: [

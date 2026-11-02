@@ -52,7 +52,7 @@ export function toStructurizr(d: Design) {
   out.push('      element "Person" {', '        shape person', '      }', '      element "Database" {', '        shape cylinder', '      }');
   out.push('      element "Queue" {', '        shape pipe', '      }', '      element "External" {', '        background #999999', '      }');
   out.push('      relationship "Async" {', '        dashed true', '      }', '    }', '  }', '}');
-  return out.join('\n') + '\n';
+  return `${out.join('\n')}\n`;
 }
 
 export function toPlantUml(d: Design) {
@@ -76,7 +76,7 @@ export function toPlantUml(d: Design) {
   out.push('');
   for (const c of d.connections) out.push(`Rel(${ident(c.from)}, ${ident(c.to)}, ${q(c.label || (c.async ? 'async' : 'uses'))})`);
   out.push('', 'SHOW_LEGEND()', '@enduml');
-  return out.join('\n') + '\n';
+  return `${out.join('\n')}\n`;
 }
 
 const SIZE = { w: 160, h: 70 };

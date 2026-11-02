@@ -1,0 +1,200 @@
+/* Canvas chrome */
+
+.react-flow {
+  --xy-background-color: var(--canvas);
+  --xy-edge-label-background-color: var(--canvas);
+}
+
+.react-flow__background-pattern.dots {
+  fill: var(--dots);
+}
+
+.react-flow__panel.react-flow__controls {
+  margin: 0;
+  right: 12px;
+  bottom: 12px;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.react-flow .react-flow__controls-button {
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border-bottom: 1px solid var(--rule);
+  color: var(--muted);
+}
+
+.react-flow .react-flow__controls-button:last-child {
+  border-bottom: 0;
+}
+
+.react-flow .react-flow__controls-button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.react-flow__panel.react-flow__minimap {
+  margin: 0;
+  top: 60px;
+  right: 12px;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Where a drilled-into design was opened from. */
+.trail {
+  position: absolute;
+  top: 64px;
+  left: 60px;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 120px);
+  font-size: 13px;
+}
+
+.trail > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Opens the design of what is inside a part. */
+.node-open {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--panel);
+  background: var(--select);
+  box-shadow: 0 0 0 2px var(--canvas);
+  cursor: pointer;
+}
+
+/* Opens the code of a part, at the corner opposite the drill-down badge. */
+.node-code {
+  position: absolute;
+  left: -10px;
+  bottom: -10px;
+  height: 20px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  font: 600 10px/1 var(--mono);
+  color: var(--panel);
+  background: var(--ink-2);
+  box-shadow: 0 0 0 2px var(--canvas);
+  text-decoration: none;
+}
+
+.node-code:focus-visible,
+.node-open:focus-visible {
+  outline: 2px solid var(--select);
+  outline-offset: 2px;
+}
+
+/* A flow as a sequence diagram, floating over the sheet. */
+.sequence {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 160px);
+  border-radius: var(--radius);
+}
+
+.sequence-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sequence-head strong {
+  margin-right: auto;
+}
+
+.sequence-body {
+  overflow: auto;
+  padding: 4px 4px 12px;
+}
+
+.seq-life {
+  stroke: var(--rule-strong);
+  stroke-dasharray: 4 4;
+}
+
+.seq-box {
+  fill: var(--panel);
+  stroke: var(--rule-strong);
+}
+
+.seq-name {
+  fill: var(--ink);
+  font: 600 13px var(--sans);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.seq-msg line {
+  stroke: var(--ink-2);
+  stroke-width: 1.4;
+}
+
+.seq-label {
+  fill: var(--muted);
+  font: 12px var(--sans);
+  text-anchor: middle;
+}
+
+.seq-msg.on line {
+  stroke: var(--signal);
+  stroke-width: 2.2;
+}
+
+.seq-msg.on .seq-label {
+  fill: var(--signal);
+}
+
+.seq-msg.missing line {
+  stroke: var(--danger);
+}
+
+.seq-bar {
+  fill: var(--panel);
+  stroke: var(--rule-strong);
+}
+
+.seq-frame rect {
+  fill: none;
+  stroke: var(--rule-strong);
+}
+
+.seq-frame line {
+  stroke: var(--rule-strong);
+  stroke-dasharray: 6 4;
+}
+
+.seq-frame text {
+  fill: var(--muted);
+  font: 600 11px var(--sans);
+}

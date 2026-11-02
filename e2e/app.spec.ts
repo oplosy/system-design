@@ -219,7 +219,8 @@ test('a big sheet draws only what is on screen, and a picture of it still holds 
   await expect.poll(() => page.locator('.react-flow__node').count()).toBeLessThan(count);
 });
 
-test('pasting a Mermaid flowchart adds a step, and undo removes it', async ({ page, request }) => {
+test('pasting a Mermaid flowchart adds a step, and undo removes it', async ({ page, request, browserName }) => {
+  test.skip(browserName === 'firefox', 'Firefox ignores clipboardData on a scripted ClipboardEvent, so this paste carries no text there.');
   const steps = async () => ((await (await request.get('/api/designs/three-tier')).json()) as { steps: unknown[] }).steps.length;
   const before = await steps();
   await page.locator('.react-flow__pane').click({ position: { x: 5, y: 5 } });

@@ -47,3 +47,22 @@ test('a link to an item still opens that item after signing in', async ({ page, 
   await expect(page).toHaveURL(/#three-tier\/app$/);
   await expect(page.getByText('Technology', { exact: true })).toBeVisible();
 });
+
+test('the production server sends its security headers and the app runs under them', async ({ page, request }) => {
+  const refused: string[] = [];
+  page.on('console', (m) => /Content Security Policy/i.test(m.text()) && refused.push(m.text()));
+  await signInAs(request, 'ann@example.com');
+  await page.goto('/#three-tier');
+  await expect(page.locator('.react-flow__node')).toHaveCount(3);
+  const headers = (await page.request.get('/')).headers();
+  expect(headers['content-security-policy']).toContain("script-src 'self'");
+  expect(headers['x-content-type-options']).toBe('nosniff');
+  expect(headers['x-frame-options']).toBe('DENY');
+  expect(headers['referrer-policy']).toBe('no-referrer');
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Export', exact: true }).click();
+  const png = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: 'PNG' }).click();
+  await png;
+  expect(refused).toEqual([]);
+});

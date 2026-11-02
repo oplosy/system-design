@@ -56,6 +56,14 @@ export function useAutoFit({ design, view, nodes, presenting, detailsOpen, canva
     };
   }, [presenting, fitView, canvasRef]);
 
+  // Unfolded details cover the lower part of the sheet, so the parts move up out from under them, and back when they fold.
+  const hasDesign = !!design;
+  useEffect(() => {
+    if (!hasDesign || presenting) return;
+    const t = setTimeout(() => fitView(fitOpts.current), 150);
+    return () => clearTimeout(t);
+  }, [detailsOpen, hasDesign, presenting, fitView]);
+
   /** Fits again after the next change of nodes, whatever was fitted last. */
   const refit = () => {
     fittedFor.current = null;

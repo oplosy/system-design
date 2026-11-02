@@ -1,0 +1,326 @@
+/* App shell: the sheet fills the window; a few small pieces float above it. */
+
+.app {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* The design on the left, the menu on the right; the sheet stays usable between them. */
+.topbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  pointer-events: auto;
+}
+
+.wordmark {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.shared-tag {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.vrule {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--rule-strong);
+}
+
+/* Design switcher and other drop-down menus */
+
+.switcher {
+  position: relative;
+  min-width: 0;
+}
+
+.switcher-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  max-width: min(420px, 60vw);
+  padding: 0 12px;
+  border-radius: var(--radius);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.switcher-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.switcher-btn:hover,
+.switcher-btn[aria-expanded='true'] {
+  border-color: var(--quiet);
+}
+
+.switcher-btn svg {
+  flex: none;
+  color: var(--quiet);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: min(320px, calc(100vw - 24px));
+  max-height: calc(100vh - 72px);
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: var(--radius);
+  box-shadow: var(--lift);
+  animation: rise 0.12s ease-out;
+}
+
+.menu-right {
+  left: auto;
+  right: 0;
+  width: 264px;
+}
+
+.icon {
+  flex: none;
+}
+
+.menu-label .icon,
+.menu-tile .icon,
+.rule-head .icon {
+  color: var(--muted);
+}
+
+.menu-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.menu-row:disabled .icon {
+  opacity: 0.5;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+}
+
+.menu-row:hover:not(:disabled),
+.menu-row[aria-selected='true'],
+.menu-row[role='menuitemradio'][aria-checked='true'] {
+  background: var(--hover);
+}
+
+.menu-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-hint {
+  font-size: 12px;
+  color: var(--quiet);
+  white-space: nowrap;
+}
+
+.menu-rule {
+  height: 1px;
+  margin: 6px 4px;
+  border: 0;
+  background: var(--rule);
+}
+
+.menu-form {
+  display: grid;
+  gap: 6px;
+  padding: 2px;
+}
+
+.menu-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.menu-chevron {
+  display: inline-block;
+  transition: transform 0.12s;
+}
+
+[aria-expanded='true'] > .menu-hint .menu-chevron {
+  transform: rotate(90deg);
+}
+
+/* A list or settings unfolding under its row, as one quiet block. */
+.menu-sub {
+  margin: 2px 0 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--hover);
+}
+
+.menu-sub .check {
+  padding: 4px 6px 8px;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.menu-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-tile:hover {
+  background: var(--active);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.check input {
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+.find-menu .menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+}
+
+.find-menu .menu-item:hover {
+  background: var(--hover);
+}
+
+.menu-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.menu-title {
+  font-weight: 500;
+}
+
+.menu-meta {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Workspace */
+
+.workspace {
+  position: absolute;
+  inset: 0;
+}
+
+/* Its own stack, so nodes (which carry their own z-index) never rise above the panels. */
+.canvas {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+}
+
+/* What a selected item says about itself, over the right of the sheet. */
+.card {
+  position: absolute;
+  top: 60px;
+  right: 12px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: min(320px, calc(100% - 24px));
+  max-height: calc(100% - 156px);
+  border-radius: var(--radius);
+  box-shadow: var(--lift);
+  animation: rise 0.12s ease-out;
+  overflow: hidden;
+}
+
+/* The + and the parts it opens. */
+.add {
+  position: absolute;
+  top: 60px;
+  left: 12px;
+  z-index: 20;
+}
+
+.add .icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  font-size: 20px;
+}
+
+.icon-btn.float:hover,
+.icon-btn.float[aria-expanded='true'] {
+  background: var(--glass);
+  border-color: var(--quiet);
+}
+
+.topbar .icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+}

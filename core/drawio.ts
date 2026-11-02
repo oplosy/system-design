@@ -169,7 +169,7 @@ export function readDrawio(xml: string): Diagram {
   for (const c of shapes.filter((x) => !boxes.has(x.id))) {
     const words = iconWords(c.style);
     const t = text(c.raw);
-    const label = t.label ?? (words && words.replace(/\b\w/g, (ch) => ch.toUpperCase()));
+    const label = t.label ?? (words?.replace(/\b\w/g, (ch) => ch.toUpperCase()));
     if (!label) {
       unnamed++;
       continue;

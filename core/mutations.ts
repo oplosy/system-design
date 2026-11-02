@@ -30,7 +30,7 @@ export function uniqueId(d: Design, base: string) {
 }
 
 /** Resolves the step an edit goes to (latest when omitted). Agent edits reopen the step for review. */
-function useStep(d: Design, step: string | undefined, reopen: boolean) {
+function stepFor(d: Design, step: string | undefined, reopen: boolean) {
   const s = step ? d.steps.find((x) => x.id === step) : d.steps.at(-1);
   if (!s) throw new Error(`unknown step "${step}"`);
   if (reopen) s.seen = false;
@@ -42,7 +42,7 @@ type Edit = { step?: string; reopen?: boolean; option?: string };
 
 /** The step an edit goes to, plus the option of that step it belongs to. */
 function placed(d: Design, input: Edit) {
-  const step = useStep(d, input.step, input.reopen ?? true);
+  const step = stepFor(d, input.step, input.reopen ?? true);
   if (input.option && !d.steps.find((s) => s.id === step)!.options?.some((o) => o.id === input.option)) throw new Error(`step "${step}" has no option "${input.option}"`);
   return { step, option: input.option };
 }
@@ -299,7 +299,7 @@ function remember(d: Design, s: Design['steps'][number], was: Snapshot) {
 /** Removes an item as an agent edit, remembering on the step what went with it (lines to a removed part included). */
 export function removeTracked(d: Design, id: string, step?: string) {
   if (!items(d).some((i) => i.id === id)) throw new Error(`unknown item "${id}"`);
-  const s = d.steps.find((t) => t.id === useStep(d, step, true))!;
+  const s = d.steps.find((t) => t.id === stepFor(d, step, true))!;
   const was = snapshot(d);
   const names = new Map(KINDS.flatMap((k) => (was[k] as Snapshot[Kind]).map((x) => [x.id, nameOf(d, x)] as const)));
   removeItem(d, id);
@@ -321,7 +321,7 @@ export function updateTracked(d: Design, id: string, fields: Record<string, stri
   if (!x) throw new Error(`unknown component, boundary or connection "${id}"`);
   const one = (v: unknown) => (v && typeof v === 'object' && 'kind' in v ? `${(v as Ref).kind}: ${(v as Ref).value}` : String(v));
   const text = (v: unknown) => (v === undefined ? undefined : Array.isArray(v) ? v.map(one).join(', ') : String(v));
-  const s = d.steps.find((t) => t.id === useStep(d, step, reopen))!;
+  const s = d.steps.find((t) => t.id === stepFor(d, step, reopen))!;
   const was = snapshot(d);
   for (const [field, to] of Object.entries(fields)) {
     const from = x[field];

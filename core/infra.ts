@@ -10,6 +10,7 @@ import { asyncapi, backstage, isBackstage, openapi } from './specs.ts';
 export type Part = { key: string; label: string; image?: string; type: ComponentType; tech?: string; description?: string; group?: string; code?: string };
 export type Link = { from: string; to: string; label?: string; qps?: number; latency?: number; async?: boolean };
 export type Group = { key: string; label: string; kind: BoundaryKind; parent?: string };
+// biome-ignore lint/suspicious/noExplicitAny: a foreign file, read defensively field by field
 export type Doc = Record<string, any>;
 
 const obj = (x: unknown): Doc => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Doc) : {});

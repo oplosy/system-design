@@ -1,0 +1,226 @@
+/* The sheet fills the window. Everything else is a small plain surface that appears when it is needed: ink on neutral, one accent. */
+:root {
+  --bg: #f4f4f2;
+  --canvas: #f6f6f4;
+  --panel: #ffffff;
+  /* Follows --panel in every theme. The sheet's own parts stay on the solid --panel. */
+  --glass: color-mix(in srgb, var(--panel) 55%, transparent);
+  --float: 0 1px 2px rgb(20 20 25 / 0.06);
+  --hover: rgb(20 20 25 / 0.05);
+  --field: rgb(20 20 25 / 0.035);
+  --active: rgb(20 20 25 / 0.08);
+  --seg-on: #ffffff;
+  --ink: #18181b;
+  --ink-2: #3f3f46;
+  --muted: #6b6b74;
+  --quiet: #73737c;
+  --rule: rgb(20 20 25 / 0.07);
+  --rule-strong: rgb(20 20 25 / 0.13);
+  --dots: #b4b4ad;
+  --signal: var(--select);
+  --danger: #e5484d;
+  --select: #2b59d9;
+  --note: #fac775;
+  --note-edge: #ef9f27;
+  --note-ink: #412402;
+  --decision: #ba7517;
+  --lift: 0 2px 6px rgb(20 20 25 / 0.05), 0 16px 40px rgb(20 20 25 / 0.12);
+  --radius: 10px;
+  /* Everything / technical values such as ids and costs / Sketch labels, notes and decisions. All cover Turkish. */
+  --sans: 'Instrument Sans', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --hand: 'Shantell Sans', 'Comic Sans MS', cursive;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0d0d0f;
+    --canvas: #111113;
+    --panel: #19191c;
+    --float: 0 1px 2px rgb(0 0 0 / 0.4);
+    --hover: rgb(255 255 255 / 0.06);
+    --field: rgb(255 255 255 / 0.05);
+    --active: rgb(255 255 255 / 0.1);
+    --seg-on: rgb(255 255 255 / 0.12);
+    --ink: #f2f2f3;
+    --ink-2: #d2d2d6;
+    --muted: #a0a0a8;
+    --quiet: #8e8e96;
+    --rule: rgb(255 255 255 / 0.07);
+    --rule-strong: rgb(255 255 255 / 0.13);
+    --dots: #47474e;
+    --danger: #ff6369;
+    --select: #7c9cff;
+    --decision: #efa94a;
+    --lift: 0 2px 6px rgb(0 0 0 / 0.3), 0 18px 44px rgb(0 0 0 / 0.55);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0d0d0f;
+  --canvas: #111113;
+  --panel: #19191c;
+  --float: 0 1px 2px rgb(0 0 0 / 0.4);
+  --hover: rgb(255 255 255 / 0.06);
+  --field: rgb(255 255 255 / 0.05);
+  --active: rgb(255 255 255 / 0.1);
+  --seg-on: rgb(255 255 255 / 0.12);
+  --ink: #f2f2f3;
+  --ink-2: #d2d2d6;
+  --muted: #a0a0a8;
+  --quiet: #8e8e96;
+  --rule: rgb(255 255 255 / 0.07);
+  --rule-strong: rgb(255 255 255 / 0.13);
+  --dots: #47474e;
+  --danger: #ff6369;
+  --select: #7c9cff;
+  --decision: #efa94a;
+  --lift: 0 2px 6px rgb(0 0 0 / 0.3), 0 18px 44px rgb(0 0 0 / 0.55);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font: 13px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  /* JetBrains Mono would turn "->" or "!=" in typed values into single glyphs. */
+  font-variant-ligatures: no-contextual no-common-ligatures;
+}
+
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: inherit;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+:focus-visible {
+  outline: 2px solid var(--select);
+  outline-offset: 2px;
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.quiet {
+  color: var(--quiet);
+}
+
+.pad {
+  padding: 8px 0;
+}
+
+.react-flow__node:focus-visible,
+.react-flow__edge:focus-visible {
+  outline: 2px solid var(--select);
+  outline-offset: 2px;
+}
+
+/* Shown in place of what failed to draw. */
+.crash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+}
+
+.crash h2 {
+  font-size: 18px;
+}
+
+.crash p {
+  max-width: 44ch;
+  color: var(--muted);
+}
+
+.crash-detail {
+  max-width: min(560px, 100%);
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--field);
+  font: 12px var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.crash-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* Floating surfaces share one material. */
+.float,
+.switcher-btn,
+.card,
+.palette,
+.review-bar,
+.review-sheet,
+.present-bar,
+.sequence,
+.menu,
+.find-input,
+.react-flow__controls,
+.react-flow__minimap {
+  background: var(--glass);
+  border: 1px solid var(--rule-strong);
+  box-shadow: var(--float);
+}
+
+.float,
+.switcher-btn,
+.card,
+.palette,
+.review-bar,
+.review-sheet,
+.review-ask,
+.present-bar,
+.sequence,
+.menu,
+.find-input,
+.select-pop,
+.dialog,
+.toast,
+.react-flow__controls,
+.react-flow__minimap {
+  backdrop-filter: blur(3px);
+}

@@ -15,7 +15,7 @@ export function downloadText(text: string, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-const spaced = (text: string) => text.replace(/[ 	]+/g, ' ').trim();
+const spaced = (text: string) => text.replace(/[ \t]+/g, ' ').trim();
 
 /** How a heading reads in a box: capital first, single spaces. A first word like macOS or tasks.json keeps its spelling. */
 export const asTitle = (text: string) => spaced(text).replace(/^\p{Ll}[\p{Ll}\d-]*(?=[\s,;)]|$)/u, (w) => w[0].toUpperCase() + w.slice(1));

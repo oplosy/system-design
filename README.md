@@ -590,6 +590,7 @@ The app folder is the parent of the data folder: `%APPDATA%\system-design` on Wi
 
 ## Security
 
+- **Security headers.** The production server sends a Content Security Policy: scripts come from the server only, and the page can't be framed. The Vite dev server doesn't send it.
 - **Local by default.** The server listens on `127.0.0.1`. It answers only requests addressed to this machine or to `HOST`, and refuses writes from other sites.
 - **No sign-in without a hub.** On a non-local `HOST` with no sign-in, anyone who reaches the server can read and change designs.
 - **Files that run code stay on disk.** Plugins and `mcp-servers.json` can't be set through a design, a repository, the API or the app.
@@ -632,8 +633,10 @@ The app folder is the parent of the data folder: `%APPDATA%\system-design` on Wi
 Requires Node 24+, which runs TypeScript directly.
 
 ```bash
+npm run lint
 npm test
-npm run test:e2e   # browser smoke tests; first run: npx playwright install chromium
+npm run test:coverage
+npm run test:e2e   # Chromium, Firefox and WebKit; first run: npx playwright install chromium firefox webkit
 npm run typecheck
 npm run build
 npm run build:cli

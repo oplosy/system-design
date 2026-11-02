@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { type Design } from '../core/schema.ts';
+import type { Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { type FlowAt, type Change, timeText } from './fields.tsx';
 import { Icon } from './icons.tsx';
@@ -67,7 +67,7 @@ export function Flows({
           </div>
         </form>
       ) : (
-        <button className="list-row" onClick={() => onRecording([])} title="Draw a request path by clicking parts in order">
+        <button type="button" className="list-row" onClick={() => onRecording([])} title="Draw a request path by clicking parts in order">
           <span className="flow-play" aria-hidden="true">
             <Icon name="plus" />
           </span>
@@ -79,7 +79,7 @@ export function Flows({
         const hops = f.path.length - 1;
         return (
           <div key={f.id} className={`flow-entry${at !== null ? ' on' : ''}`}>
-            <button className="list-row" aria-pressed={at !== null} onClick={() => onFlow(at !== null ? null : { id: f.id, at: 0 })} title={at !== null ? 'Stop' : 'Play hop by hop'}>
+            <button type="button" className="list-row" aria-pressed={at !== null} onClick={() => onFlow(at !== null ? null : { id: f.id, at: 0 })} title={at !== null ? 'Stop' : 'Play hop by hop'}>
               <span className="flow-play" aria-hidden="true">
                 <Icon name={at !== null ? 'stop' : 'present'} />
               </span>
@@ -90,20 +90,21 @@ export function Flows({
             </button>
             {at !== null && (
               <div className="flow-steps">
-                <button className="btn" disabled={at === 0} onClick={() => onFlow({ id: f.id, at: at - 1 })} aria-label="Previous hop">
+                <button type="button" className="btn" disabled={at === 0} onClick={() => onFlow({ id: f.id, at: at - 1 })} aria-label="Previous hop">
                   <Icon name="left" />
                 </button>
                 <span className="flow-hop">
                   {at + 1} of {hops}: {labelOf(f.path[at])} → {labelOf(f.path[at + 1])}
                 </span>
-                <button className="btn" disabled={at === hops - 1} onClick={() => onFlow({ id: f.id, at: at + 1 })} aria-label="Next hop">
+                <button type="button" className="btn" disabled={at === hops - 1} onClick={() => onFlow({ id: f.id, at: at + 1 })} aria-label="Next hop">
                   <Icon name="right" />
                 </button>
-                <button className="text-btn" onClick={() => onSequence(f.id)} title="Show as a sequence diagram">
+                <button type="button" className="text-btn" onClick={() => onSequence(f.id)} title="Show as a sequence diagram">
                   <Icon name="sequence" />
                   Sequence
                 </button>
                 <button
+                  type="button"
                   className="text-btn danger"
                   onClick={() => {
                     onFlow(null);
