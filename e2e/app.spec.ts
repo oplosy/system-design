@@ -17,8 +17,8 @@ test.afterEach(({ page }) => {
 
 test('the design opens with only the sheet, the + and the review bar', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Add a part', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Mark seen/ })).toBeVisible();
-  await expect(page.getByPlaceholder(/^Search: /)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Approve/ })).toBeVisible();
+  await expect(page.getByPlaceholder('Search parts')).toHaveCount(0);
   await expect(page.locator('.card')).toHaveCount(0);
   await expect(page.locator('.react-flow__minimap')).toHaveCount(0);
   await expect(page.locator('.review-sheet')).toHaveCount(0);
@@ -48,9 +48,9 @@ test('Ctrl+F opens the find box, Esc closes it, and / opens the parts', async ({
   await page.keyboard.press('Escape');
   await expect(find).toHaveCount(0);
   await page.keyboard.press('/');
-  await expect(page.getByPlaceholder(/^Search: /)).toBeFocused();
+  await expect(page.getByPlaceholder('Search parts')).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(page.getByPlaceholder(/^Search: /)).toHaveCount(0);
+  await expect(page.getByPlaceholder('Search parts')).toHaveCount(0);
 });
 
 test('a step with decisions opens with its details and keeps them closed once closed', async ({ page }) => {
@@ -65,12 +65,12 @@ test('a step with decisions opens with its details and keeps them closed once cl
   await expect(page.locator('.review-sheet')).toHaveCount(0);
 });
 
-test('Diff and Request changes live in the step details', async ({ page }) => {
+test('Show changes lives in the step details and Request changes in the bar', async ({ page }) => {
   await openDetails(page);
-  await page.getByRole('button', { name: 'Diff', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Diff', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Show changes', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Show changes', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Request changes', exact: true }).click();
-  await expect(page.getByLabel(/back to the agent/)).toBeFocused();
+  await expect(page.getByLabel(/What should change/)).toBeFocused();
 });
 
 test('selecting a part opens its inspector', async ({ page }) => {
@@ -112,7 +112,7 @@ test('palette search finds the parts added later, in their own kit', async ({ pa
   await search.fill('lifeline');
   await expect(page.getByText('Lifeline', { exact: true })).toBeVisible();
   await search.fill('mcp');
-  await expect(page.getByText('MCP server / tool')).toBeVisible();
+  await expect(page.getByText('MCP server')).toBeVisible();
 });
 
 test('an edit is saved to disk and undo takes it back', async ({ page, request }) => {
@@ -122,7 +122,7 @@ test('an edit is saved to disk and undo takes it back', async ({ page, request }
   await openParts(page);
   await page.getByRole('button', { name: /^User/ }).first().click();
   await expect(page.locator('.react-flow__node')).toHaveCount(4);
-  await expect(page.getByPlaceholder(/^Search: /)).toHaveCount(0);
+  await expect(page.getByPlaceholder('Search parts')).toHaveCount(0);
   await expect.poll(components).toBe(before + 1);
   await more(page, 'Undo');
   await expect(page.locator('.react-flow__node')).toHaveCount(3);

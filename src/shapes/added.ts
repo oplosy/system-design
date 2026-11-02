@@ -42,13 +42,13 @@ export const added = {
       return [...spokes.map(([x, y]) => gen.line(c, 34, x, y, l)), ...spokes.map(([x, y]) => gen.circle(x, y, 14, o)), gen.circle(c, 34, 22, o)];
     },
   },
-  'private-link': tiled('Private link / endpoint', 'network', 'privatelink private link vpc endpoint interface endpoint private endpoint private service connect gateway endpoint', glyph.link, 220),
+  'private-link': tiled('Private link', 'network', 'privatelink private link vpc endpoint interface endpoint private endpoint private service connect gateway endpoint', glyph.link, 220),
   'llm-gateway': tiled('LLM gateway', 'analytics', 'llm gateway litellm portkey openrouter helicone model router ai gateway guardrails prompt filter token budget fallback proxy', glyph.arrows, 170),
-  'mcp-server': tiled('MCP server / tool', 'analytics', 'mcp model context protocol server tool provider function calling tools plugin connector', glyph.link, 190),
+  'mcp-server': tiled('MCP server', 'analytics', 'mcp model context protocol server tool provider function calling tools plugin connector', glyph.link, 190),
   object: {
-    name: 'Object / instance',
+    name: 'Object',
     group: 'sw-uml',
-    keywords: 'object instance uml object diagram snapshot runtime underlined',
+    keywords: 'object instance uml object diagram snapshot runtime underlined endpoint tool',
     w: 160,
     h: 56,
     labelY: 24,

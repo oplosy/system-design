@@ -94,13 +94,13 @@ test('presenting walks the steps with the arrow keys and Escape leaves', async (
   await openCopy(page, request, 'present-copy', { seen: true });
   await more(page, 'Present');
   const counter = page.getByRole('region', { name: 'Presentation' }).locator('.present-no');
-  await expect(counter).toHaveText('03/03');
+  await expect(counter).toHaveText('3 of 3');
   await page.keyboard.press('ArrowLeft');
-  await expect(counter).toHaveText('02/03');
+  await expect(counter).toHaveText('2 of 3');
   await page.keyboard.press('ArrowLeft');
-  await expect(counter).toHaveText('01/03');
+  await expect(counter).toHaveText('1 of 3');
   await page.keyboard.press('ArrowRight');
-  await expect(counter).toHaveText('02/03');
+  await expect(counter).toHaveText('2 of 3');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('region', { name: 'Presentation' })).toHaveCount(0);
 });

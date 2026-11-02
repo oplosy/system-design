@@ -1,80 +1,61 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as m from '../core/mutations.ts';
 import { api, type Me, type Summary, type Trashed } from './api.ts';
-import { useDismiss } from './menus.tsx';
-import { pad, errorText, MAX_IMPORT } from './format.ts';
+import { DialogHead, useDismiss } from './menus.tsx';
+import { errorText, MAX_IMPORT } from './format.ts';
 
-export function DesignSwitcher({ designs, current, meta, onPick, onCreate, onAll, onConnections, user }: { designs: Summary[]; current: string | null; meta?: string; onPick: (id: string) => void; onCreate?: () => void; onAll?: () => void; onConnections?: () => void; user: Me }) {
+export function DesignSwitcher({ designs, current, onPick, onCreate, onAll, onConnections, user }: { designs: Summary[]; current: string | null; onPick: (id: string) => void; onCreate?: () => void; onAll?: () => void; onConnections?: () => void; user: Me }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(open, close, ref);
   const cur = designs.find((d) => d.id === current);
+  /** Closes the menu, then acts. */
+  const item = (name: string, onClick: () => void) => (
+    <button
+      className="menu-row"
+      onClick={() => {
+        setOpen(false);
+        onClick();
+      }}
+    >
+      {name}
+    </button>
+  );
   return (
     <div className="switcher" ref={ref}>
-      <button className="switcher-btn" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)} title={meta}>
+      <button className="switcher-btn" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className="switcher-title">{cur?.title ?? 'Select a design'}</span>
-        {cur?.unseen ? <span className="new-count">{cur.unseen} new</span> : null}
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 3.5 5 7l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" /></svg>
       </button>
       {open && (
-        <div className="menu" role="listbox" aria-label="Designs">
-          {meta && <p className="menu-head">{meta}</p>}
-          {designs.map((d) => (
-            <button
-              key={d.id}
-              role="option"
-              aria-selected={d.id === current}
-              className="menu-item"
-              onClick={() => {
-                onPick(d.id);
-                setOpen(false);
-              }}
-            >
-              <span className="menu-main">
-                <span className="menu-title">{d.title}</span>
-                {d.description && <span className="menu-desc">{d.description}</span>}
-              </span>
-              {d.unseen ? <span className="new-count">{d.unseen} new</span> : <span className="menu-meta">{pad(d.steps)} steps</span>}
-            </button>
-          ))}
-          {onCreate && (
-            <button
-              className="menu-item menu-all"
-              onClick={() => {
-                setOpen(false);
-                onCreate();
-              }}
-            >
-              New design
-            </button>
-          )}
-          {onAll && (
-            <button
-              className="menu-item menu-all"
-              onClick={() => {
-                setOpen(false);
-                onAll();
-              }}
-            >
-              All designs, trash and files…
-            </button>
-          )}
+        <div className="menu">
+          <div role="listbox" aria-label="Designs">
+            {designs.map((d) => (
+              <button
+                key={d.id}
+                role="option"
+                aria-selected={d.id === current}
+                className="menu-row"
+                title={d.description}
+                onClick={() => {
+                  onPick(d.id);
+                  setOpen(false);
+                }}
+              >
+                <span className="menu-name">{d.title}</span>
+                {d.unseen ? <span className="new-count">{d.unseen} new</span> : null}
+              </button>
+            ))}
+          </div>
+          {(onCreate || onAll || onConnections || user) && <hr className="menu-rule" />}
+          {onCreate && item('New design', onCreate)}
+          {onAll && item('All designs', onAll)}
+          {onConnections && item('Connections', onConnections)}
           {user && (
-            <a className="menu-item menu-all" href="/auth/logout">
-              Sign out {user.email}
+            <a className="menu-row" href="/auth/logout" title={user.email}>
+              Sign out
             </a>
-          )}
-          {onConnections && (
-            <button
-              className="menu-item menu-all"
-              onClick={() => {
-                setOpen(false);
-                onConnections();
-              }}
-            >
-              Connections: webhooks, API, links…
-            </button>
           )}
         </div>
       )}
@@ -154,18 +135,11 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog wide" role="dialog" aria-modal="true" aria-labelledby="designs-title">
-        <header className="dialog-head">
-          <span className="tag" id="designs-title">
-            Designs · {designs.length}
-          </span>
-          <button type="button" className="text-btn" onClick={onClose}>
-            Close <kbd>Esc</kbd>
-          </button>
-        </header>
+        <DialogHead id="designs-title" title="Designs" onClose={onClose} />
         <div className="designs-tools">
           <input className="find-input" autoFocus value={query} placeholder="Search designs" aria-label="Search designs" onChange={(e) => setQuery(e.target.value)} />
           <button className="text-btn" onClick={() => setByName((x) => !x)} title="Change the order">
-            {byName ? 'A–Z' : 'Recent'}
+            {byName ? 'By name' : 'Recent'}
           </button>
         </div>
         {err && <em className="ed-error">{err}</em>}
@@ -185,14 +159,9 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
                   onBlur={(e) => rename(d.id, e.currentTarget.value)}
                 />
               ) : (
-                <button className="designs-open" onClick={() => onOpen(d.id)}>
-                  <span className="choice-main">
-                    <strong>{d.title}</strong>
-                    {d.description && <span>{d.description}</span>}
-                  </span>
-                  <span className="menu-meta">
-                    {d.unseen ? <span className="new-count">{d.unseen} new</span> : `${pad(d.steps)} steps`} · {ago(d.updated)}
-                  </span>
+                <button className="designs-open" title={d.description} onClick={() => onOpen(d.id)}>
+                  <span className="menu-name">{d.title}</span>
+                  {d.unseen ? <span className="new-count">{d.unseen} new</span> : <span className="menu-meta">{ago(d.updated)}</span>}
                 </button>
               )}
               <span className="designs-actions">
@@ -208,7 +177,7 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
         {trashed.length > 0 && (
           <>
             <button className="text-btn" aria-expanded={showTrash} onClick={() => setShowTrash((x) => !x)}>
-              Recently deleted · {trashed.length}
+              Trash {trashed.length}
             </button>
             {showTrash && (
               <ul className="designs-list">
@@ -216,8 +185,8 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
                   <li key={t.entry} className="designs-row">
                     <span className="choice-main">
                       <strong>{t.title}</strong>
-                      <span>Deleted {ago(t.deleted)}</span>
                     </span>
+                    <span className="menu-meta">{ago(t.deleted)}</span>
                     <span className="designs-actions">
                       <button className="text-btn" onClick={() => run(async () => (await api.restore(t.entry), loadTrash()))}>Restore</button>
                     </span>
@@ -229,10 +198,9 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
         )}
         <footer className="dialog-foot designs-foot">
           {dir && (
-            <span className="designs-dir" title="Every design is a JSON file in this folder">
-              Saved in <code>{dir}</code>
-              <button className="text-btn" onClick={() => navigator.clipboard?.writeText(dir)}>Copy path</button>
-            </span>
+            <button className="text-btn" title={dir} onClick={() => navigator.clipboard?.writeText(dir)}>
+              Copy folder path
+            </button>
           )}
           <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => (e.target.files?.[0] && upload(e.target.files[0]), (e.target.value = ''))} />
           <button className="btn" onClick={() => fileRef.current?.click()}>Add from file</button>

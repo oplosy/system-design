@@ -19,7 +19,7 @@ export type TopBarProps = ComponentProps<typeof MoreMenu> & {
 
 /** Two small pieces over the sheet: the design on the left, everything else behind a menu on the right. */
 export function TopBar(p: TopBarProps) {
-  const { design, me } = p;
+  const { me } = p;
   const viewOnly = me?.canEdit === false;
   return (
     <header className="topbar">
@@ -33,7 +33,6 @@ export function TopBar(p: TopBarProps) {
             onAll={shared ? undefined : p.onBrowse}
             onConnections={shared || me ? undefined : p.onConnections}
             user={me}
-            meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined}
           />
         ) : (
           <span className="wordmark">system design</span>

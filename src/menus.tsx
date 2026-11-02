@@ -3,6 +3,7 @@ import { type Design } from '../core/schema.ts';
 import { shared, type LiveLoad } from './api.ts';
 import { LAYOUTS, type LayoutKind } from './layout.ts';
 import { type Editing, type Theme } from './format.ts';
+import { CURRENCIES, Ed, Prop, type Change } from './fields.tsx';
 
 export function useDismiss(active: boolean, onDismiss: () => void, ref?: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
@@ -16,6 +17,17 @@ export function useDismiss(active: boolean, onDismiss: () => void, ref?: React.R
       document.removeEventListener('mousedown', onDown);
     };
   }, [active, onDismiss, ref]);
+}
+
+export function DialogHead({ id, title, onClose }: { id: string; title: string; onClose: () => void }) {
+  return (
+    <header className="dialog-head">
+      <h2 id={id}>{title}</h2>
+      <button type="button" className="icon-btn" onClick={onClose} aria-label="Close" title="Close (Esc)">
+        ×
+      </button>
+    </header>
+  );
 }
 
 /** Text box over the canvas for renaming in place. Enter or leaving it saves; Esc cancels; Shift+Enter adds a line. */
@@ -77,7 +89,32 @@ function Appearance({ sketch, onSketch, theme, onTheme }: { sketch: boolean; onS
       <Seg label="Theme" value={theme} options={THEMES} onPick={onTheme} />
       <span className="field-label">Drawing style</span>
       <Seg label="Drawing style" value={sketch ? 'sketch' : 'clean'} options={STYLES} onPick={(v) => onSketch(v === 'sketch')} />
-      <p className="menu-note">Clean draws crisp lines for docs; Sketch draws hand-made ones like a whiteboard.</p>
+    </div>
+  );
+}
+
+/** What belongs to the whole design rather than to a step. */
+function DesignSettings({ design, change }: { design: Design; change: Change }) {
+  return (
+    <div className="menu-form">
+      <Prop label="Repo">
+        <Ed
+          label="Repo"
+          placeholder="https://…"
+          value={design.repo}
+          check={(v) => (/^https?:\/\/\S+$/i.test(v) ? undefined : 'Use an http(s) address')}
+          onCommit={(v) => change((d) => void (d.repo = v?.trim()))}
+        />
+      </Prop>
+      <Prop label="Currency">
+        <select className="ed" value={design.currency ?? 'USD'} onChange={(e) => change((d) => void (d.currency = e.target.value === 'USD' ? undefined : e.target.value))} aria-label="Currency of costs">
+          {CURRENCIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </Prop>
     </div>
   );
 }
@@ -92,20 +129,13 @@ function tagCounts(design: Design | null) {
 function TagList({ counts, tag, onPick }: { counts: Map<string, number>; tag: string | null; onPick: (tag: string | null) => void }) {
   return (
     <>
-      <button role="menuitemradio" aria-checked={!tag} className="menu-item" onClick={() => onPick(null)}>
-        <span className="menu-main">
-          <span className="menu-title">Everything</span>
-          <span className="menu-desc">Every part on the sheet</span>
-        </span>
+      <button role="menuitemradio" aria-checked={!tag} className="menu-row" onClick={() => onPick(null)}>
+        Everything
       </button>
       {[...counts].sort(([a], [b]) => a.localeCompare(b)).map(([t, n]) => (
-        <button key={t} role="menuitemradio" aria-checked={tag === t} className="menu-item" onClick={() => onPick(t)}>
-          <span className="menu-main">
-            <span className="menu-title">{t}</span>
-            <span className="menu-desc">
-              {n} {n > 1 ? 'parts' : 'part'}
-            </span>
-          </span>
+        <button key={t} role="menuitemradio" aria-checked={tag === t} className="menu-row" onClick={() => onPick(t)}>
+          {t}
+          <span className="menu-hint">{n}</span>
         </button>
       ))}
     </>
@@ -119,14 +149,11 @@ function LayoutList({ selected, onPick }: { selected: number; onPick: (kind: Lay
     <>
       <label className={`check${selected > 1 ? '' : ' off'}`} title={selected > 1 ? undefined : 'Select two or more items first (Shift or Ctrl + click, or drag a box)'}>
         <input type="checkbox" checked={scoped} disabled={selected < 2} onChange={(e) => setOnlySelected(e.target.checked)} />
-        Only the selected items{selected > 1 ? ` (${selected})` : ''}
+        Only the selected items
       </label>
       {LAYOUTS.map((x) => (
-        <button key={x.key} role="menuitem" className="menu-item" onClick={() => onPick(x.key, scoped)}>
-          <span className="menu-main">
-            <span className="menu-title">{x.title}</span>
-            <span className="menu-desc">{x.desc}</span>
-          </span>
+        <button key={x.key} role="menuitem" className="menu-row" title={x.desc} onClick={() => onPick(x.key, scoped)}>
+          {x.title}
         </button>
       ))}
     </>
@@ -148,11 +175,8 @@ export type ExportKind = (typeof EXPORTS)[number]['kind'] | `plugin:${string}`;
 
 function ExportList({ extra, onPick }: { extra: { kind: string; name: string; extension: string }[]; onPick: (kind: ExportKind) => void }) {
   return [...EXPORTS.filter((x) => !(shared && x.kind === 'html')), ...extra.map((x) => ({ kind: x.kind as ExportKind, title: x.name, desc: `From a plugin, as .${x.extension}` }))].map((x) => (
-    <button key={x.kind} role="menuitem" className="menu-item" onClick={() => onPick(x.kind)}>
-      <span className="menu-main">
-        <span className="menu-title">{x.title}</span>
-        <span className="menu-desc">{x.desc}</span>
-      </span>
+    <button key={x.kind} role="menuitem" className="menu-row" title={x.desc} onClick={() => onPick(x.kind)}>
+      {x.title}
     </button>
   ));
 }
@@ -179,13 +203,14 @@ type MoreMenuProps = {
   onSketch: (sketch: boolean) => void;
   theme: Theme;
   onTheme: (theme: Theme) => void;
+  change: Change;
 };
 
 /** Everything that is not the sheet: one menu, with longer lists and settings on a page of their own. */
 export function MoreMenu(p: MoreMenuProps) {
   const { design, tag, onTag } = p;
   const [open, setOpen] = useState(false);
-  const [page, setPage] = useState<'view' | 'layout' | 'export' | 'appearance' | null>(null);
+  const [page, setPage] = useState<'view' | 'layout' | 'export' | 'settings' | 'appearance' | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => {
     setOpen(false);
@@ -202,10 +227,9 @@ export function MoreMenu(p: MoreMenuProps) {
     close();
     fn(...args);
   };
-  const action = (name: string, onClick: () => void, hint?: string, disabled?: boolean) => (
-    <button role="menuitem" className="menu-row" disabled={disabled} onClick={act(onClick)}>
+  const action = (name: string, onClick: () => void, keys?: string, disabled?: boolean) => (
+    <button role="menuitem" className="menu-row" title={keys} disabled={disabled} onClick={act(onClick)}>
       {name}
-      {hint && <span className="menu-hint" aria-hidden="true">{hint}</span>}
     </button>
   );
   const sub = (name: string, to: NonNullable<typeof page>, hint?: string, disabled?: boolean) => (
@@ -217,13 +241,14 @@ export function MoreMenu(p: MoreMenuProps) {
   const check = (name: string, on: boolean, onClick: () => void, title?: string) => (
     <button role="menuitemcheckbox" aria-checked={on} className="menu-row" title={title} onClick={onClick}>
       {name}
-      <span className="menu-hint" aria-hidden="true">{on ? 'On' : 'Off'}</span>
+      {on && <span className="menu-hint" aria-hidden="true">On</span>}
     </button>
   );
   const pages = {
     view: <TagList counts={counts} tag={tag} onPick={act(onTag)} />,
     layout: <LayoutList selected={p.selectedCount} onPick={act(p.onArrange)} />,
     export: <ExportList extra={p.exportExtras} onPick={act(p.onExport)} />,
+    settings: design && <DesignSettings design={design} change={p.change} />,
     appearance: <Appearance sketch={p.sketch} onSketch={p.onSketch} theme={p.theme} onTheme={p.onTheme} />,
   };
   return (
@@ -255,6 +280,7 @@ export function MoreMenu(p: MoreMenuProps) {
               {action('Present', p.onPresent, undefined, !design)}
               <hr className="menu-rule" />
               {check('Overview map', p.minimap, () => p.onMinimap(!p.minimap))}
+              {sub('Design settings', 'settings', undefined, !design)}
               {sub('Appearance', 'appearance')}
             </>
           )}

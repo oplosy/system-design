@@ -44,7 +44,7 @@ export async function more(page: Page, name: string) {
 /** Opens the parts from the + beside the sheet and returns their search box. */
 export async function openParts(page: Page) {
   await page.getByRole('button', { name: 'Add a part', exact: true }).click();
-  return page.getByPlaceholder(/^Search: /);
+  return page.getByPlaceholder('Search parts');
 }
 
 /** Unfolds the current step's details above the review bar. */

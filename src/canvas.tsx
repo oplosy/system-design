@@ -81,7 +81,7 @@ export const ComponentNodeView = memo(function ComponentNodeView({ id, data }: N
       <div className="node-label" style={{ left: spec.labelX ?? spec.w / 2, top: spec.labelY, maxWidth: spec.w + 30 }}>
         <div>{data.label}</div>
         {data.tech && <div className="node-tech">{data.tech}</div>}
-        {data.cost !== undefined && <div className="node-tech">{money(data.cost, data.currency)}/mo</div>}
+        {data.cost !== undefined && <div className="node-tech">{money(data.cost, data.currency)} a month</div>}
       </div>
       {data.code && (
         <a className="node-code nodrag" href={data.code} target="_blank" rel="noreferrer noopener" title="Open the code in a new tab" aria-label={`Open the code of ${data.label}`}>
@@ -210,9 +210,9 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
     return [toPaths(parts), toPaths(heads)];
   }, [geo?.d, sketch, id, link, rel, selected, data?.hopOn]);
   const named = data?.label ?? (rel === 'include' || rel === 'extend' ? `«${rel}»` : undefined);
-  const load = [data?.latency !== undefined && `${data.latency} ms`, data?.qps !== undefined && `${rate(data.qps)}/s`, data?.errors && `${data.errors}% failed`]
+  const load = [data?.latency !== undefined && `${data.latency} ms`, data?.qps !== undefined && `${rate(data.qps)} rps`, data?.errors && `${data.errors}% failed`]
     .filter(Boolean)
-    .join(' · ');
+    .join(', ');
   // Live numbers with 5% or more failed calls turn the line red.
   const failing = (data?.errors ?? 0) >= 5;
   const label = named || load ? (
@@ -252,7 +252,7 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
       {data?.hops && (
         <EdgeLabelRenderer>
           <div className={`hop-badge${data.hopOn ? ' on' : ''}`} style={{ transform: `${at} translateY(${label ? -22 : 0}px)` }}>
-            {data.hops.join(' · ')}
+            {data.hops.join(', ')}
           </div>
         </EdgeLabelRenderer>
       )}
@@ -262,7 +262,7 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
             <div
               className={`edge-label${data?.faded ? ' faded' : ''}${handle ? ' nodrag nopan grab' : ''}`}
               style={{ transform: at }}
-              title={handle ? 'Drag to bend · double-click to edit' : undefined}
+              title={handle ? 'Drag to bend, double-click to edit' : undefined}
               onPointerDown={startBend}
               onDoubleClick={() => onEditLabel(id, geo.mid)}
             >
@@ -272,7 +272,7 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
             <div
               className="bend-handle nodrag nopan"
               style={{ transform: at }}
-              title="Drag to bend · double-click to add a label"
+              title="Drag to bend, double-click to add a label"
               onPointerDown={startBend}
               onDoubleClick={() => onEditLabel(id, geo.mid)}
             />

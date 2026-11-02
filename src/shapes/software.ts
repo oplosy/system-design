@@ -27,7 +27,7 @@ export const software = {
   },
   interface: tiled('Interface', 'sw-uml', 'interface contract protocol trait abstract api uml lollipop', glyph.lollipop, 160),
   module: {
-    name: 'Component / module',
+    name: 'Module',
     group: 'sw-uml',
     keywords: 'uml component module bounded unit deployable part subsystem',
     w: 180,
@@ -37,7 +37,7 @@ export const software = {
     draw: (o, w, h) => [gen.rectangle(12, 3, w - 15, h - 6, o), gen.rectangle(4, 13, 16, 9, o), gen.rectangle(4, h - 22, 16, 9, o)],
   },
   package: {
-    name: 'Package / namespace',
+    name: 'Package',
     group: 'sw-uml',
     keywords: 'package namespace folder module uml directory',
     w: 180,
@@ -46,7 +46,7 @@ export const software = {
     draw: (o, w, h) => [gen.rectangle(3, 3, 64, 12, o), gen.rectangle(3, 15, w - 6, h - 18, o)],
   },
   table: {
-    name: 'Entity / table',
+    name: 'Table',
     group: 'sw-uml',
     keywords: 'er erd entity relationship table schema database model columns rows',
     w: 170,
@@ -139,7 +139,7 @@ export const software = {
     draw: (o, w) => [gen.circle(w / 2, 18, 32, line(o)), gen.circle(w / 2, 18, 18, { ...o, fill: 'currentColor', fillStyle: 'solid' })],
   },
   action: {
-    name: 'Action / step',
+    name: 'Action',
     group: 'sw-flow',
     keywords: 'action activity step task process flowchart',
     w: 170,
@@ -148,7 +148,7 @@ export const software = {
     draw: (o, w, h) => [gen.path(roundRect(3, 3, w - 6, h - 6, (h - 6) / 2), o)],
   },
   choice: {
-    name: 'Decision / branch',
+    name: 'Branch',
     group: 'sw-flow',
     keywords: 'decision branch condition if choice merge gateway flowchart diamond',
     w: 180,
@@ -157,7 +157,7 @@ export const software = {
     draw: (o, w, h) => [gen.polygon([[w / 2, 3], [w - 3, h / 2], [w / 2, h - 3], [3, h / 2]], o)],
   },
   fork: {
-    name: 'Fork / join',
+    name: 'Fork and join',
     group: 'sw-flow',
     keywords: 'fork join parallel sync bar concurrency split',
     w: 160,
@@ -175,7 +175,7 @@ export const software = {
     draw: (o, w, h) => [gen.path(roundRect(3, 3, w - 6, h - 6, 14), o), gen.line(3, 31, w - 3, 31, line(o))],
   },
   signal: {
-    name: 'Signal / message',
+    name: 'Signal',
     group: 'sw-flow',
     keywords: 'signal send message emit notify event',
     w: 170,

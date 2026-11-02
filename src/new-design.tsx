@@ -3,8 +3,8 @@ import { parseDesign, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { ApiError, api, type Summary } from './api.ts';
 import { guessType } from './shapes.ts';
-import { useDismiss } from './menus.tsx';
-import { errorText, pad } from './format.ts';
+import { DialogHead, useDismiss } from './menus.tsx';
+import { errorText } from './format.ts';
 
 // Not a valid design id, so no template can take it.
 const MERMAID = ':mermaid';
@@ -58,22 +58,15 @@ export function NewDesign({ templates, onCancel, onCreated }: { templates: Summa
     }
   };
   const options = [
-    { id: '', title: 'Blank sheet', description: 'Nothing on it yet. Build it yourself or let an agent fill it in.', steps: 1, unseen: 0 },
-    { id: MERMAID, title: 'Diagram from another tool', description: 'Paste Mermaid (flowchart, sequence, C4, architecture), C4-PlantUML, draw.io XML or a Structurizr workspace; boxes, arrows and groups become parts, lines and boundaries, a sequence or dynamic view a flow.', steps: 1, unseen: 0 },
-    { id: INFRA, title: 'Infrastructure, catalogs, API specs or traces', description: 'Paste a compose file, manifests, "terraform show -json" output, a CloudFormation / CDK template, a Pulumi stack export, a Backstage catalog, an OpenAPI or AsyncAPI document, or OpenTelemetry / Jaeger traces; services, workloads and resources become parts, dependencies and calls become lines (traces add measured load, latency and flows).', steps: 1, unseen: 0 },
+    { id: '', title: 'Blank sheet', description: undefined, steps: 1, unseen: 0 },
+    { id: MERMAID, title: 'Paste a diagram', description: 'Mermaid, C4-PlantUML, draw.io XML or a Structurizr workspace', steps: 1, unseen: 0 },
+    { id: INFRA, title: 'Paste infrastructure or an API file', description: 'Compose, Kubernetes, Terraform JSON, CloudFormation, CDK, Pulumi, Backstage, OpenAPI, AsyncAPI, OpenTelemetry or Jaeger traces', steps: 1, unseen: 0 },
     ...templates,
   ];
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
       <form className="dialog" role="dialog" aria-modal="true" aria-labelledby="new-design-title" onSubmit={submit}>
-        <header className="dialog-head">
-          <span className="tag" id="new-design-title">
-            New design
-          </span>
-          <button type="button" className="text-btn" onClick={onCancel}>
-            Close <kbd>Esc</kbd>
-          </button>
-        </header>
+        <DialogHead id="new-design-title" title="New design" onClose={onCancel} />
         <input
           className="title-input"
           autoFocus
@@ -90,13 +83,12 @@ export function NewDesign({ templates, onCancel, onCreated }: { templates: Summa
         <h3 className="rule-head">Start from</h3>
         <div role="radiogroup" aria-label="Start from">
           {options.map((t) => (
-            <button key={t.id || 'blank'} type="button" role="radio" aria-checked={template === t.id} className="choice" onClick={() => setTemplate(t.id)}>
+            <button key={t.id || 'blank'} type="button" role="radio" aria-checked={template === t.id} className="choice" title={t.description} onClick={() => setTemplate(t.id)}>
               <span className="radio" aria-hidden="true" />
               <span className="choice-main">
                 <strong>{t.title}</strong>
-                {t.description && <span>{t.description}</span>}
               </span>
-              <span className="menu-meta">{t.id && t.id !== MERMAID && t.id !== INFRA ? `${pad(t.steps)} steps` : '—'}</span>
+              {t.id && t.id !== MERMAID && t.id !== INFRA && <span className="menu-meta">{t.steps} steps</span>}
             </button>
           ))}
         </div>
@@ -119,9 +111,6 @@ export function NewDesign({ templates, onCancel, onCreated }: { templates: Summa
           />
         )}
         <footer className="dialog-foot">
-          <button type="button" className="text-btn" onClick={onCancel}>
-            Cancel
-          </button>
           <button type="submit" className="btn ink" disabled={busy}>
             Create design
           </button>

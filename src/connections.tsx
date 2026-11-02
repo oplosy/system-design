@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { type Design } from '../core/schema.ts';
 import { api, type Hook, type HookFormat, type McpServers, type Plugins } from './api.ts';
-import { useDismiss } from './menus.tsx';
+import { DialogHead, useDismiss } from './menus.tsx';
 import { errorText } from './format.ts';
 
 const EVENT_CHOICES = [
   { label: 'Everything', events: undefined },
-  { label: 'Steps (added, approved, sent back)', events: ['step.*'] },
+  { label: 'Steps', events: ['step.*'] },
   { label: 'Steps and comments', events: ['step.*', 'comment.*'] },
   { label: 'Parts and lines', events: ['part.*', 'line.*', 'boundary.*'] },
   { label: 'Decisions', events: ['decision.*'] },
@@ -64,29 +64,21 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
   const origin = location.origin;
   const link = design ? `${origin}/#${[design.id, ...(selected ? [selected] : [])].map(encodeURIComponent).join('/')}` : null;
   const copy = (what: string, text: string) => navigator.clipboard?.writeText(text).then(() => setCopied(what));
-  const addresses: [string, string, string][] = [
-    ['API', `${origin}/api/v1`, 'Designs, templates, trash and webhooks over JSON'],
-    ['Plugins', `${origin}/api/v1/plugins`, 'What is installed here'],
-    ['OpenAPI', `${origin}/api/v1/openapi.json`, 'Generate a client, or import it into Postman, n8n or Zapier'],
-    ['Design schema', `${origin}/api/v1/schema/design.json`, 'JSON Schema of a design file'],
-    ['Change stream', `${origin}/api/v1/events`, 'Server-sent events whenever a design changes'],
-    ['MCP', 'npx -y github:oplosy/system-design mcp', 'Command that starts the MCP server for an agent'],
+  const addresses: [string, string][] = [
+    ['API', `${origin}/api/v1`],
+    ['Plugins', `${origin}/api/v1/plugins`],
+    ['OpenAPI', `${origin}/api/v1/openapi.json`],
+    ['Design schema', `${origin}/api/v1/schema/design.json`],
+    ['Change stream', `${origin}/api/v1/events`],
+    ['MCP', 'npx -y github:oplosy/system-design mcp'],
   ];
   const what = (h: Hook) => EVENT_CHOICES.find((c) => JSON.stringify(c.events ?? null) === JSON.stringify(h.events ?? null))?.label ?? h.events?.join(', ') ?? 'Everything';
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog wide" role="dialog" aria-modal="true" aria-labelledby="connections-title">
-        <header className="dialog-head">
-          <span className="tag" id="connections-title">
-            Connections
-          </span>
-          <button type="button" className="text-btn" onClick={onClose}>
-            Close <kbd>Esc</kbd>
-          </button>
-        </header>
+        <DialogHead id="connections-title" title="Connections" onClose={onClose} />
         {err && <em className="ed-error">{err}</em>}
         <h3 className="conn-head">Webhooks</h3>
-        <p className="quiet conn-note">Every change, made here, by an agent or by a command, is posted to these addresses as CloudEvents, or as a chat line when an agent adds steps.</p>
         <ul className="designs-list">
           {hooks.map((h) => (
             <li key={h.id} className="designs-row">
@@ -95,9 +87,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
                   {h.url}
                 </code>
                 <span>
-                  {{ cloudevents: 'CloudEvents', chat: 'Chat message', slack: 'Slack with buttons' }[h.format]} · {what(h)} · {h.designs?.length ? h.designs.join(', ') : 'all designs'}
-                  {h.signed ? ' · signed' : ''}
-                  {results[h.id] ? ` · ${results[h.id]}` : ''}
+                  {[{ cloudevents: 'CloudEvents', chat: 'Chat message', slack: 'Slack with buttons' }[h.format], what(h), h.designs?.length ? h.designs.join(', ') : 'all designs', h.signed && 'signed', results[h.id]].filter(Boolean).join(', ')}
                 </span>
               </span>
               <span className="designs-actions">
@@ -113,11 +103,11 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
           {!hooks.length && <li className="designs-empty">No webhooks yet.</li>}
         </ul>
         <form className="conn-form" onSubmit={add}>
-          <input className="find-input" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.slack.com/… or your endpoint" aria-label="Webhook address" required />
+          <input className="find-input" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" aria-label="Webhook address" required />
           <select className="find-input" value={format} onChange={(e) => setFormat(e.target.value as HookFormat)} aria-label="Format">
-            <option value="cloudevents">CloudEvents (JSON)</option>
-            <option value="chat">Chat message (Slack, Teams, Discord)</option>
-            <option value="slack">Slack with Approve and Send back buttons</option>
+            <option value="cloudevents">CloudEvents</option>
+            <option value="chat">Chat message</option>
+            <option value="slack">Slack with buttons</option>
           </select>
           <select className="find-input" value={choice} onChange={(e) => setChoice(Number(e.target.value))} aria-label="Events">
             {EVENT_CHOICES.map((c, i) => (
@@ -126,7 +116,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
               </option>
             ))}
           </select>
-          <input className="find-input" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Signing secret (optional, 8+ characters)" aria-label="Signing secret" autoComplete="new-password" />
+          <input className="find-input" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Secret, at least 8 characters" aria-label="Signing secret" autoComplete="new-password" />
           {design && (
             <label className="conn-check">
               <input type="checkbox" checked={onlyThis} onChange={(e) => setOnlyThis(e.target.checked)} /> Only “{design.title}”
@@ -138,7 +128,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
         </form>
         <h3 className="conn-head">MCP servers</h3>
         <p className="quiet conn-note">
-          Servers you already run answer questions about a part in its panel. List them in <code>{mcp?.file}</code>, then restart. Only tools that declare themselves read-only are called.
+          List servers in <code>{mcp?.file}</code>, then restart.
         </p>
         {mcp?.error && <em className="ed-error">{mcp.error}</em>}
         <ul className="designs-list">
@@ -146,10 +136,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
             <li key={s.name} className="designs-row">
               <span className="choice-main">
                 <strong>{s.name}</strong>
-                <span>
-                  {s.queries.length ? s.queries.join(', ') : 'No queries yet'}
-                  {results[s.name] ? ` · ${results[s.name]}` : ''}
-                </span>
+                <span>{[s.queries.length ? s.queries.join(', ') : 'No queries yet', results[s.name]].filter(Boolean).join(', ')}</span>
               </span>
               <span className="designs-actions">
                 <button className="text-btn" onClick={() => testMcp(s.name)}>
@@ -162,7 +149,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
         </ul>
         <h3 className="conn-head">Plugins</h3>
         <p className="quiet conn-note">
-          Add formats, metric sources and link targets by putting a <code>.mjs</code> module in <code>{plugins?.dir}</code>, then restart. Plugins run as code on this machine, so add only what you trust.
+          Put <code>.mjs</code> modules in <code>{plugins?.dir}</code>, then restart. Plugins run as code on this machine.
         </p>
         <ul className="designs-list">
           {plugins?.plugins.map((p) => (
@@ -177,7 +164,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
                     p.links.length && `Opens ${p.links.join(', ')} links`,
                   ]
                     .filter(Boolean)
-                    .join(' · ')}
+                    .join(', ')}
                 </span>
               </span>
             </li>
@@ -192,7 +179,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
           ))}
           {!plugins?.plugins.length && !plugins?.failed.length && <li className="designs-empty">No plugins yet.</li>}
         </ul>
-        <h3 className="conn-head">For other tools and agents</h3>
+        <h3 className="conn-head">Addresses</h3>
         <ul className="designs-list">
           {link && (
             <li className="designs-row">
@@ -207,11 +194,10 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
               </span>
             </li>
           )}
-          {addresses.map(([name, value, note]) => (
+          {addresses.map(([name, value]) => (
             <li key={name} className="designs-row">
               <span className="choice-main">
                 <strong>{name}</strong>
-                <span>{note}</span>
                 <code className="conn-url">{value}</code>
               </span>
               <span className="designs-actions">

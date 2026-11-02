@@ -90,10 +90,7 @@ export function Flows({
                   ←
                 </button>
                 <span className="flow-hop">
-                  <span className="mono">
-                    {at + 1}/{hops}
-                  </span>{' '}
-                  {labelOf(f.path[at])} → {labelOf(f.path[at + 1])}
+                  {at + 1} of {hops}: {labelOf(f.path[at])} → {labelOf(f.path[at + 1])}
                 </span>
                 <button className="btn" disabled={at === hops - 1} onClick={() => onFlow({ id: f.id, at: at + 1 })} aria-label="Next hop">
                   →

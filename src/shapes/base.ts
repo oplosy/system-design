@@ -13,23 +13,23 @@ export type Kit = (typeof KITS)[number]['key'];
 
 /** Palette sections, in order. Each group has one fill colour. */
 export const GROUPS = [
-  { key: 'client', title: 'Clients / users', color: '#2F9FB8', kit: 'system' },
-  { key: 'edge', title: 'Edge / security', color: '#D85A30', kit: 'system' },
+  { key: 'client', title: 'Clients', color: '#2F9FB8', kit: 'system' },
+  { key: 'edge', title: 'Edge and security', color: '#D85A30', kit: 'system' },
   { key: 'network', title: 'Network', color: '#3F7FD9', kit: 'system' },
   { key: 'compute', title: 'Compute', color: '#7F77DD', kit: 'system' },
   { key: 'data', title: 'Data', color: '#1D9E75', kit: 'system' },
-  { key: 'messaging', title: 'Messaging / events', color: '#D4537E', kit: 'system' },
-  { key: 'ops', title: 'Observability / ops', color: '#6E7B8B', kit: 'system' },
-  { key: 'analytics', title: 'Analytics / AI', color: '#A8742E', kit: 'system' },
+  { key: 'messaging', title: 'Messaging', color: '#D4537E', kit: 'system' },
+  { key: 'ops', title: 'Observability', color: '#6E7B8B', kit: 'system' },
+  { key: 'analytics', title: 'Analytics and AI', color: '#A8742E', kit: 'system' },
   { key: 'external', title: 'Third party', color: '#888780', kit: 'system' },
   { key: 'net-core', title: 'Network gear', color: '#3F7FD9', kit: 'network' },
   { key: 'net-device', title: 'End devices', color: '#2F9FB8', kit: 'network' },
-  { key: 'net-infra', title: 'Racks / power', color: '#6E7B8B', kit: 'network' },
-  { key: 'net-wan', title: 'WAN / internet', color: '#888780', kit: 'network' },
-  { key: 'sw-uml', title: 'Use case / UML', color: '#2F9FB8', kit: 'software' },
+  { key: 'net-infra', title: 'Racks and power', color: '#6E7B8B', kit: 'network' },
+  { key: 'net-wan', title: 'WAN', color: '#888780', kit: 'network' },
+  { key: 'sw-uml', title: 'UML', color: '#2F9FB8', kit: 'software' },
   { key: 'sw-arch', title: 'Architecture', color: '#7F77DD', kit: 'software' },
-  { key: 'sw-ddd', title: 'Domain / CQRS', color: '#1D9E75', kit: 'software' },
-  { key: 'sw-flow', title: 'Flow / state', color: '#A8742E', kit: 'software' },
+  { key: 'sw-ddd', title: 'Domain', color: '#1D9E75', kit: 'software' },
+  { key: 'sw-flow', title: 'Flow and state', color: '#A8742E', kit: 'software' },
 ] as const;
 
 export type Group = (typeof GROUPS)[number]['key'];

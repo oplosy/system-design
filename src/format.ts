@@ -1,7 +1,5 @@
 import type { Pt } from './edges.ts';
 
-export const pad = (n: number) => String(n).padStart(2, '0');
-
 export const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function download(url: string, name: string) {

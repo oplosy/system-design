@@ -4,7 +4,6 @@ import { type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SHAPES } from './shapes.ts';
-import { pad } from './format.ts';
 import { type FlowAt, timeText, type Change } from './fields.tsx';
 
 export function ReviewBar({
@@ -14,8 +13,6 @@ export function ReviewBar({
   onView,
   onSeenNext,
   onRequestChanges,
-  diff,
-  onDiff,
   open,
   onToggle,
   children,
@@ -26,15 +23,12 @@ export function ReviewBar({
   onView: (i: number) => void;
   onSeenNext: () => void;
   onRequestChanges: (text: string) => void;
-  diff: boolean;
-  onDiff: () => void;
   /** Whether this step's details are unfolded above the bar. */
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
 }) {
   const step = design.steps[viewIndex];
-  const seen = design.steps.filter((s) => s.seen).length;
   const [asking, setAsking] = useState(false);
   const [why, setWhy] = useState('');
   const send = () => {
@@ -46,93 +40,85 @@ export function ReviewBar({
     <div className="review" role="region" aria-label="Step review">
       {open && (
         <div className="review-sheet" id="step-details">
-          <div className="review-tools">
-            <span className="dots">
-              {design.steps.map((s, i) => (
-                <button
-                  key={s.id}
-                  className={`dot${s.seen ? ' seen' : ''}${s.changesRequested ? ' changes' : ''}${i === viewIndex ? ' current' : ''}${i > maxIndex ? ' locked' : ''}`}
-                  onClick={() => i <= maxIndex && onView(i)}
-                  aria-disabled={i > maxIndex}
-                  aria-current={i === viewIndex ? 'step' : undefined}
-                  aria-label={`Step ${i + 1}`}
-                  title={
-                    i > maxIndex
-                      ? `Step ${i + 1} is locked until the earlier steps are reviewed`
-                      : `Step ${i + 1}: ${s.title}${s.seen ? ' (reviewed)' : ''}${s.changesRequested ? ' (changes requested)' : ''}`
-                  }
-                />
-              ))}
-            </span>
-            <span className="review-seen">{seen} reviewed</span>
-            <button className="chip" aria-pressed={diff} onClick={onDiff} title="Outline what this step added or changed, show what it removed, and dim the rest">
-              Diff
-            </button>
-            <button className="text-btn" aria-expanded={asking} onClick={() => setAsking((a) => !a)} title="Send this step back to the agent with a comment">
-              Request changes
-            </button>
-          </div>
-          {asking && (
-            <form
-              className="review-ask"
-              onSubmit={(e) => {
-                e.preventDefault();
-                send();
-              }}
-            >
-              <label className="field-label" htmlFor="changes-why">
-                Send step {pad(viewIndex + 1)} back to the agent
-              </label>
-              <textarea
-                id="changes-why"
-                className="ed"
-                autoFocus
-                rows={3}
-                value={why}
-                placeholder="What should change? The agent reads this through get_feedback."
-                onChange={(e) => setWhy(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setAsking(false);
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send();
-                }}
-              />
-              <div className="pop-foot">
-                <button type="button" className="text-btn" onClick={() => setAsking(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn ink">
-                  Request changes
-                </button>
-              </div>
-            </form>
-          )}
           {children}
         </div>
       )}
+      {asking && (
+        <form
+          className="review-ask"
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
+          }}
+        >
+          <label className="field-label" htmlFor="changes-why">
+            What should change in step {viewIndex + 1}?
+          </label>
+          <textarea
+            id="changes-why"
+            className="ed"
+            autoFocus
+            rows={3}
+            value={why}
+            onChange={(e) => setWhy(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setAsking(false);
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send();
+            }}
+          />
+          <div className="pop-foot">
+            <button type="button" className="text-btn" onClick={() => setAsking(false)}>
+              Cancel
+            </button>
+            <button type="submit" className="btn ink">
+              Send to agent
+            </button>
+          </div>
+        </form>
+      )}
       <div className="review-bar">
-        <button className="icon-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} title="Previous step (←)" aria-label="Previous step">
-          ‹
-        </button>
-        <button className="review-title" aria-expanded={open} aria-controls="step-details" onClick={onToggle} title={`${open ? 'Hide' : 'Show'} this step's details`}>
-          <span className="review-count">
-            {viewIndex + 1} / {design.steps.length}
-          </span>
-          <span className="review-name">{step.title}</span>
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <path d={open ? 'M1.5 3.5 5 7l3.5-3.5' : 'M1.5 6.5 5 3l3.5 3.5'} fill="none" stroke="currentColor" strokeWidth="1.4" />
-          </svg>
-        </button>
-        {!step.seen ? (
-          <button className="btn ink" onClick={onSeenNext} disabled={!!step.options} title={step.options ? 'Pick one of the options first (step details)' : 'Mark as seen and go to the next step (→)'}>
-            Mark seen
+        <div className="review-steps">
+          {design.steps.map((s, i) => (
+            <button
+              key={s.id}
+              className={`review-step${s.seen ? ' seen' : ''}${s.changesRequested ? ' changes' : ''}${i === viewIndex ? ' current' : ''}`}
+              onClick={() => i <= maxIndex && onView(i)}
+              aria-disabled={i > maxIndex}
+              aria-current={i === viewIndex ? 'step' : undefined}
+              aria-label={`Step ${i + 1}`}
+              title={i > maxIndex ? `Step ${i + 1} opens once the earlier steps are approved` : `${i + 1}. ${s.title}`}
+            />
+          ))}
+        </div>
+        <div className="review-row">
+          <button className="icon-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} title="Previous step (←)" aria-label="Previous step">
+            ‹
           </button>
-        ) : viewIndex < maxIndex ? (
-          <button className="btn" onClick={() => onView(viewIndex + 1)} title="Next step (→)">
-            Next
+          <div className="review-text">
+            <span className="review-count">
+              Step {viewIndex + 1} of {design.steps.length}
+              {step.changesRequested ? ', changes requested' : step.seen ? ', approved' : ''}
+            </span>
+            <span className="review-name">{step.title}</span>
+          </div>
+          <button className="text-btn review-title" aria-expanded={open} aria-controls="step-details" onClick={onToggle}>
+            {open ? 'Hide details' : 'Details'}
           </button>
-        ) : (
-          <span className="review-done">All reviewed ✓</span>
-        )}
+          <button className="text-btn" aria-expanded={asking} onClick={() => setAsking((a) => !a)} title="Send this step back to the agent with a comment">
+            Request changes
+          </button>
+          {!step.seen ? (
+            <button className="btn ink" onClick={onSeenNext} disabled={!!step.options} title={step.options ? 'Pick one of the options first' : 'Approve and go to the next step (→)'}>
+              Approve
+            </button>
+          ) : viewIndex < maxIndex ? (
+            <button className="btn ink" onClick={() => onView(viewIndex + 1)} title="Next step (→)">
+              Next
+            </button>
+          ) : (
+            <span className="review-done">All approved</span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -165,8 +151,7 @@ export function PresentBar({
   return (
     <div className="present-bar" role="region" aria-label="Presentation">
       <span className="present-no">
-        {pad((playing ? flow.at : viewIndex) + 1)}
-        <span>/{pad(playing ? hops : design.steps.length)}</span>
+        {(playing ? flow.at : viewIndex) + 1} <span>of {playing ? hops : design.steps.length}</span>
       </span>
       <div className="present-text">
         {playing ? (
@@ -186,10 +171,10 @@ export function PresentBar({
       </div>
       {flows.length > 0 && (
         <select className="present-flows" value={playing?.id ?? ''} onChange={(e) => (onFlow(e.target.value ? { id: e.target.value, at: 0 } : null), e.target.blur())} aria-label="Play a flow">
-          <option value="">Flows…</option>
+          <option value="">Flows</option>
           {flows.map((f) => (
             <option key={f.id} value={f.id}>
-              ▶ {f.title}
+              {f.title}
             </option>
           ))}
         </select>
@@ -214,7 +199,7 @@ export function PresentBar({
         </>
       )}
       <button className="text-btn" onClick={onExit}>
-        Exit <kbd>Esc</kbd>
+        Exit
       </button>
     </div>
   );
@@ -268,7 +253,7 @@ export function FindBox({ design, visible, onPick, inputRef, onClose }: { design
               </button>
             ))
           ) : (
-            <p className="quiet pad">Nothing on this step matches “{q}”.</p>
+            <p className="quiet pad">No match</p>
           )}
         </div>
       )}

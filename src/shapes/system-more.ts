@@ -15,7 +15,7 @@ export const systemMore = {
     draw: (o, w, h) => [gen.rectangle(4, 4, w - 8, h - 8, o), gen.line(4, 18, w - 4, 18, line(o)), ...[0, 1, 2].map((i) => gen.circle(14 + i * 9, 11, 4, line(o)))],
   },
   console: {
-    name: 'TV / console',
+    name: 'Console',
     group: 'client',
     keywords: 'smart tv game console playstation xbox nintendo switch set top box apple tv roku chromecast display digital signage projector screen',
     kits: ['system', 'network'],
@@ -44,7 +44,7 @@ export const systemMore = {
     },
   },
   certificate: {
-    name: 'Certificates / PKI',
+    name: 'Certificates',
     group: 'edge',
     keywords: 'tls ssl certificate ca pki acm lets encrypt letsencrypt cert-manager mtls x509 signing',
     kits: ['system', 'network'],
@@ -65,7 +65,7 @@ export const systemMore = {
 
   // Network
   'nat-gateway': {
-    name: 'NAT / internet gateway',
+    name: 'NAT gateway',
     group: 'network',
     keywords: 'nat gateway internet gateway igw egress cloud nat snat masquerade outbound',
     kits: ['system', 'network'],
@@ -106,7 +106,7 @@ export const systemMore = {
   bff: tiled('GraphQL / BFF', 'compute', 'graphql apollo hasura bff backend for frontend federation schema stitching resolver', glyph.graph, 170),
   'game-server': tiled('Game server', 'compute', 'dedicated game server multiplayer authoritative tick netcode photon agones gamelift playfab matchmaking lobby relay', glyph.gamepad, 170),
   gpu: {
-    name: 'GPU / accelerator',
+    name: 'GPU',
     group: 'compute',
     keywords: 'gpu cuda nvidia tpu inference accelerator a100 h100 gpu node triton vllm',
     w: 110,
@@ -123,7 +123,7 @@ export const systemMore = {
   },
   media: tiled('Media processing', 'compute', 'transcoding ffmpeg video audio image resize thumbnail encoder mediaconvert mux hls dash streaming vod', glyph.play, 180),
   mainframe: {
-    name: 'Mainframe / legacy',
+    name: 'Mainframe',
     group: 'compute',
     keywords: 'mainframe legacy cobol as400 ibm z erp on-prem monolith system of record',
     w: 110,
@@ -137,7 +137,7 @@ export const systemMore = {
 
   // Data
   olap: {
-    name: 'OLAP / columnar',
+    name: 'OLAP',
     group: 'data',
     keywords: 'clickhouse druid pinot olap columnar duckdb starrocks analytics database cube',
     w: 150,
@@ -169,7 +169,7 @@ export const systemMore = {
     },
   },
   backup: {
-    name: 'Backup / archive',
+    name: 'Backup',
     group: 'data',
     keywords: 'backup snapshot archive glacier cold storage restore disaster recovery dr velero veeam borg restic',
     kits: ['system', 'network'],
@@ -182,7 +182,7 @@ export const systemMore = {
     },
   },
   ledger: {
-    name: 'Ledger / blockchain',
+    name: 'Ledger',
     group: 'data',
     keywords: 'blockchain ledger ethereum solana smart contract web3 immutable qldb chain crypto wallet',
     w: 150,

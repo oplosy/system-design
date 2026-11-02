@@ -207,14 +207,14 @@ export function RefsEditor({ refs = [], onChange }: { refs?: Ref[]; onChange: (r
 }
 
 /** Picks the boundary something sits in; `exclude` keeps a boundary out of its own subtree. */
-/** UML relations, named by how they are drawn; the diamond sits at the line's start (the whole). */
+/** UML relations; the diamond of composition and aggregation sits at the line's start (the whole). */
 export const RELATION_NAMES: Record<ConnectionKind, string> = {
-  inheritance: 'Inheritance ▷',
-  implementation: 'Implementation ┄▷',
-  composition: 'Composition ◆',
-  aggregation: 'Aggregation ◇',
-  include: '«include» ┄>',
-  extend: '«extend» ┄>',
+  inheritance: 'Inheritance',
+  implementation: 'Implementation',
+  composition: 'Composition',
+  aggregation: 'Aggregation',
+  include: 'Include',
+  extend: 'Extend',
 };
 
 export function InsideSelect({ design, value, exclude, onPick }: { design: Design; value?: string; exclude?: Set<string>; onPick: (id: string | undefined) => void }) {
@@ -232,10 +232,10 @@ export function InsideSelect({ design, value, exclude, onPick }: { design: Desig
   );
 }
 
-/** A flow's total time, " · ≥ 40 ms" when some hops have no latency yet; empty when none have. */
+/** A flow's total time, ", at least 40 ms" when some hops have no latency yet; empty when none have. */
 export function timeText(design: Design, flow: Design['flows'][number]) {
   const { total, unknown } = flowLatency(design, flow);
-  return unknown === flow.path.length - 1 ? '' : ` · ${unknown ? '≥ ' : ''}${total} ms`;
+  return unknown === flow.path.length - 1 ? '' : `, ${unknown ? 'at least ' : ''}${total} ms`;
 }
 
 /** The flow being played and which hop (0-based) is lit. */

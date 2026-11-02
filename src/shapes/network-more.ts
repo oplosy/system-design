@@ -26,7 +26,7 @@ export const networkMore = {
     },
   },
   kvm: {
-    name: 'KVM / console server',
+    name: 'KVM',
     group: 'net-core',
     keywords: 'kvm console server serial out of band oob ipmi idrac ilo bmc lantronix opengear',
     w: 120,
@@ -88,7 +88,7 @@ export const networkMore = {
     },
   },
   nvr: {
-    name: 'NVR / recorder',
+    name: 'NVR',
     group: 'net-device',
     keywords: 'nvr dvr video recorder surveillance storage cctv recorder hikvision',
     w: 130,
@@ -126,7 +126,7 @@ export const networkMore = {
     },
   },
   cooling: {
-    name: 'Cooling / HVAC',
+    name: 'Cooling',
     group: 'net-infra',
     keywords: 'crac crah hvac cooling air conditioning chiller in-row cooling airflow temperature',
     w: 100,
@@ -168,7 +168,7 @@ export const networkMore = {
     },
   },
   mpls: {
-    name: 'MPLS / leased line',
+    name: 'MPLS',
     group: 'net-wan',
     keywords: 'mpls leased line metro ethernet private wan dark fiber e-line carrier circuit vpls',
     w: 170,

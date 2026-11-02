@@ -78,7 +78,7 @@ function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
         e.dataTransfer.effectAllowed = 'copy';
       }}
       onClick={() => onAdd(kind)}
-      title={`Add ${name}: drag onto the canvas or click`}
+      title="Drag onto the sheet or click"
     >
       <span className="part-shape">{preview}</span>
       <span className="part-name">{name}</span>
@@ -95,7 +95,7 @@ function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
     .sort((a, b) => Number(b.kit === kit) - Number(a.kit === kit))
     .map((g) => ({ ...g, types: COMPONENT_TYPES.filter((t) => SHAPES[t].group === g.key && inView(t)).sort((a, b) => rank(a) - rank(b)) }))
     .sort((a, b) => (terms.length ? Math.min(...a.types.map(rank), 3) - Math.min(...b.types.map(rank), 3) : 0));
-  const boundaries = BOUNDARY_KINDS.filter((k) => (terms.length ? match(`${BOUNDARY_SPECS[k].name} ${k} boundary box group network segment`) : BOUNDARY_SPECS[k].kits.includes(kit)));
+  const boundaries = BOUNDARY_KINDS.filter((k) => (terms.length ? match(`${BOUNDARY_SPECS[k].name} ${k} boundary box group network segment vnet namespace floor`) : BOUNDARY_SPECS[k].kits.includes(kit)));
   const explain = [
     { kind: 'note' as const, name: 'Note', preview: <span className="note-swatch" /> },
     { kind: 'decision' as const, name: 'Decision', preview: <span className="decision-swatch" /> },
@@ -118,7 +118,7 @@ function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
               setQuery('');
             } else if (e.key === 'Enter' && terms.length && first) onAdd(first);
           }}
-          placeholder={{ system: 'Search: kafka, redis, s3…', network: 'Search: router, printer, wifi…', software: 'Search: use case, class, state…' }[kit]}
+          placeholder="Search parts"
           aria-label="Search parts"
         />
         <div className="seg" role="radiogroup" aria-label="Part kit">
@@ -151,7 +151,7 @@ function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
             {explain.map((x) => row(x.kind, x.name, x.preview))}
           </section>
         )}
-        {!groups.some((g) => g.types.length) && !boundaries.length && !explain.length && <p className="quiet pad">No part matches “{query}”.</p>}
+        {!groups.some((g) => g.types.length) && !boundaries.length && !explain.length && <p className="quiet pad">No match</p>}
       </div>
     </aside>
   );

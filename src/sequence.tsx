@@ -14,18 +14,17 @@ export function SequenceView({ design, flow, at, onClose }: { design: Design; fl
     <div className="sequence" role="dialog" aria-label={`Sequence: ${flow.title}`}>
       <header className="sequence-head">
         <strong>{flow.title}</strong>
-        <span className="quiet">Sequence</span>
         {time.unknown < messages.length && (
-          <span className="mono" title={time.unknown ? `${time.unknown} hops have no latency yet` : 'Sum of the hops’ latencies'}>
-            {time.unknown ? '≥ ' : ''}
+          <span title={time.unknown ? `${time.unknown} hops have no latency yet` : 'Sum of the hops’ latencies'}>
+            {time.unknown ? 'At least ' : ''}
             {time.total} ms
           </span>
         )}
         <button className="text-btn" onClick={() => navigator.clipboard?.writeText(toMermaidSequence(design, flow))} title="Copy as a Mermaid sequence diagram">
           Copy Mermaid
         </button>
-        <button className="text-btn" onClick={onClose}>
-          Close <kbd>Esc</kbd>
+        <button className="icon-btn" onClick={onClose} aria-label="Close" title="Close (Esc)">
+          ×
         </button>
       </header>
       <div className="sequence-body">
@@ -60,7 +59,7 @@ export function SequenceView({ design, flow, at, onClose }: { design: Design; fl
                 <line x1={x1} x2={x2 + (x2 > x1 ? -2 : 2)} y1={y} y2={y} strokeDasharray={m.reply ? '6 4' : undefined} markerEnd={`url(#seq-${m.async || m.reply ? 'open' : 'solid'}-${on ? 'signal' : 'ink-2'})`} />
                 <text x={(x1 + x2) / 2} y={y - 7} className="seq-label">
                   {i + 1}. {m.label ?? (m.reply ? 'reply' : '')}
-                  {m.latency !== undefined && ` · ${m.latency} ms`}
+                  {m.latency !== undefined && `, ${m.latency} ms`}
                 </text>
               </g>
             );

@@ -4,8 +4,7 @@ import { failureImpact, loadOf } from '../core/lint.ts';
 import * as m from '../core/mutations.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { GROUPS, SHAPES } from './shapes.ts';
-import { type FlowAt, type Change, Prop, Ed, CURRENCIES, Num, RefsEditor, Connected, InsideSelect, RELATION_NAMES } from './fields.tsx';
-import { pad } from './format.ts';
+import { type FlowAt, type Change, Prop, Ed, Num, RefsEditor, Connected, InsideSelect, RELATION_NAMES } from './fields.tsx';
 import { BoundaryPreview, ShapePreview } from './palette.tsx';
 import { Flows } from './flows.tsx';
 import { Comments } from './bars.tsx';
@@ -133,26 +132,26 @@ export function Inspector({
                 <span>
                   {(() => {
                     const at = costAt(design, component, stepId);
-                    return at === undefined ? '—' : `${money(at, design.currency)}/mo`;
-                  })()}{' '}
-                  · changed in step {stepNo(costEditedAfter)}
+                    return at === undefined ? 'None' : `${money(at, design.currency)} a month`;
+                  })()}
+                  , changed in step {stepNo(costEditedAfter)}
                 </span>
               ) : (
                 // Recorded on the step on the sheet, so its cost change counts it; the step stays reviewed.
                 <Num
                   label="Cost per month"
-                  unit={`${design.currency ?? 'USD'}/mo`}
+                  unit={`${design.currency ?? 'USD'} a month`}
                   value={component.cost}
                   onCommit={(v) => change((d) => m.updateTracked(d, component.id, { cost: v }, stepId, false))}
                 />
               )}
             </Prop>
             <Prop label="Capacity">
-              <Num label="Capacity" unit="req/s" value={component.capacity} onCommit={(v) => edit((d: Design) => d.components, { capacity: v })} />
+              <Num label="Capacity" unit="rps" value={component.capacity} onCommit={(v) => edit((d: Design) => d.components, { capacity: v })} />
               {(() => {
                 const { load, capacity } = loadOf(sheet, component.id);
                 if (!load) return null;
-                return <span className="prop-note">Gets {load}{capacity ? ` · ${Math.round((load / capacity) * 100)}%` : ''}</span>;
+                return <span className="prop-note">Gets {load} rps{capacity ? `, ${Math.round((load / capacity) * 100)}% used` : ''}</span>;
               })()}
             </Prop>
             {(() => {
@@ -188,7 +187,7 @@ export function Inspector({
               {/* Only web links open; anything else (javascript:, a path with no repo) stays text. */}
               {codeUrl(design, component.code) && (
                 <a className="ref" href={codeUrl(design, component.code)} target="_blank" rel="noreferrer noopener" title="Open the code in a new tab">
-                  Open ↗
+                  Open
                 </a>
               )}
             </Prop>
@@ -196,7 +195,7 @@ export function Inspector({
               {component.detail ? (
                 <>
                   <button className="ref" onClick={() => onOpenInside(component)} title="Open the design of what is inside">
-                    {designs.find((x) => x.id === component.detail)?.title ?? component.detail} ↗
+                    {designs.find((x) => x.id === component.detail)?.title ?? component.detail}
                   </button>
                   <button className="text-btn" onClick={() => edit((d: Design) => d.components, { detail: undefined })}>
                     Unlink
@@ -280,7 +279,7 @@ export function Inspector({
             </select>
           </Prop>
           <Prop label="Load">
-            <Num label="Requests per second" unit="req/s" value={connection.qps} onCommit={(v) => edit((d: Design) => d.connections, { qps: v })} />
+            <Num label="Requests per second" unit="rps" value={connection.qps} onCommit={(v) => edit((d: Design) => d.connections, { qps: v })} />
           </Prop>
           <Prop label="Latency">
             <Num label="Latency" unit="ms" value={connection.latency} onCommit={(v) => edit((d: Design) => d.connections, { latency: v })} />
@@ -362,6 +361,8 @@ export function Inspector({
 export function StepDetails({
   design,
   stepId,
+  diff,
+  onDiff,
   flow,
   onFlow,
   recording,
@@ -376,6 +377,8 @@ export function StepDetails({
 }: {
   design: Design;
   stepId: string;
+  diff: boolean;
+  onDiff: () => void;
   flow: FlowAt | null;
   onFlow: (f: FlowAt | null) => void;
   recording: string[] | null;
@@ -390,7 +393,7 @@ export function StepDetails({
   onSelect: (id: string | null) => void;
 }) {
   const labelOf = (id: string) => [...design.components, ...design.boundaries].find((c) => c.id === id)?.label;
-  const fieldText = (field: string, v: string | undefined) => (v === undefined ? '—' : field === 'boundary' || field === 'parent' ? (labelOf(v) ?? v) : v);
+  const fieldText = (field: string, v: string | undefined) => (v === undefined ? 'None' : field === 'boundary' || field === 'parent' ? (labelOf(v) ?? v) : v);
   const stepNo = (id: string) => design.steps.findIndex((s) => s.id === id) + 1;
   const step = design.steps.find((s) => s.id === stepId)!;
   const decisions = design.decisions.filter((x) => x.step === stepId && inOption(x));
@@ -404,174 +407,155 @@ export function StepDetails({
   const delta = changes[at - 1];
   return (
     <aside className="inspector">
-      <header className="insp-head">
-        <div className="insp-tagline">
-          <span className="tag">Step {pad(stepNo(step.id))}</span>
-          {step.changesRequested ? (
-            <span className="state new">Changes requested</span>
-          ) : (
-            <span className={`state${step.seen ? '' : ' new'}`}>{step.seen ? 'Reviewed' : 'Not reviewed'}</span>
+      <header className="step-head">
+        <div className="step-lead">
+          {step.summary && <p className="insp-lead">{step.summary}</p>}
+          {changes.some((c) => c !== 0) && (
+            <p className="insp-cost">
+              {money(sofar, design.currency)} a month so far{delta !== 0 && <>, {delta > 0 ? '+' : '−'}{money(Math.abs(delta), design.currency)} in this step</>}
+            </p>
           )}
         </div>
-        <h2 className="insp-title">{step.title}</h2>
-        {step.summary && <p className="insp-lead">{step.summary}</p>}
-        {changes.some((c) => c !== 0) && (
-          <p className="insp-cost">
-            {money(sofar, design.currency)}/mo so far{delta !== 0 && <> · {delta > 0 ? '+' : '−'}{money(Math.abs(delta), design.currency)} in this step</>}
-          </p>
-        )}
+        <button className="chip" aria-pressed={diff} onClick={onDiff} title="Outline what this step added or changed, show what it removed, and dim the rest">
+          Show changes
+        </button>
       </header>
 
-      {step.options && (
-        <section className="insp-sec">
-          <h3 className="rule-head">Options</h3>
-          {step.options.map((o) => {
-            const on = o.id === viewed;
-            return (
-              <div key={o.id} className={`option-entry${on ? ' on' : ''}`}>
-                <button className="list-row" aria-pressed={on} onClick={() => onOption(stepId, o.id)} title="Show this option on the sheet">
-                  <span className="flow-play" aria-hidden="true">
-                    {on ? '●' : '○'}
-                  </span>
-                  <span className="list-main">{o.title}</span>
-                  <span className="list-meta">{design.components.filter((c) => c.option === o.id && c.step === stepId).length} parts</span>
+      <div className="step-cols">
+        {(step.options || decisions.length > 0 || notes.length > 0) && (
+          <div className="step-col">
+            {step.options && (
+              <section className="insp-sec">
+                <h3 className="rule-head">Options</h3>
+                {step.options.map((o) => {
+                  const on = o.id === viewed;
+                  return (
+                    <div key={o.id} className={`option-entry${on ? ' on' : ''}`}>
+                      <button className="list-row" aria-pressed={on} onClick={() => onOption(stepId, o.id)} title="Show this option on the sheet">
+                        <span className="flow-play" aria-hidden="true">
+                          {on ? '●' : '○'}
+                        </span>
+                        <span className="list-main">{o.title}</span>
+                        <span className="list-meta">{design.components.filter((c) => c.option === o.id && c.step === stepId).length} parts</span>
+                      </button>
+                      {o.summary && <p className="option-why">{o.summary}</p>}
+                      {on && (
+                        <div className="flow-steps">
+                          <button className="btn ink" onClick={() => onPickOption(stepId, o.id)}>
+                            Pick {o.title}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </section>
+            )}
+
+            {decisions.length > 0 && (
+              <section className="insp-sec">
+                <h3 className="rule-head">Decisions</h3>
+                {decisions.map((x) => (
+                  <button key={x.id} className="decision-entry" onClick={() => onSelect(x.id)}>
+                    <span className="decision-body">
+                      <strong>{x.title}</strong>
+                      <span className="decision-why">{x.why}</span>
+                      {x.alternatives?.length ? (
+                        <span className="decision-line">
+                          <em>Instead of</em> {x.alternatives.join(', ')}
+                        </span>
+                      ) : null}
+                      {x.tradeoffs && (
+                        <span className="decision-line">
+                          <em>Cost</em> {x.tradeoffs}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                ))}
+              </section>
+            )}
+
+            {notes.length > 0 && (
+              <section className="insp-sec">
+                <h3 className="rule-head">Notes</h3>
+                {notes.map((n) => (
+                  <button key={n.id} className="note-entry" onClick={() => onSelect(n.id)}>
+                    {n.text}
+                  </button>
+                ))}
+              </section>
+            )}
+          </div>
+        )}
+
+        <div className="step-col">
+          {components.length + boundaries.length > 0 && (
+            <section className="insp-sec">
+              <h3 className="rule-head">Added</h3>
+              {boundaries.map((b) => (
+                <button key={b.id} className="list-row" onClick={() => onSelect(b.id)}>
+                  <BoundaryPreview kind={b.kind} />
+                  <span className="list-main">{b.label}</span>
+                  <span className="list-meta">{b.detail ?? BOUNDARY_SPECS[b.kind].name}</span>
                 </button>
-                {o.summary && <p className="option-why">{o.summary}</p>}
-                {on && (
-                  <div className="flow-steps">
-                    <button className="btn ink" onClick={() => onPickOption(stepId, o.id)}>
-                      Pick {o.title}
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </section>
-      )}
+              ))}
+              {components.map((c) => (
+                <button key={c.id} className="list-row" onClick={() => onSelect(c.id)}>
+                  <ShapePreview type={c.type} width={30} height={20} />
+                  <span className="list-main">{c.label}</span>
+                  {c.tech && <span className="list-meta">{c.tech}</span>}
+                </button>
+              ))}
+            </section>
+          )}
 
-      {decisions.length > 0 && (
-        <section className="insp-sec">
-          <h3 className="rule-head">Decisions</h3>
-          {decisions.map((x, i) => (
-            <button key={x.id} className="decision-entry" onClick={() => onSelect(x.id)}>
-              <span className="decision-no">D{i + 1}</span>
-              <span className="decision-body">
-                <strong>{x.title}</strong>
-                <span className="decision-why">{x.why}</span>
-                {x.alternatives?.length ? (
-                  <span className="decision-line">
-                    <em>instead of</em> {x.alternatives.join(' · ')}
+          {!!step.changed?.length && (
+            <section className="insp-sec">
+              <h3 className="rule-head">Changed</h3>
+              {step.changed.map((c) => (
+                <button key={`${c.id}:${c.field}`} className="list-row change-row" onClick={() => onSelect(c.id)} disabled={!labelOf(c.id)}>
+                  <span className="list-main">
+                    {labelOf(c.id) ?? c.id} <span className="quiet">{c.field}</span>
                   </span>
-                ) : null}
-                {x.tradeoffs && (
-                  <span className="decision-line">
-                    <em>cost</em> {x.tradeoffs}
+                  <span className="list-meta">
+                    <s>{fieldText(c.field, c.from)}</s> → {fieldText(c.field, c.to)}
                   </span>
-                )}
-              </span>
+                </button>
+              ))}
+            </section>
+          )}
+
+          {!!step.removed?.length && (
+            <section className="insp-sec">
+              <h3 className="rule-head">Removed</h3>
+              {step.removed.map((r) => (
+                <div key={r.id} className="list-row removed-row">
+                  {r.type && <ShapePreview type={r.type} width={30} height={20} />}
+                  <s className="list-main">{r.label}</s>
+                </div>
+              ))}
+            </section>
+          )}
+
+          <Flows design={design} inOption={inOption} stepId={stepId} flow={flow} onFlow={onFlow} recording={recording} onRecording={onRecording} onSequence={onSequence} change={change} />
+
+          <Comments design={design} step={stepId} change={change} onSelect={onSelect} />
+
+          <footer className="insp-foot">
+            <button
+              className="text-btn danger"
+              title="Remove everything this step added (Ctrl+Z brings it back)"
+              onClick={() =>
+                confirm(`Revert step ${stepNo(step.id)} “${step.title}”? Everything it added is removed.${design.steps.length > 1 ? ' The step goes too.' : ''}`) &&
+                change((d) => m.revertStep(d, stepId))
+              }
+            >
+              Revert step
             </button>
-          ))}
-        </section>
-      )}
-
-      {notes.length > 0 && (
-        <section className="insp-sec">
-          <h3 className="rule-head">Notes</h3>
-          {notes.map((n) => (
-            <button key={n.id} className="note-entry" onClick={() => onSelect(n.id)}>
-              {n.text}
-            </button>
-          ))}
-        </section>
-      )}
-
-      {components.length + boundaries.length > 0 && (
-        <section className="insp-sec">
-          <h3 className="rule-head">Added</h3>
-          {boundaries.map((b) => (
-            <button key={b.id} className="list-row" onClick={() => onSelect(b.id)}>
-              <BoundaryPreview kind={b.kind} />
-              <span className="list-main">{b.label}</span>
-              <span className="list-meta">{b.detail ?? BOUNDARY_SPECS[b.kind].name}</span>
-            </button>
-          ))}
-          {components.map((c) => (
-            <button key={c.id} className="list-row" onClick={() => onSelect(c.id)}>
-              <ShapePreview type={c.type} width={30} height={20} />
-              <span className="list-main">{c.label}</span>
-              {c.tech && <span className="list-meta">{c.tech}</span>}
-            </button>
-          ))}
-        </section>
-      )}
-
-      {!!step.changed?.length && (
-        <section className="insp-sec">
-          <h3 className="rule-head">Changed</h3>
-          {step.changed.map((c) => (
-            <button key={`${c.id}:${c.field}`} className="list-row change-row" onClick={() => onSelect(c.id)} disabled={!labelOf(c.id)}>
-              <span className="list-main">
-                {labelOf(c.id) ?? c.id} <span className="quiet">{c.field}</span>
-              </span>
-              <span className="list-meta">
-                <s>{fieldText(c.field, c.from)}</s> → {fieldText(c.field, c.to)}
-              </span>
-            </button>
-          ))}
-        </section>
-      )}
-
-      {!!step.removed?.length && (
-        <section className="insp-sec">
-          <h3 className="rule-head">Removed</h3>
-          {step.removed.map((r) => (
-            <div key={r.id} className="list-row removed-row">
-              {r.type && <ShapePreview type={r.type} width={30} height={20} />}
-              <s className="list-main">{r.label}</s>
-            </div>
-          ))}
-        </section>
-      )}
-
-      <Flows design={design} inOption={inOption} stepId={stepId} flow={flow} onFlow={onFlow} recording={recording} onRecording={onRecording} onSequence={onSequence} change={change} />
-
-      <Comments design={design} step={stepId} change={change} onSelect={onSelect} />
-
-      <section className="insp-sec">
-        <h3 className="rule-head">Design</h3>
-        <Prop label="Repo">
-          <Ed
-            label="Repo"
-            placeholder="https://…"
-            value={design.repo}
-            check={(v) => (/^https?:\/\/\S+$/i.test(v) ? undefined : 'Use an http(s) address')}
-            onCommit={(v) => change((d) => void (d.repo = v?.trim()))}
-          />
-        </Prop>
-        <Prop label="Currency">
-          <select className="ed" value={design.currency ?? 'USD'} onChange={(e) => change((d) => void (d.currency = e.target.value === 'USD' ? undefined : e.target.value))} aria-label="Currency of costs">
-            {CURRENCIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </Prop>
-      </section>
-
-      <footer className="insp-foot">
-        <button
-          className="text-btn danger"
-          title="Remove everything this step added (Ctrl+Z brings it back)"
-          onClick={() =>
-            confirm(`Revert step ${pad(stepNo(step.id))} “${step.title}”? Everything it added is removed.${design.steps.length > 1 ? ' The step goes too.' : ''}`) &&
-            change((d) => m.revertStep(d, stepId))
-          }
-        >
-          Revert step
-        </button>
-      </footer>
+          </footer>
+        </div>
+      </div>
     </aside>
   );
 }

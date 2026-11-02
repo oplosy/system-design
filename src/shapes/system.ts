@@ -102,7 +102,7 @@ export const system = {
     },
   },
   identity: {
-    name: 'Auth / identity',
+    name: 'Identity',
     group: 'edge',
     keywords: 'auth oauth oidc sso login identity provider idp jwt cognito auth0 keycloak okta session active directory ad ldap domain controller radius',
     kits: ['system', 'network'],
@@ -113,7 +113,7 @@ export const system = {
     draw: (o, w, h) => [box(o, w, h), ...glyph.key(o, 24, h / 2)],
   },
   secrets: {
-    name: 'Secrets / KMS',
+    name: 'Secrets',
     group: 'edge',
     keywords: 'vault kms secret manager key encryption certificate tls hsm',
     w: 100,
@@ -138,9 +138,9 @@ export const system = {
   },
 
   ids: {
-    name: 'IDS / IPS',
+    name: 'Intrusion detection',
     group: 'edge',
-    keywords: 'intrusion detection prevention snort suricata siem security monitoring',
+    keywords: 'intrusion detection prevention snort suricata siem security monitoring ids ips',
     kits: ['system', 'network'],
     w: 140,
     h: 56,
@@ -210,7 +210,7 @@ export const system = {
     draw: (o, w, h) => [box(o, w, h), ...glyph.arrows(o, 24, h / 2)],
   },
   vpn: {
-    name: 'VPN / private link',
+    name: 'VPN',
     group: 'network',
     keywords: 'vpn bastion private link peering tunnel wireguard ipsec vpc site to site openvpn concentrator',
     kits: ['system', 'network'],
@@ -288,7 +288,7 @@ export const system = {
     },
   },
   vm: {
-    name: 'Server / VM',
+    name: 'Virtual machine',
     group: 'compute',
     keywords: 'ec2 vm virtual machine host bare metal instance compute engine droplet server dhcp file server mail server hypervisor esxi',
     kits: ['system', 'network'],
@@ -301,7 +301,7 @@ export const system = {
     },
   },
   cron: {
-    name: 'Scheduler / cron',
+    name: 'Scheduler',
     group: 'compute',
     keywords: 'cron scheduled job timer periodic quartz eventbridge scheduler',
     w: 110,
@@ -407,7 +407,7 @@ export const system = {
     draw: (o, w, h) => [gen.path(`M4 12 L16 ${h - 10} Q${w / 2} ${h + 2} ${w - 16} ${h - 10} L${w - 4} 12`, o), gen.ellipse(w / 2, 12, w - 8, 18, o)],
   },
   'file-storage': {
-    name: 'File / block storage',
+    name: 'File storage',
     group: 'data',
     keywords: 'nfs efs ebs disk volume block filesystem shared drive',
     w: 160,
@@ -506,7 +506,7 @@ export const system = {
     },
   },
   email: {
-    name: 'Email / SMS',
+    name: 'Email',
     group: 'messaging',
     keywords: 'smtp ses sendgrid mailgun postmark twilio sms text message',
     w: 110,
@@ -517,7 +517,7 @@ export const system = {
 
   // Observability / ops
   monitoring: {
-    name: 'Metrics / monitoring',
+    name: 'Monitoring',
     group: 'ops',
     keywords: 'prometheus grafana datadog cloudwatch new relic metrics dashboard monitoring slo nms snmp zabbix nagios prtg',
     kits: ['system', 'network'],
@@ -556,9 +556,9 @@ export const system = {
     draw: (o) => [gen.rectangle(6, 4, 70, 11, o), gen.rectangle(30, 19, 60, 11, o), gen.rectangle(52, 34, 80, 11, o)],
   },
   alerting: {
-    name: 'Alerting / on-call',
+    name: 'Alerting',
     group: 'ops',
-    keywords: 'pagerduty opsgenie alertmanager alerts incident on call',
+    keywords: 'pagerduty opsgenie alertmanager alerts incident on call on-call',
     w: 130,
     h: 88,
     labelY: 78,

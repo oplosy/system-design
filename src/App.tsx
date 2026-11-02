@@ -267,7 +267,7 @@ function Shell() {
   const focused = !!design && [...design.components, ...design.connections, ...design.notes, ...design.decisions, ...design.boundaries].some((x) => x.id === selected);
   // The bars float over the sheet, so fitting leaves room for them and for the details unfolded above the review bar.
   fitOpts.current = {
-    padding: { left: '40px', right: '40px', top: presenting ? '40px' : '72px', bottom: !presenting && detailsOpen ? `${Math.round(window.innerHeight * DETAILS_HEIGHT) + 88}px` : '96px' },
+    padding: { left: '40px', right: '40px', top: presenting ? '40px' : '72px', bottom: !presenting && detailsOpen ? `${Math.round(window.innerHeight * DETAILS_HEIGHT) + 100}px` : '108px' },
     duration: 300,
     maxZoom: 1.2,
   };
@@ -655,7 +655,7 @@ function Shell() {
   const seenNext = () => {
     if (!design || !current) return;
     if (current.seen) return goTo(view + 1);
-    if (current.options) return setError('Pick one of this step’s options first (step details).');
+    if (current.options) return setError('Pick one of this step’s options first.');
     change((d) => {
       d.steps[view].seen = true;
     });
@@ -821,6 +821,7 @@ function Shell() {
           onSketch={setStyle}
           theme={theme}
           onTheme={setTheme}
+          change={change}
           onCreate={() => setCreating(true)}
           onPickDesign={(x) => (setTrail([]), setId(x))}
           onBrowse={() => setBrowsing(true)}
@@ -932,15 +933,13 @@ function Shell() {
                   onView={goTo}
                   onSeenNext={seenNext}
                   onRequestChanges={requestChanges}
-                  diff={diff}
-                  onDiff={() => setDiff((x) => !x)}
                   open={detailsOpen && !focused}
                   onToggle={() => {
                     setSelected(null);
                     setStepOpen((o) => ({ ...o, [current.id]: focused || !detailsOpen }));
                   }}
                 >
-                  <StepDetails design={design} stepId={current.id} flow={flow} onFlow={setFlow} recording={recording} onRecording={startRecording} onSequence={setSequence} inOption={inOption} optionView={optionView} onOption={(s, o) => setOptionView((v) => ({ ...v, [s]: o }))} onPickOption={pickOption} change={change} onSelect={setSelected} />
+                  <StepDetails design={design} stepId={current.id} diff={diff} onDiff={() => setDiff((x) => !x)} flow={flow} onFlow={setFlow} recording={recording} onRecording={startRecording} onSequence={setSequence} inOption={inOption} optionView={optionView} onOption={(s, o) => setOptionView((v) => ({ ...v, [s]: o }))} onPickOption={pickOption} change={change} onSelect={setSelected} />
                 </ReviewBar>
               )}
             </div>
@@ -962,13 +961,12 @@ function Shell() {
                 <ShapePreview type="sql-db" width={64} height={48} />
               </div>
               <h2>No designs yet</h2>
-              <p>Walk through a template one step at a time, or start from a blank sheet. Agents can also start one through the MCP server.</p>
-              <button className="btn ink lg" onClick={() => setCreating(true)}>
+                            <button className="btn ink lg" onClick={() => setCreating(true)}>
                 New design
               </button>
               {!shared && (
                 <button className="text-btn" onClick={() => setBrowsing(true)}>
-                  Restore a deleted design or add one from a file
+                  All designs
                 </button>
               )}
             </div>
@@ -1003,7 +1001,6 @@ function Shell() {
         )}
         {error && (
           <div className="toast" role="alert">
-            <span className="tag signal">Error</span>
             <span className="toast-msg">{error}</span>
             <button className="text-btn" onClick={() => setError(null)} aria-label="Dismiss">
               ×

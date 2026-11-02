@@ -77,7 +77,7 @@ export const network = {
     draw: (o, w, h) => [gen.path(roundRect(3, 3, w - 6, h - 6, 4), o), ...glyph.wifi(o, 26, 38)],
   },
   modem: {
-    name: 'Modem / ONT',
+    name: 'Modem',
     group: 'net-core',
     keywords: 'modem ont fiber dsl cable modem isp box adsl vdsl gpon',
     w: 100,
@@ -193,7 +193,7 @@ export const network = {
     },
   },
   nas: {
-    name: 'NAS / SAN',
+    name: 'NAS',
     group: 'net-infra',
     keywords: 'nas san storage synology qnap file server iscsi raid backup',
     w: 100,
@@ -205,7 +205,7 @@ export const network = {
     },
   },
   ups: {
-    name: 'UPS / power',
+    name: 'UPS',
     group: 'net-infra',
     keywords: 'ups power battery pdu generator electricity',
     w: 100,
