@@ -478,15 +478,19 @@ export function StepDetails({
               {boundaries.map((b) => (
                 <button key={b.id} className="list-row" onClick={() => onSelect(b.id)}>
                   <BoundaryPreview kind={b.kind} />
-                  <span className="list-main">{b.label}</span>
-                  <span className="list-meta">{b.detail ?? BOUNDARY_SPECS[b.kind].name}</span>
+                  <span className="list-text">
+                    <span className="list-main">{b.label}</span>
+                    <span className="list-meta">{b.detail ?? BOUNDARY_SPECS[b.kind].name}</span>
+                  </span>
                 </button>
               ))}
               {components.map((c) => (
                 <button key={c.id} className="list-row" onClick={() => onSelect(c.id)}>
                   <ShapePreview type={c.type} width={30} height={20} />
-                  <span className="list-main">{c.label}</span>
-                  {c.tech && <span className="list-meta">{c.tech}</span>}
+                  <span className="list-text">
+                    <span className="list-main">{c.label}</span>
+                    {c.tech && <span className="list-meta">{c.tech}</span>}
+                  </span>
                 </button>
               ))}
             </section>

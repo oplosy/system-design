@@ -1563,6 +1563,24 @@ code.ref-value {
   color: var(--muted);
 }
 
+/* Name over detail, so every row starts on the same line whatever the lengths. */
+.list-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.list-text .list-meta {
+  margin-left: 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.list-row > svg {
+  flex: none;
+}
+
 .decision-entry {
   display: block;
   width: calc(100% + 16px);
