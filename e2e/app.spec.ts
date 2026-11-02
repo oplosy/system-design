@@ -29,9 +29,9 @@ test('the menu sets the theme and style directly and unfolds its lists in place'
   await page.getByRole('radio', { name: 'Dark' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.getByRole('menuitem', { name: 'Export', exact: true }).click();
-  await expect(page.getByRole('menuitem', { name: 'PNG image' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'PNG' })).toBeVisible();
   await page.getByRole('menuitem', { name: 'Layout', exact: true }).click();
-  await expect(page.getByRole('menuitem', { name: 'PNG image' })).toHaveCount(0);
+  await expect(page.getByRole('menuitem', { name: 'PNG' })).toHaveCount(0);
   await expect(page.getByRole('menuitem', { name: 'Grid' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('.menu')).toHaveCount(0);

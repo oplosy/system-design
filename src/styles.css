@@ -283,6 +283,10 @@ button:disabled {
 .seg button,
 .toggle button {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   height: 26px;
   padding: 0 10px;
   border-radius: 7px;
@@ -296,6 +300,10 @@ button:disabled {
 .seg button:hover,
 .toggle button:hover {
   color: var(--ink);
+}
+
+.seg .icon {
+  color: inherit;
 }
 
 .seg button[aria-checked='true'],
@@ -468,7 +476,23 @@ button:disabled {
 .menu-right {
   left: auto;
   right: 0;
-  width: 248px;
+  width: 264px;
+}
+
+.icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.menu-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.menu-row:disabled .icon {
+  opacity: 0.5;
 }
 
 .menu-row {
@@ -531,11 +555,40 @@ button:disabled {
   transform: rotate(90deg);
 }
 
-/* A list or settings unfolding under its row. */
+/* A list or settings unfolding under its row, as one quiet block. */
 .menu-sub {
-  margin: 2px 0 4px 10px;
-  padding-left: 6px;
-  border-left: 1px solid var(--rule-strong);
+  margin: 2px 0 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--hover);
+}
+
+.menu-sub .check {
+  padding: 4px 6px 8px;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.menu-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-tile:hover {
+  background: var(--active);
 }
 
 .check {

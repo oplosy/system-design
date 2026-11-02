@@ -4,6 +4,7 @@ import { shared, type LiveLoad, type Me } from './api.ts';
 import { LAYOUTS, type LayoutKind } from './layout.ts';
 import { type Editing, type Theme } from './format.ts';
 import { CURRENCIES, Ed, Prop, type Change } from './fields.tsx';
+import { Icon, type IconName } from './icons.tsx';
 
 export function useDismiss(active: boolean, onDismiss: () => void, ref?: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
@@ -60,11 +61,12 @@ export function InlineEdit({ at, value, multiline, onDone }: Editing & { onDone:
   return multiline ? <textarea rows={4} {...props} /> : <input {...props} />;
 }
 
-function Seg<T extends string>({ label, value, options, onPick }: { label: string; value: T; options: readonly { key: T; title: string }[]; onPick: (v: T) => void }) {
+function Seg<T extends string>({ label, value, options, onPick }: { label: string; value: T; options: readonly { key: T; title: string; icon: IconName }[]; onPick: (v: T) => void }) {
   return (
     <div className="seg" role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <button key={o.key} role="radio" aria-checked={value === o.key} onClick={() => onPick(o.key)}>
+          <Icon name={o.icon} />
           {o.title}
         </button>
       ))}
@@ -73,12 +75,12 @@ function Seg<T extends string>({ label, value, options, onPick }: { label: strin
 }
 
 const THEMES = [
-  { key: 'light', title: 'Light' },
-  { key: 'dark', title: 'Dark' },
+  { key: 'light', title: 'Light', icon: 'sun' },
+  { key: 'dark', title: 'Dark', icon: 'moon' },
 ] as const;
 const STYLES = [
-  { key: 'clean', title: 'Clean' },
-  { key: 'sketch', title: 'Sketch' },
+  { key: 'clean', title: 'Clean', icon: 'clean' },
+  { key: 'sketch', title: 'Sketch', icon: 'sketch' },
 ] as const;
 
 function Appearance({ sketch, onSketch, theme, onTheme }: { sketch: boolean; onSketch: (s: boolean) => void; theme: Theme; onTheme: (t: Theme) => void }) {
@@ -152,34 +154,43 @@ function LayoutList({ selected, onPick }: { selected: number; onPick: (kind: Lay
           Only the selected items
         </label>
       )}
-      {LAYOUTS.map((x) => (
-        <button key={x.key} role="menuitem" className="menu-row" title={x.desc} onClick={() => onPick(x.key, scoped)}>
-          {x.title}
-        </button>
-      ))}
+      <div className="menu-grid">
+        {LAYOUTS.map((x) => (
+          <button key={x.key} role="menuitem" className="menu-tile" title={x.desc} onClick={() => onPick(x.key, scoped)}>
+            <Icon name={x.key} />
+            {x.title}
+          </button>
+        ))}
+      </div>
     </>
   );
 }
 
 const EXPORTS = [
-  { kind: 'png', title: 'PNG image', desc: 'The sheet as it looks now, at 2× resolution' },
-  { kind: 'svg', title: 'SVG image', desc: 'Scalable, for docs and slides' },
-  { kind: 'mermaid', title: 'Mermaid diagram', desc: 'Flowchart text for Markdown, GitHub, Notion' },
-  { kind: 'decisions', title: 'Decision record', desc: 'Every decision with why, alternatives and cost, as Markdown' },
-  { kind: 'structurizr', title: 'Structurizr DSL', desc: 'C4 container model for Structurizr' },
-  { kind: 'plantuml', title: 'C4-PlantUML', desc: 'C4 container diagram as PlantUML' },
-  { kind: 'drawio', title: 'draw.io', desc: 'Editable diagram for diagrams.net, positions kept' },
-  { kind: 'html', title: 'Shared HTML', desc: 'One file that opens anywhere: walk the steps, play flows; nothing is saved' },
+  { kind: 'png', title: 'PNG', icon: 'image', desc: 'The sheet as it looks now, at 2× resolution' },
+  { kind: 'svg', title: 'SVG', icon: 'vector', desc: 'Scalable, for docs and slides' },
+  { kind: 'mermaid', title: 'Mermaid', icon: 'code', desc: 'Flowchart text for Markdown, GitHub, Notion' },
+  { kind: 'decisions', title: 'Decisions', icon: 'doc', desc: 'Every decision with why, alternatives and cost, as Markdown' },
+  { kind: 'structurizr', title: 'Structurizr', icon: 'layers', desc: 'C4 container model for Structurizr' },
+  { kind: 'plantuml', title: 'PlantUML', icon: 'code', desc: 'C4 container diagram as PlantUML' },
+  { kind: 'drawio', title: 'draw.io', icon: 'tree', desc: 'Editable diagram for diagrams.net, positions kept' },
+  { kind: 'html', title: 'HTML', icon: 'globe', desc: 'One file that opens anywhere: walk the steps, play flows; nothing is saved' },
 ] as const;
 
 export type ExportKind = (typeof EXPORTS)[number]['kind'] | `plugin:${string}`;
 
 function ExportList({ extra, onPick }: { extra: { kind: string; name: string; extension: string }[]; onPick: (kind: ExportKind) => void }) {
-  return [...EXPORTS.filter((x) => !(shared && x.kind === 'html')), ...extra.map((x) => ({ kind: x.kind as ExportKind, title: x.name, desc: `From a plugin, as .${x.extension}` }))].map((x) => (
-    <button key={x.kind} role="menuitem" className="menu-row" title={x.desc} onClick={() => onPick(x.kind)}>
-      {x.title}
-    </button>
-  ));
+  const items: { kind: ExportKind; title: string; icon: IconName; desc: string }[] = [...EXPORTS.filter((x) => !(shared && x.kind === 'html')), ...extra.map((x) => ({ kind: x.kind as ExportKind, title: x.name, icon: 'doc' as const, desc: `From a plugin, as .${x.extension}` }))];
+  return (
+    <div className="menu-grid">
+      {items.map((x) => (
+        <button key={x.kind} role="menuitem" className="menu-tile" title={x.desc} onClick={() => onPick(x.kind)}>
+          <Icon name={x.icon} />
+          {x.title}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 type MoreMenuProps = {
@@ -230,15 +241,21 @@ export function MoreMenu(p: MoreMenuProps) {
     close();
     fn(...args);
   };
-  const action = (name: string, onClick: () => void, keys?: string, disabled?: boolean) => (
-    <button role="menuitem" className="menu-row" title={keys} disabled={disabled} onClick={act(onClick)}>
+  const label = (name: string, icon: IconName) => (
+    <span className="menu-label">
+      <Icon name={icon} />
       {name}
+    </span>
+  );
+  const action = (name: string, icon: IconName, onClick: () => void, keys?: string, disabled?: boolean) => (
+    <button role="menuitem" className="menu-row" title={keys} disabled={disabled} onClick={act(onClick)}>
+      {label(name, icon)}
     </button>
   );
-  const sub = (name: string, to: NonNullable<typeof page>, hint?: string, disabled?: boolean) => (
+  const sub = (name: string, icon: IconName, to: NonNullable<typeof page>, hint?: string, disabled?: boolean) => (
     <>
       <button role="menuitem" className="menu-row" aria-expanded={page === to} disabled={disabled} onClick={() => setPage(page === to ? null : to)}>
-        {name}
+        {label(name, icon)}
         <span className="menu-hint" aria-hidden="true">
           {hint} <span className="menu-chevron">›</span>
         </span>
@@ -246,9 +263,9 @@ export function MoreMenu(p: MoreMenuProps) {
       {page === to && <div className="menu-sub">{pages[to]}</div>}
     </>
   );
-  const check = (name: string, on: boolean, onClick: () => void, title?: string) => (
+  const check = (name: string, icon: IconName, on: boolean, onClick: () => void, title?: string) => (
     <button role="menuitemcheckbox" aria-checked={on} className="menu-row" title={title} onClick={onClick}>
-      {name}
+      {label(name, icon)}
       {on && <span className="menu-hint" aria-hidden="true">On</span>}
     </button>
   );
@@ -270,23 +287,23 @@ export function MoreMenu(p: MoreMenuProps) {
           <Appearance sketch={p.sketch} onSketch={p.onSketch} theme={p.theme} onTheme={p.onTheme} />
           <hr className="menu-rule" />
           <div className="menu-pair">
-            {action('Undo', () => p.onUndo(true), 'Ctrl+Z', !p.canUndo)}
-            {action('Redo', () => p.onUndo(false), 'Ctrl+Shift+Z', !p.canRedo)}
+            {action('Undo', 'undo', () => p.onUndo(true), 'Ctrl+Z', !p.canUndo)}
+            {action('Redo', 'redo', () => p.onUndo(false), 'Ctrl+Shift+Z', !p.canRedo)}
           </div>
-          {action('Find', p.onFind, 'Ctrl+F', !design)}
-          {action('Present', p.onPresent, undefined, !design)}
+          {action('Find', 'find', p.onFind, 'Ctrl+F', !design)}
+          {action('Present', 'present', p.onPresent, undefined, !design)}
           <hr className="menu-rule" />
-          {counts.size > 0 && sub('View', 'view', tag ?? undefined)}
-          {sub('Layout', 'layout', undefined, !design)}
-          {sub('Export', 'export', undefined, !design)}
-          {sub('Design settings', 'settings', undefined, !design)}
+          {counts.size > 0 && sub('View', 'view', 'view', tag ?? undefined)}
+          {sub('Layout', 'layout', 'layout', undefined, !design)}
+          {sub('Export', 'export', 'export', undefined, !design)}
+          {sub('Design settings', 'settings', 'settings', undefined, !design)}
           <hr className="menu-rule" />
-          {design && !shared && check('Live load', p.liveOn, act(p.onLiveToggle), [p.live?.unmatched.length && `No line for: ${p.live.unmatched.join(', ')}`, p.live?.failed?.length && `Not answering: ${p.live.failed.join('; ')}`].filter(Boolean).join('. ') || 'Show measured load and latency on the lines')}
-          {check('Overview map', p.minimap, () => p.onMinimap(!p.minimap))}
-          {p.onConnections && action('Connections', p.onConnections)}
+          {design && !shared && check('Live load', 'live', p.liveOn, act(p.onLiveToggle), [p.live?.unmatched.length && `No line for: ${p.live.unmatched.join(', ')}`, p.live?.failed?.length && `Not answering: ${p.live.failed.join('; ')}`].filter(Boolean).join('. ') || 'Show measured load and latency on the lines')}
+          {check('Overview map', 'map', p.minimap, () => p.onMinimap(!p.minimap))}
+          {p.onConnections && action('Connections', 'connections', p.onConnections)}
           {p.user && (
             <a role="menuitem" className="menu-row" href="/auth/logout" title={p.user.email}>
-              Sign out
+              {label('Sign out', 'signout')}
             </a>
           )}
         </div>

@@ -244,15 +244,15 @@ Copied parts pasted back into the app keep every detail. A [plugin](#plugins) ca
 | PNG | The sheet as it looks now, at 2× resolution |
 | SVG | Scalable, for docs and slides |
 | Mermaid | Flowchart text for Markdown, GitHub, Notion |
-| Decision record | Every decision with why, alternatives and cost, as Markdown |
-| Structurizr DSL | C4 container level: users become people, third parties external systems, datastores and queues get their shapes, boundaries become groups |
-| C4-PlantUML | Same model as Structurizr |
+| Decisions | Every decision with why, alternatives and cost, as Markdown |
+| Structurizr | C4 container level: users become people, third parties external systems, datastores and queues get their shapes, boundaries become groups |
+| PlantUML | Same model as Structurizr, in C4-PlantUML |
 | draw.io | An editable file that keeps the sheet's positions |
-| Shared HTML | One self-contained file, described below |
+| HTML | One self-contained file, described below |
 
 Agents get the text formats with `export_design`, and exporter [plugins](#plugins) appear in this menu too.
 
-**Shared HTML** (or `system-design share <design id> [out.html]`) writes one file with the app and the design baked in, plus every design its parts open. It opens from disk or any static host, such as a PR attachment or GitHub Pages, with no server. Readers walk the steps, use the diff, play flows and open drill-downs; their changes stay in that tab. It is built from `dist/`, so in a clone run `npm run build` first, and again after app changes.
+**HTML** (or `system-design share <design id> [out.html]`) writes one file with the app and the design baked in, plus every design its parts open. It opens from disk or any static host, such as a PR attachment or GitHub Pages, with no server. Readers walk the steps, use the diff, play flows and open drill-downs; their changes stay in that tab. It is built from `dist/`, so in a clone run `npm run build` first, and again after app changes.
 
 ## Drift: design against reality
 
