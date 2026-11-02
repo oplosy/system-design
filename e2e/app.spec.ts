@@ -37,6 +37,30 @@ test('the menu sets the theme and style directly and unfolds its lists in place'
   await expect(page.locator('.menu')).toHaveCount(0);
 });
 
+test('resting the mouse on a menu row unfolds its list after two seconds', async ({ page }) => {
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  const layout = page.getByRole('menuitem', { name: 'Layout', exact: true });
+  const grid = page.getByRole('menuitem', { name: 'Grid' });
+
+  // Passing over a row does nothing.
+  await layout.hover();
+  await page.getByRole('menuitemcheckbox', { name: 'Live load' }).hover();
+  await page.waitForTimeout(2300);
+  await expect(grid).toHaveCount(0);
+
+  await layout.hover();
+  await page.waitForTimeout(1500);
+  await expect(grid).toHaveCount(0);
+  await expect(grid).toBeVisible({ timeout: 1500 });
+
+  // A click while waiting wins: the list stays closed and nothing opens it again.
+  await page.getByRole('menuitem', { name: 'Export', exact: true }).hover();
+  await page.getByRole('menuitem', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Export', exact: true }).click();
+  await page.waitForTimeout(2300);
+  await expect(page.getByRole('menuitem', { name: 'PNG' })).toHaveCount(0);
+});
+
 test('the overview map is off until asked for, and stays as chosen', async ({ page }) => {
   await page.getByRole('button', { name: 'More', exact: true }).click();
   await page.getByRole('menuitemcheckbox', { name: /Overview map/ }).click();

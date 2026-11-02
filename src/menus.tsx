@@ -220,17 +220,22 @@ type MoreMenuProps = {
   user: Me;
 };
 
+/** How long the mouse rests on a row before its list unfolds. */
+const HOVER_OPEN_MS = 2000;
+
 /** Everything that is not the sheet: one menu, with longer lists unfolding in place. */
 export function MoreMenu(p: MoreMenuProps) {
   const { design, tag, onTag } = p;
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<'view' | 'layout' | 'export' | 'settings' | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const hover = useRef<number | undefined>(undefined);
   const close = useCallback(() => {
     setOpen(false);
     setPage(null);
   }, []);
   useDismiss(open, close, ref);
+  useEffect(() => () => clearTimeout(hover.current), [open]);
   const counts = tagCounts(design);
   // A tag that no part carries any more (renamed, removed, another design) falls back to everything.
   useEffect(() => {
@@ -254,7 +259,20 @@ export function MoreMenu(p: MoreMenuProps) {
   );
   const sub = (name: string, icon: IconName, to: NonNullable<typeof page>, hint?: string, disabled?: boolean) => (
     <>
-      <button role="menuitem" className="menu-row" aria-expanded={page === to} disabled={disabled} onClick={() => setPage(page === to ? null : to)}>
+      <button
+        role="menuitem"
+        className="menu-row"
+        aria-expanded={page === to}
+        disabled={disabled}
+        onPointerEnter={(e) => {
+          if (e.pointerType === 'mouse' && page !== to && !disabled) hover.current = window.setTimeout(() => setPage(to), HOVER_OPEN_MS);
+        }}
+        onPointerLeave={() => clearTimeout(hover.current)}
+        onClick={() => {
+          clearTimeout(hover.current);
+          setPage(page === to ? null : to);
+        }}
+      >
         {label(name, icon)}
         <span className="menu-hint" aria-hidden="true">
           {hint} <span className="menu-chevron">›</span>
