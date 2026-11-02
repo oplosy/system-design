@@ -42,5 +42,6 @@ test('Connections lists the installed plugin', async ({ page, request }) => {
   await openCopy(page, request, 'plugin-list-copy');
   await page.getByRole('button', { name: /^Copy plugin-list-copy/ }).click();
   await page.getByRole('button', { name: /^Connections/ }).click();
+  await page.getByRole('tab', { name: 'Plugins' }).click();
   await expect(page.getByRole('dialog').getByText('service-list')).toBeVisible();
 });

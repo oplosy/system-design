@@ -299,6 +299,7 @@ button:disabled {
 }
 
 .seg button[aria-checked='true'],
+.seg button[aria-selected='true'],
 .toggle button[aria-checked='true'] {
   color: var(--ink);
   background: var(--seg-on);
@@ -1642,15 +1643,33 @@ code.ref-value {
   color: var(--ink-2);
 }
 
-.conn-head {
-  margin: 18px 0 6px;
-  font-size: 13px;
-  font-weight: 600;
+/* One subject at a time; the height stays put between tabs. */
+.conn-body {
+  min-height: 300px;
+  margin-top: 14px;
+}
+
+.conn-row {
+  min-height: 40px;
+  gap: 12px;
+  padding: 2px 0 2px 8px;
+}
+
+.conn-name {
+  flex: none;
+  width: 104px;
+  font-weight: 500;
+}
+
+.conn-row .conn-url {
+  flex: 1;
+  min-width: 0;
 }
 
 .conn-note {
-  margin: 0 0 6px;
+  padding: 4px 8px;
   font-size: 12.5px;
+  color: var(--muted);
 }
 
 .conn-url {
@@ -1662,24 +1681,16 @@ code.ref-value {
   color: var(--muted);
 }
 
-/* Address on its own row, then the choices side by side. */
-.conn-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.conn-form > input[type='url'] {
-  grid-column: 1 / -1;
+.conn-form .dialog-foot {
+  margin-top: 16px;
 }
 
 .conn-check {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  margin-top: 12px;
+  font-size: 13px;
 }
 
 .designs-foot {
