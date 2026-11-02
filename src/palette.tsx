@@ -2,7 +2,7 @@ import { useContext, useMemo, useState } from 'react';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType } from '../core/schema.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SketchContext } from './canvas.tsx';
-import { GROUPS, KITS, NOTE_COLOR, SHAPES, drawShape, kitsOf, searchText, type Kit } from './shapes.ts';
+import { GROUPS, KITS, NOTE_COLOR, SHAPES, drawShape, kitsOf, searchRank, type Kit } from './shapes.ts';
 import { pad } from './format.ts';
 
 export type AddKind = ComponentType | 'note' | 'decision' | `boundary:${BoundaryKind}`;
@@ -73,15 +73,20 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
     </button>
   );
   // A search looks through every kit; otherwise only the chosen kit, its own groups first.
-  const inView = (t: ComponentType) => (terms.length ? match(searchText(t)) : kitsOf(t).includes(kit));
+  const inView = (t: ComponentType) => (terms.length ? searchRank(t, terms) !== undefined : kitsOf(t).includes(kit));
+  // Searching puts the closest names first, within a group and between groups; the palette order breaks ties.
+  const rank = (t: ComponentType) => searchRank(t, terms) ?? 0;
   const groups = [...GROUPS]
     .sort((a, b) => Number(b.kit === kit) - Number(a.kit === kit))
-    .map((g) => ({ ...g, types: COMPONENT_TYPES.filter((t) => SHAPES[t].group === g.key && inView(t)) }));
+    .map((g) => ({ ...g, types: COMPONENT_TYPES.filter((t) => SHAPES[t].group === g.key && inView(t)).sort((a, b) => rank(a) - rank(b)) }))
+    .sort((a, b) => (terms.length ? Math.min(...a.types.map(rank), 3) - Math.min(...b.types.map(rank), 3) : 0));
   const boundaries = BOUNDARY_KINDS.filter((k) => (terms.length ? match(`${BOUNDARY_SPECS[k].name} ${k} boundary box group network segment`) : BOUNDARY_SPECS[k].kits.includes(kit)));
   const explain = [
     { kind: 'note' as const, name: 'Note', preview: <span className="note-swatch" /> },
     { kind: 'decision' as const, name: 'Decision', preview: <span className="decision-swatch" /> },
   ].filter((x) => match(x.name));
+  // Enter adds the closest match.
+  const first: AddKind | undefined = groups.find((g) => g.types.length)?.types[0] ?? (boundaries[0] && `boundary:${boundaries[0]}`) ?? explain[0]?.kind;
   return (
     <aside className="palette">
       <div className="palette-top">
@@ -90,7 +95,13 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setQuery('');
+            else if (e.key === 'Enter' && terms.length && first) {
+              onAdd(first);
+              setQuery('');
+            }
+          }}
           placeholder={{ system: 'Search: kafka, redis, s3…', network: 'Search: router, printer, wifi…', software: 'Search: use case, class, state…' }[kit]}
           aria-label="Search parts"
         />
@@ -138,7 +149,7 @@ export function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
         )}
         {!groups.some((g) => g.types.length) && !boundaries.length && !explain.length && <p className="quiet pad">No part matches “{query}”.</p>}
       </div>
-      <p className="palette-foot">Drag onto the sheet or click to add. Drag between items to connect.</p>
+      <p className="palette-foot">Drag onto the sheet or click to add; Enter adds the first match. Drag between items to connect.</p>
     </aside>
   );
 }

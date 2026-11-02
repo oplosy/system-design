@@ -20,6 +20,17 @@ export const kitsOf = (t: ComponentType): Kit[] => SHAPES[t].kits ?? [GROUPS.fin
 /** Lowercase text the palette search matches against. */
 export const searchText = (t: ComponentType) => `${SHAPES[t].name} ${t} ${SHAPES[t].keywords}`.toLowerCase();
 
+/**
+ * How well a search fits a part: 0 when its name starts with the first word, 1 when its name or id holds every word,
+ * 2 when only its keywords do. Undefined when a word is nowhere in it.
+ */
+export function searchRank(t: ComponentType, terms: string[]): number | undefined {
+  if (!terms.length || !terms.every((w) => searchText(t).includes(w))) return undefined;
+  if (SHAPES[t].name.toLowerCase().startsWith(terms[0])) return 0;
+  const head = `${SHAPES[t].name} ${t}`.toLowerCase();
+  return terms.every((w) => head.includes(w)) ? 1 : 2;
+}
+
 export const NOTE_SIZE = { w: 190, h: 96 };
 export const DECISION_SIZE = { w: 230, h: 120 };
 

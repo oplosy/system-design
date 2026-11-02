@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { COMPONENT_TYPES } from '../core/schema.ts';
-import { GROUPS, KITS, SHAPES, drawShape, guessType, kitsOf, searchText } from './shapes.ts';
+import { GROUPS, KITS, SHAPES, drawShape, guessType, kitsOf, searchRank, searchText } from './shapes.ts';
 import type { ComponentType } from '../core/schema.ts';
 
 test('every component type draws cleanly in both styles and sits in a palette group', () => {
@@ -60,4 +60,14 @@ test('the part tables keep their order, so a shared word still means what it alw
   assert.equal(guessType('hub'), 'hub');
   assert.equal(guessType('cell tower'), 'cell-tower');
   assert.equal(guessType('NAS backup'), 'nas');
+});
+
+test('a search ranks names before keywords', () => {
+  assert.equal(searchRank('queue', ['queue']), 0);
+  assert.equal(searchRank('dead-letter-queue', ['queue']), 1);
+  assert.equal(searchRank('api-gateway', ['gateway']), 1);
+  assert.equal(searchRank('forward-proxy', ['gateway']), 2);
+  assert.equal(searchRank('stream', ['kafka']), 2);
+  assert.equal(searchRank('queue', ['kafka']), undefined);
+  assert.equal(searchRank('queue', []), undefined);
 });

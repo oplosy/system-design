@@ -151,7 +151,7 @@ The palette has three kits:
 
 ## Working on the canvas
 
-- **Add** a part by dragging it from the palette or clicking it. Search the palette with words like `kafka`, `redis` or `s3`.
+- **Add** a part by dragging it from the palette or clicking it. Search the palette with words like `kafka`, `redis` or `s3`. Parts with the word in their name come first, and Enter adds the first match.
 - **Connect** by dragging between two parts. Drag from a note or decision to a part to attach it.
 - **Group** by dropping a part into a box.
 - **Edit** by selecting an item and using the panel on the right. Double-click to rename. Press Delete or Backspace to remove.

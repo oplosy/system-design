@@ -96,3 +96,27 @@ test('presenting walks the steps with the arrow keys and Escape leaves', async (
   await page.keyboard.press('Escape');
   await expect(page.getByRole('region', { name: 'Presentation' })).toHaveCount(0);
 });
+
+test('palette search lists name matches first and Enter adds the closest one', async ({ page, request }) => {
+  await openCopy(page, request, 'search-copy');
+  const search = page.getByPlaceholder(/^Search: /);
+  await search.fill('gateway');
+  // Inside each group the parts with the word in their name come before the ones that only list it as a keyword.
+  const groups = await page.locator('.palette-scroll section').evaluateAll((sections) => sections.map((s) => [...s.querySelectorAll('.part-name')].map((n) => n.textContent ?? '')));
+  const named = groups.filter((names) => names.some((n) => /gateway/i.test(n)));
+  expect(named.length).toBeGreaterThan(0);
+  for (const names of groups) {
+    const firstOther = names.findIndex((n) => !/gateway/i.test(n));
+    if (firstOther >= 0) expect(names.slice(firstOther).every((n) => !/gateway/i.test(n))).toBe(true);
+  }
+  // A group that has a name match is listed before one that only has keyword matches.
+  const lastNamed = groups.map((names) => names.some((n) => /gateway/i.test(n))).lastIndexOf(true);
+  expect(groups.slice(0, lastNamed + 1).every((names) => names.some((n) => /gateway/i.test(n)))).toBe(true);
+  const parts = async () => (await saved(request, 'search-copy')).components.length;
+  const before = await parts();
+  await search.fill('queue');
+  await expect(page.locator('.palette .part-name').first()).toHaveText('Queue');
+  await search.press('Enter');
+  await expect(search).toHaveValue('');
+  await expect.poll(parts).toBe(before + 1);
+});
