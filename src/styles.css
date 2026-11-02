@@ -3,6 +3,8 @@
   --bg: #f4f4f2;
   --canvas: #f6f6f4;
   --panel: #ffffff;
+  /* Follows --panel in every theme. The sheet's own parts stay on the solid --panel. */
+  --glass: color-mix(in srgb, var(--panel) 72%, transparent);
   --float: 0 1px 2px rgb(20 20 25 / 0.06);
   --hover: rgb(20 20 25 / 0.05);
   --field: rgb(20 20 25 / 0.035);
@@ -156,9 +158,28 @@ button:disabled {
 .find-input,
 .react-flow__controls,
 .react-flow__minimap {
-  background: var(--panel);
+  background: var(--glass);
   border: 1px solid var(--rule-strong);
   box-shadow: var(--float);
+}
+
+.float,
+.switcher-btn,
+.card,
+.palette,
+.review-bar,
+.review-sheet,
+.review-ask,
+.present-bar,
+.sequence,
+.menu,
+.find-input,
+.select-pop,
+.dialog,
+.toast,
+.react-flow__controls,
+.react-flow__minimap {
+  backdrop-filter: blur(14px) saturate(1.4);
 }
 
 /* Buttons: one filled main action, quiet text for the rest. */
@@ -695,7 +716,7 @@ button:disabled {
 
 .icon-btn.float:hover,
 .icon-btn.float[aria-expanded='true'] {
-  background: var(--panel);
+  background: var(--glass);
   border-color: var(--quiet);
 }
 
@@ -1159,7 +1180,7 @@ button:disabled {
 
 .review-ask {
   padding: 12px 16px;
-  background: var(--panel);
+  background: var(--glass);
   border: 1px solid var(--rule-strong);
   border-radius: var(--radius);
   box-shadow: var(--lift);
@@ -1347,7 +1368,7 @@ textarea.ed-title {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--panel);
+  background: var(--glass);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   box-shadow: var(--lift);
@@ -1655,7 +1676,7 @@ code.ref-value {
   padding: 18px 24px 22px;
   border: 1px solid var(--rule-strong);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--glass);
   box-shadow: var(--lift);
   animation: rise 0.14s ease-out;
 }
@@ -1922,7 +1943,7 @@ code.ref-value {
   padding: 10px 6px 10px 12px;
   border: 1px solid var(--rule-strong);
   border-radius: 12px;
-  background: var(--panel);
+  background: var(--glass);
   box-shadow: var(--lift);
   animation: rise 0.14s ease-out;
 }
