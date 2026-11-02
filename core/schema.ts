@@ -181,18 +181,56 @@ export const COMPONENT_TYPES = [
   'state',
   'signal',
   'timer',
-  // Threat models
+  // Threat models and security programmes
   'threat-actor',
   'threat',
   'vulnerability',
+  'exploit',
+  'attack-step',
+  'entry-point',
   'asset',
+  'risk',
   'mitigation',
+  'mfa',
+  'pam',
+  'ztna',
+  'casb',
+  'nac',
+  'iam-role',
+  'service-account',
+  'credential',
+  'access-token',
+  'siem',
+  'soar',
+  'edr',
+  'ndr',
+  'honeypot',
+  'threat-intel',
+  'soc',
+  'incident',
+  'dlp',
+  'hsm',
+  'encryption-key',
+  'tokenization',
+  'data-masking',
+  'audit-log',
+  'sast',
+  'dast',
+  'sbom',
+  'pentest',
+  'cspm',
+  'mdm',
+  'code-signing',
+  'sandbox',
+  'compliance-control',
+  'bug-bounty',
+  'email-security',
 ] as const;
 
 export type ComponentType = (typeof COMPONENT_TYPES)[number];
 
 /** Boxes that group components: cloud regions, networks, VLANs, sites, clusters, system boundaries, swimlanes. */
-export const BOUNDARY_KINDS = ['region', 'zone', 'datacenter', 'vpc', 'subnet', 'vlan', 'cluster', 'site', 'system', 'context', 'lane', 'trust', 'group'] as const;
+export const BOUNDARY_KINDS = ['region', 'zone', 'datacenter', 'vpc', 'subnet', 'vlan', 'cluster', 'site', 'system', 'context', 'lane', 'trust', 'dmz', 'surface', 'group'] as const;
 export type BoundaryKind = (typeof BOUNDARY_KINDS)[number];
 
 /** Version of the design file format this app writes. */

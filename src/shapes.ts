@@ -71,7 +71,7 @@ export function insideOf(type: ComponentType): string[] {
 export { gen };
 
 // Words too common across parts to say anything about the type.
-const GENERIC = new Set('api app apps server servers web data service services system the and for with main core new application node asset'.split(' '));
+const GENERIC = new Set('api app apps server servers web data service services system the and for with main core new application node asset risk role sandbox'.split(' '));
 /**
  * Parts whose words only count when no other part has them, so a name like "Status page" or "Schema registry" never
  * takes "page" from UI or "registry" from the container registry. Every other tie goes to the part listed first above.
@@ -79,7 +79,7 @@ const GENERIC = new Set('api app apps server servers web data service services s
 const FALLBACK = new Set<ComponentType>([
   'policy-engine', 'transit-gateway', 'private-link', 'autoscaler', 'dead-letter-queue', 'schema-registry', 'status-page',
   'vulnerability-scanner', 'data-catalog', 'llm-gateway', 'mcp-server', 'object', 'enum', 'deployment-node', 'lifeline',
-  'subprocess', 'document', 'data-store', 'threat-actor', 'threat', 'vulnerability', 'asset', 'mitigation',
+  'subprocess', 'document', 'data-store', ...(Object.keys(security) as ComponentType[]),
 ]);
 const WORDS = Object.entries(SHAPES)
   .map(([type, s]) => [type, new Set(`${s.name} ${s.keywords}`.toLowerCase().split(/\s+/))] as const)

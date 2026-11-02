@@ -32,6 +32,10 @@ export const GROUPS = [
   { key: 'sw-ddd', title: 'Domain', color: '#1D9E75', kit: 'software' },
   { key: 'sw-flow', title: 'Flow and state', color: '#A8742E', kit: 'software' },
   { key: 'threat', title: 'Threat model', color: '#C2413B', kit: 'security' },
+  { key: 'sec-access', title: 'Access', color: '#7F77DD', kit: 'security' },
+  { key: 'sec-detect', title: 'Detection and response', color: '#3F7FD9', kit: 'security' },
+  { key: 'sec-data', title: 'Data protection', color: '#1D9E75', kit: 'security' },
+  { key: 'sec-app', title: 'Application security', color: '#A8742E', kit: 'security' },
 ] as const;
 
 export type Group = (typeof GROUPS)[number]['key'];

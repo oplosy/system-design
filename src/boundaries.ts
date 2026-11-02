@@ -10,9 +10,9 @@ export const EMPTY_BOUNDARY = { w: 360, h: 220 };
 export const BOUNDARY_SPECS: Record<BoundaryKind, { name: string; color: string; dash?: string; strokeWidth: number; kits: Kit[] }> = {
   region: { name: 'Region', color: '#3F7FD9', dash: '12 6', strokeWidth: 1.8, kits: ['system'] },
   zone: { name: 'Availability zone', color: '#3F7FD9', dash: '3 5', strokeWidth: 1.4, kits: ['system'] },
-  datacenter: { name: 'Data center', color: '#6E7B8B', strokeWidth: 1.8, kits: ['system', 'network'] },
-  vpc: { name: 'VPC', color: '#1D9E75', strokeWidth: 1.4, kits: ['system', 'network'] },
-  subnet: { name: 'Subnet', color: '#1D9E75', dash: '7 5', strokeWidth: 1.3, kits: ['system', 'network'] },
+  datacenter: { name: 'Data center', color: '#6E7B8B', strokeWidth: 1.8, kits: ['system', 'network', 'security'] },
+  vpc: { name: 'VPC', color: '#1D9E75', strokeWidth: 1.4, kits: ['system', 'network', 'security'] },
+  subnet: { name: 'Subnet', color: '#1D9E75', dash: '7 5', strokeWidth: 1.3, kits: ['system', 'network', 'security'] },
   vlan: { name: 'VLAN', color: '#7F77DD', dash: '9 4', strokeWidth: 1.4, kits: ['network'] },
   cluster: { name: 'Cluster', color: '#7F77DD', dash: '2 5', strokeWidth: 1.4, kits: ['system'] },
   site: { name: 'Site', color: '#A8742E', strokeWidth: 1.8, kits: ['network'] },
@@ -20,6 +20,8 @@ export const BOUNDARY_SPECS: Record<BoundaryKind, { name: string; color: string;
   context: { name: 'Bounded context', color: '#1D9E75', dash: '10 5', strokeWidth: 1.5, kits: ['software'] },
   lane: { name: 'Swimlane', color: '#A8742E', strokeWidth: 1.2, kits: ['software'] },
   trust: { name: 'Trust boundary', color: '#C2413B', dash: '10 4 2 4', strokeWidth: 1.6, kits: ['security'] },
+  dmz: { name: 'DMZ', color: '#D85A30', dash: '9 4', strokeWidth: 1.5, kits: ['security', 'network'] },
+  surface: { name: 'Attack surface', color: '#C2413B', dash: '3 4', strokeWidth: 1.4, kits: ['security'] },
   group: { name: 'Group', color: '#888780', dash: '6 6', strokeWidth: 1.2, kits: ['system', 'network', 'software', 'security'] },
 };
 

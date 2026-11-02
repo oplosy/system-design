@@ -40,9 +40,10 @@ test('the software kit has diagram parts plus actors, services and stores', () =
 
 test('the security kit has threat parts plus the defences and systems they point at', () => {
   const security = COMPONENT_TYPES.filter((t) => kitsOf(t).includes('security'));
-  for (const t of ['threat-actor', 'threat', 'vulnerability', 'asset', 'mitigation', 'firewall', 'waf', 'identity', 'user', 'service', 'sql-db'] as const) assert.ok(security.includes(t), `${t} missing from security kit`);
+  for (const t of ['threat-actor', 'threat', 'vulnerability', 'asset', 'mitigation', 'mfa', 'siem', 'dlp', 'sast', 'firewall', 'waf', 'identity', 'user', 'service', 'sql-db'] as const) assert.ok(security.includes(t), `${t} missing from security kit`);
   assert.ok(!security.includes('router'), 'network gear stays out of the security kit');
   assert.ok(kitsOf('waf').includes('system'), 'shared parts stay in the system kit');
+  assert.ok(kitsOf('siem').every((k) => k === 'security'), 'its own parts stay out of the other kits');
   assert.ok(kitsOf('policy-engine').includes('system'), 'shared parts stay in the system kit');
 });
 
@@ -50,6 +51,9 @@ test('threat parts do not take words from older parts or ordinary names', () => 
   assert.equal(guessType('Vulnerability'), 'vulnerability-scanner');
   assert.equal(guessType('attacker'), 'threat-actor');
   assert.equal(guessType('Asset service'), undefined);
+  assert.equal(guessType('risk'), undefined);
+  assert.equal(guessType('SIEM'), 'ids');
+  assert.equal(guessType('CrowdStrike'), 'edr');
 });
 
 test('a word that several parts list is never guessed as a part that does not list it, and later parts do not take old words', () => {
