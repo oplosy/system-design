@@ -120,3 +120,52 @@ test('palette search lists name matches first and Enter adds the closest one', a
   await expect(search).toHaveValue('');
   await expect.poll(parts).toBe(before + 1);
 });
+
+test('double-clicking a part renames it in place and the name is saved', async ({ page, request }) => {
+  await openCopy(page, request, 'rename-copy');
+  const label = async () => (await saved(request, 'rename-copy')).components.find((c) => c.id === 'app')?.label;
+  // The first click selects the part and redraws it; the pair of clicks a person makes is far enough apart for that to finish.
+  const at = await centerOf(page, '.react-flow__node', 'App server');
+  await page.mouse.click(at.x, at.y);
+  await expect(page).toHaveURL(/#rename-copy\/app$/);
+  await page.waitForTimeout(300);
+  await page.mouse.dblclick(at.x, at.y);
+  const box = page.locator('.inline-edit');
+  await expect(box).toBeVisible();
+  await box.fill('Web server');
+  await box.press('Enter');
+  await expect(page.locator('.react-flow__node', { hasText: 'Web server' })).toBeVisible();
+  await expect.poll(label).toBe('Web server');
+});
+
+test('a flow is drawn by clicking connected parts in order, then saved', async ({ page, request }) => {
+  await openCopy(page, request, 'flow-copy');
+  const flows = async () => (await saved(request, 'flow-copy')).flows ?? [];
+  await page.getByRole('button', { name: 'New flow' }).click();
+  await page.getByLabel('Flow title').fill('Open the app');
+  for (const name of ['Browser', 'App server', 'Database']) await page.locator('.react-flow__node', { hasText: name }).click();
+  await page.getByRole('button', { name: 'Save flow' }).click();
+  await expect.poll(async () => (await flows()).map((f) => `${f.title}:${f.path.join('>')}`)).toEqual(['Open the app:client>app>db']);
+});
+
+test('dragging a boundary by its tab carries the parts inside it', async ({ page, request }) => {
+  await openCopy(page, request, 'box-move-copy', {
+    nodes: 4,
+    edit: (d) => {
+      d.boundaries = [{ id: 'private', kind: 'vpc', label: 'Private network', step: 'single' }];
+      d.components = (d.components as { id: string }[]).map((c) => (c.id === 'app' || c.id === 'db' ? { ...c, boundary: 'private' } : c));
+    },
+  });
+  const at = async () => Object.fromEntries((await saved(request, 'box-move-copy')).components.map((c) => [c.id, c.position!]));
+  const before = await at();
+  const tab = await centerOf(page, '.boundary-tab');
+  await page.mouse.move(tab.x, tab.y);
+  await page.mouse.down();
+  await page.mouse.move(tab.x + 60, tab.y + 10, { steps: 6 });
+  await page.mouse.move(tab.x + 140, tab.y + 20, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await at()).app.x - before.app.x).toBeGreaterThan(80);
+  const after = await at();
+  expect(Math.round(after.db.x - before.db.x)).toBe(Math.round(after.app.x - before.app.x));
+  expect(after.client).toEqual(before.client);
+});
