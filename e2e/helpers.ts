@@ -30,7 +30,9 @@ export async function openCopy(page: Page, request: APIRequestContext, id: strin
   // A design with every step seen opens at its last step, which shows more parts.
   if (options.seen) await expect(page.locator('.react-flow__node').first()).toBeVisible();
   else await expect(page.locator('.react-flow__node')).toHaveCount(options.nodes ?? 3);
-  await expect.poll(async () => (await saved(request, id)).components.every((c) => c.position)).toBe(true);
+  // The layout is saved a moment after it is drawn; reading the file while that happens can make Windows refuse the rename.
+  await page.waitForTimeout(700);
+  await expect.poll(async () => (await saved(request, id)).components.every((c) => c.position), { intervals: [300, 500, 800] }).toBe(true);
 }
 
 /**
