@@ -8,6 +8,7 @@ import { type FlowAt, type Change, Prop, Ed, Num, RefsEditor, Connected, InsideS
 import { BoundaryPreview, ShapePreview } from './palette.tsx';
 import { Flows } from './flows.tsx';
 import { Comments } from './bars.tsx';
+import { Icon, type IconName } from './icons.tsx';
 
 // The "Opens" choice that starts a new design; a design id is a slug, so it can't clash.
 const NEW_INSIDE = '+new';
@@ -78,7 +79,7 @@ export function Inspector({
             {kind}
           </span>
           <button className="icon-btn close" onClick={() => onSelect(null)} aria-label="Close" title="Close (Esc)">
-            ×
+            <Icon name="close" />
           </button>
         </div>
         {component && <Ed label="Label" required className="ed-title" value={component.label} onCommit={(v) => edit((d: Design) => d.components, { label: v })} />}
@@ -96,7 +97,7 @@ export function Inspector({
       {component && (
         <>
           <section className="insp-sec">
-            <h3 className="rule-head">General</h3>
+            <h3 className="rule-head"><Icon name="info" />General</h3>
             <Prop label="Type">
               <select className="ed" value={component.type} onChange={(e) => edit((d: Design) => d.components, { type: e.target.value as ComponentType })} aria-label="Type">
                 {GROUPS.map((g) => (
@@ -125,7 +126,7 @@ export function Inspector({
           </section>
 
           <section className="insp-sec">
-            <h3 className="rule-head">Cost and load</h3>
+            <h3 className="rule-head"><Icon name="cost" />Cost and load</h3>
             <Prop label="Cost">
               {costEditedAfter ? (
                 // A later step changed it; editing here would overwrite that change.
@@ -170,7 +171,7 @@ export function Inspector({
           </section>
 
           <section className="insp-sec">
-            <h3 className="rule-head">Links</h3>
+            <h3 className="rule-head"><Icon name="link" />Links</h3>
             <Prop label="Tags">
               <Ed
                 label="Tags"
@@ -198,6 +199,7 @@ export function Inspector({
                     {designs.find((x) => x.id === component.detail)?.title ?? component.detail}
                   </button>
                   <button className="text-btn" onClick={() => edit((d: Design) => d.components, { detail: undefined })}>
+                    <Icon name="unlink" />
                     Unlink
                   </button>
                 </>
@@ -233,7 +235,7 @@ export function Inspector({
 
       {boundary && (
         <section className="insp-sec">
-          <h3 className="rule-head">General</h3>
+          <h3 className="rule-head"><Icon name="info" />General</h3>
           <Prop label="Kind">
             <select className="ed" value={boundary.kind} onChange={(e) => edit((d: Design) => d.boundaries, { kind: e.target.value as BoundaryKind })} aria-label="Kind">
               {BOUNDARY_KINDS.map((k) => (
@@ -259,7 +261,7 @@ export function Inspector({
 
       {connection && (
         <section className="insp-sec">
-          <h3 className="rule-head">General</h3>
+          <h3 className="rule-head"><Icon name="info" />General</h3>
           <Prop label="Label">
             <Ed label="Label" value={connection.label} onCommit={(v) => edit((d: Design) => d.connections, { label: v })} />
           </Prop>
@@ -287,9 +289,11 @@ export function Inspector({
           <Prop label="Mode">
             <div className="toggle" role="radiogroup" aria-label="Mode">
               <button role="radio" aria-checked={!connection.async} onClick={() => edit((d: Design) => d.connections, { async: undefined })}>
+                <Icon name="sync" />
                 Sync
               </button>
               <button role="radio" aria-checked={!!connection.async} onClick={() => edit((d: Design) => d.connections, { async: true })}>
+                <Icon name="async" />
                 Async
               </button>
             </div>
@@ -298,12 +302,14 @@ export function Inspector({
             <div className="toggle" role="radiogroup" aria-label="Line">
               {(['curve', 'straight', 'elbow'] as const).map((r) => (
                 <button key={r} role="radio" aria-checked={(connection.route ?? 'curve') === r} onClick={() => edit((d: Design) => d.connections, { route: r === 'curve' ? undefined : r, bend: undefined })}>
+                  <Icon name={r as IconName} />
                   {r[0].toUpperCase() + r.slice(1)}
                 </button>
               ))}
             </div>
             {connection.bend !== undefined && (
               <button className="text-btn" onClick={() => edit((d: Design) => d.connections, { bend: undefined })}>
+                <Icon name="undo" />
                 Reset bend
               </button>
             )}
@@ -314,7 +320,7 @@ export function Inspector({
 
       {decision && (
         <section className="insp-sec">
-          <h3 className="rule-head">General</h3>
+          <h3 className="rule-head"><Icon name="info" />General</h3>
           {decision.links.length > 0 && <Prop label="Affects">{decision.links.map(ref)}</Prop>}
           {addedIn}
           <Prop label="Why" wide>
@@ -337,7 +343,7 @@ export function Inspector({
 
       {note && (
         <section className="insp-sec">
-          <h3 className="rule-head">General</h3>
+          <h3 className="rule-head"><Icon name="info" />General</h3>
           {note.attachTo && <Prop label="Attached to">{ref(note.attachTo)}</Prop>}
           {addedIn}
           <Prop label="Text" wide>
@@ -350,6 +356,7 @@ export function Inspector({
 
       <footer className="insp-foot">
         <button className="text-btn danger" onClick={() => onDelete(item.id)}>
+          <Icon name="trash" />
           Delete
         </button>
       </footer>
@@ -417,6 +424,7 @@ export function StepDetails({
           )}
         </div>
         <button className="chip" aria-pressed={diff} onClick={onDiff} title="Outline what this step added or changed, show what it removed, and dim the rest">
+          <Icon name="diff" />
           Show changes
         </button>
       </header>
@@ -426,7 +434,7 @@ export function StepDetails({
           <div className="step-col">
             {step.options && (
               <section className="insp-sec">
-                <h3 className="rule-head">Options</h3>
+                <h3 className="rule-head"><Icon name="layers" />Options</h3>
                 {step.options.map((o) => {
                   const on = o.id === viewed;
                   return (
@@ -442,6 +450,7 @@ export function StepDetails({
                       {on && (
                         <div className="flow-steps">
                           <button className="btn ink" onClick={() => onPickOption(stepId, o.id)}>
+                            <Icon name="check" />
                             Pick {o.title}
                           </button>
                         </div>
@@ -454,7 +463,7 @@ export function StepDetails({
 
             {decisions.length > 0 && (
               <section className="insp-sec">
-                <h3 className="rule-head">Decisions</h3>
+                <h3 className="rule-head"><Icon name="branch" />Decisions</h3>
                 {decisions.map((x) => (
                   <button key={x.id} className="decision-entry" onClick={() => onSelect(x.id)}>
                     <span className="decision-body">
@@ -478,7 +487,7 @@ export function StepDetails({
 
             {notes.length > 0 && (
               <section className="insp-sec">
-                <h3 className="rule-head">Notes</h3>
+                <h3 className="rule-head"><Icon name="note" />Notes</h3>
                 {notes.map((n) => (
                   <button key={n.id} className="note-entry" onClick={() => onSelect(n.id)}>
                     {n.text}
@@ -492,7 +501,7 @@ export function StepDetails({
         <div className="step-col">
           {components.length + boundaries.length > 0 && (
             <section className="insp-sec">
-              <h3 className="rule-head">Added</h3>
+              <h3 className="rule-head"><Icon name="plus" />Added</h3>
               {boundaries.map((b) => (
                 <button key={b.id} className="list-row" onClick={() => onSelect(b.id)}>
                   <BoundaryPreview kind={b.kind} />
@@ -512,7 +521,7 @@ export function StepDetails({
 
           {!!step.changed?.length && (
             <section className="insp-sec">
-              <h3 className="rule-head">Changed</h3>
+              <h3 className="rule-head"><Icon name="sketch" />Changed</h3>
               {step.changed.map((c) => (
                 <button key={`${c.id}:${c.field}`} className="list-row change-row" onClick={() => onSelect(c.id)} disabled={!labelOf(c.id)}>
                   <span className="list-main">
@@ -528,7 +537,7 @@ export function StepDetails({
 
           {!!step.removed?.length && (
             <section className="insp-sec">
-              <h3 className="rule-head">Removed</h3>
+              <h3 className="rule-head"><Icon name="minus" />Removed</h3>
               {step.removed.map((r) => (
                 <div key={r.id} className="list-row removed-row">
                   {r.type && <ShapePreview type={r.type} width={30} height={20} />}
@@ -551,6 +560,7 @@ export function StepDetails({
                 change((d) => m.revertStep(d, stepId))
               }
             >
+              <Icon name="undo" />
               Revert step
             </button>
           </footer>

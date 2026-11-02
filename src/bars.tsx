@@ -5,6 +5,8 @@ import * as m from '../core/mutations.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SHAPES } from './shapes.ts';
 import { type FlowAt, timeText, type Change } from './fields.tsx';
+import { useHoverOpen } from './menus.tsx';
+import { Icon } from './icons.tsx';
 
 export function ReviewBar({
   design,
@@ -31,13 +33,14 @@ export function ReviewBar({
   const step = design.steps[viewIndex];
   const [asking, setAsking] = useState(false);
   const [why, setWhy] = useState('');
+  const hover = useHoverOpen(open, onToggle);
   const send = () => {
     onRequestChanges(why);
     setWhy('');
     setAsking(false);
   };
   return (
-    <div className="review" role="region" aria-label="Step review">
+    <div className="review" role="region" aria-label="Step review" {...hover.area}>
       {open && (
         <div className="review-sheet" id="step-details">
           {children}
@@ -71,6 +74,7 @@ export function ReviewBar({
               Cancel
             </button>
             <button type="submit" className="btn ink">
+              <Icon name="send" />
               Send to agent
             </button>
           </div>
@@ -92,7 +96,7 @@ export function ReviewBar({
         </div>
         <div className="review-row">
           <button className="icon-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} title="Previous step (←)" aria-label="Previous step">
-            ‹
+            <Icon name="left" />
           </button>
           <div className="review-text">
             <span className="review-count">
@@ -101,22 +105,29 @@ export function ReviewBar({
             </span>
             <span className="review-name">{step.title}</span>
           </div>
-          <button className="text-btn review-title" aria-expanded={open} aria-controls="step-details" onClick={onToggle}>
+          <button className="text-btn review-title" aria-expanded={open} aria-controls="step-details" {...hover.trigger} onClick={onToggle}>
+            <Icon name="panel" />
             {open ? 'Hide details' : 'Details'}
           </button>
           <button className="text-btn" aria-expanded={asking} onClick={() => setAsking((a) => !a)} title="Send this step back to the agent with a comment">
+            <Icon name="comment" />
             Request changes
           </button>
           {!step.seen ? (
             <button className="btn ink" onClick={onSeenNext} disabled={!!step.options} title={step.options ? 'Pick one of the options first' : 'Approve and go to the next step (→)'}>
+              <Icon name="check" />
               Approve
             </button>
           ) : viewIndex < maxIndex ? (
             <button className="btn ink" onClick={() => onView(viewIndex + 1)} title="Next step (→)">
               Next
+              <Icon name="right" />
             </button>
           ) : (
-            <span className="review-done">All approved</span>
+            <span className="review-done">
+              <Icon name="check" />
+              All approved
+            </span>
           )}
         </div>
       </div>
@@ -182,23 +193,24 @@ export function PresentBar({
       {playing ? (
         <>
           <button className="icon-btn" onClick={() => onFlow({ id: playing.id, at: flow.at - 1 })} disabled={flow.at === 0} aria-label="Previous hop">
-            ‹
+            <Icon name="left" />
           </button>
           <button className="icon-btn" onClick={() => onFlow({ id: playing.id, at: flow.at + 1 })} disabled={flow.at >= hops - 1} aria-label="Next hop">
-            ›
+            <Icon name="right" />
           </button>
         </>
       ) : (
         <>
           <button className="icon-btn" onClick={() => onView(viewIndex - 1)} disabled={viewIndex === 0} aria-label="Previous step">
-            ‹
+            <Icon name="left" />
           </button>
           <button className="icon-btn" onClick={() => onView(viewIndex + 1)} disabled={viewIndex >= maxIndex} aria-label="Next step">
-            ›
+            <Icon name="right" />
           </button>
         </>
       )}
       <button className="text-btn" onClick={onExit}>
+        <Icon name="signout" />
         Exit
       </button>
     </div>
@@ -294,6 +306,7 @@ export function Comments({ design, step, target, change, onSelect }: { design: D
   return (
     <section className="insp-sec">
       <h3 className="rule-head">
+        <Icon name="comment" />
         Comments
         {open > 0 && <span className="rule-count">{open}</span>}
       </h3>
@@ -309,6 +322,7 @@ export function Comments({ design, step, target, change, onSelect }: { design: D
             <span className="comment-at">{when(c.at)}</span>
             {c.by === 'reviewer' && (
               <button className="text-btn" onClick={() => toggle(c.id)}>
+                <Icon name={c.resolved ? 'undo' : 'check'} />
                 {c.resolved ? 'Reopen' : 'Resolve'}
               </button>
             )}
@@ -329,6 +343,7 @@ export function Comments({ design, step, target, change, onSelect }: { design: D
         />
         {text.trim() && (
           <button className="btn" onClick={send} title="Ctrl+Enter">
+            <Icon name="send" />
             Comment
           </button>
         )}

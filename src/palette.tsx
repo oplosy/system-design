@@ -3,7 +3,8 @@ import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType 
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SketchContext } from './canvas.tsx';
 import { ShapeDrawing } from './shape-drawing.tsx';
-import { useDismiss } from './menus.tsx';
+import { useDismiss, useHoverOpen } from './menus.tsx';
+import { Icon } from './icons.tsx';
 import { GROUPS, KITS, SHAPES, kitsOf, searchRank, type Kit } from './shapes.ts';
 
 export type AddKind = ComponentType | 'note' | 'decision' | `boundary:${BoundaryKind}`;
@@ -44,10 +45,11 @@ export function AddMenu({ open, onOpen, onAdd }: { open: boolean; onOpen: (open:
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => onOpen(false), [onOpen]);
   useDismiss(open, close, ref);
+  const hover = useHoverOpen(open, onOpen);
   return (
-    <div className="add" ref={ref}>
-      <button className="icon-btn float" aria-expanded={open} aria-label="Add a part" title="Add a part (/)" onClick={() => onOpen(!open)}>
-        +
+    <div className="add" ref={ref} {...hover.area}>
+      <button className="icon-btn float" aria-expanded={open} aria-label="Add a part" title="Add a part (/)" {...hover.trigger} onClick={() => onOpen(!open)}>
+        <Icon name="plus" />
       </button>
       {open && <Palette onAdd={onAdd} />}
     </div>
@@ -141,13 +143,13 @@ function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
         )}
         {boundaries.length > 0 && (
           <section>
-            <h3 className="rule-head">Boundaries</h3>
+            <h3 className="rule-head"><Icon name="clean" />Boundaries</h3>
             {boundaries.map((k) => row(`boundary:${k}`, BOUNDARY_SPECS[k].name, <BoundaryPreview kind={k} />))}
           </section>
         )}
         {explain.length > 0 && (
           <section>
-            <h3 className="rule-head">Annotate</h3>
+            <h3 className="rule-head"><Icon name="note" />Annotate</h3>
             {explain.map((x) => row(x.kind, x.name, x.preview))}
           </section>
         )}

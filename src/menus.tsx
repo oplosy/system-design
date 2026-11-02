@@ -20,12 +20,71 @@ export function useDismiss(active: boolean, onDismiss: () => void, ref?: React.R
   }, [active, onDismiss, ref]);
 }
 
+/** How long the mouse rests on something before it opens, and how soon after leaving it closes again. */
+const HOVER_OPEN_MS = 2000;
+const HOVER_CLOSE_MS = 700;
+
+/**
+ * Opens something when the mouse rests on its trigger, and closes it soon after the mouse leaves. `trigger` goes on what
+ * the mouse rests on, `area` on an element around that and what opens. A click or a key inside keeps it open, and
+ * whatever a click opened stays open.
+ */
+export function useHoverOpen(open: boolean, onOpen: (open: boolean) => void, disabled?: boolean) {
+  const latest = useRef({ open, onOpen, disabled });
+  latest.current = { open, onOpen, disabled };
+  const opening = useRef<number | undefined>(undefined);
+  const closing = useRef<number | undefined>(undefined);
+  const byHover = useRef(false);
+  const stop = () => {
+    clearTimeout(opening.current);
+    clearTimeout(closing.current);
+  };
+  useEffect(() => stop, []);
+  const keep = () => {
+    stop();
+    byHover.current = false;
+  };
+  return {
+    trigger: {
+      onPointerEnter: (e: React.PointerEvent) => {
+        if (e.pointerType !== 'mouse' || latest.current.open || latest.current.disabled) return;
+        opening.current = window.setTimeout(() => {
+          byHover.current = true;
+          latest.current.onOpen(true);
+        }, HOVER_OPEN_MS);
+      },
+      onPointerLeave: () => clearTimeout(opening.current),
+    },
+    area: {
+      onPointerEnter: () => clearTimeout(closing.current),
+      onPointerLeave: () => {
+        if (!byHover.current) return;
+        closing.current = window.setTimeout(() => {
+          byHover.current = false;
+          if (latest.current.open) latest.current.onOpen(false);
+        }, HOVER_CLOSE_MS);
+      },
+      onPointerDown: keep,
+      onKeyDown: keep,
+    },
+  };
+}
+
+export function MenuLabel({ name, icon }: { name: string; icon: IconName }) {
+  return (
+    <span className="menu-label">
+      <Icon name={icon} />
+      {name}
+    </span>
+  );
+}
+
 export function DialogHead({ id, title, onClose }: { id: string; title: string; onClose: () => void }) {
   return (
     <header className="dialog-head">
       <h2 id={id}>{title}</h2>
       <button type="button" className="icon-btn" onClick={onClose} aria-label="Close" title="Close (Esc)">
-        ×
+        <Icon name="close" />
       </button>
     </header>
   );
@@ -220,8 +279,21 @@ type MoreMenuProps = {
   user: Me;
 };
 
-/** How long the mouse rests on a row before its list unfolds. */
-const HOVER_OPEN_MS = 2000;
+/** A row that unfolds its list in place. */
+function MenuSub({ name, icon, hint, open, onOpen, disabled, children }: { name: string; icon: IconName; hint?: string; open: boolean; onOpen: (open: boolean) => void; disabled?: boolean; children: React.ReactNode }) {
+  const hover = useHoverOpen(open, onOpen, disabled);
+  return (
+    <div className="contents" {...hover.area}>
+      <button role="menuitem" className="menu-row" aria-expanded={open} disabled={disabled} {...hover.trigger} onClick={() => onOpen(!open)}>
+        <MenuLabel name={name} icon={icon} />
+        <span className="menu-hint" aria-hidden="true">
+          {hint} <span className="menu-chevron">›</span>
+        </span>
+      </button>
+      {open && <div className="menu-sub">{children}</div>}
+    </div>
+  );
+}
 
 /** Everything that is not the sheet: one menu, with longer lists unfolding in place. */
 export function MoreMenu(p: MoreMenuProps) {
@@ -229,13 +301,12 @@ export function MoreMenu(p: MoreMenuProps) {
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<'view' | 'layout' | 'export' | 'settings' | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-  const hover = useRef<number | undefined>(undefined);
   const close = useCallback(() => {
     setOpen(false);
     setPage(null);
   }, []);
   useDismiss(open, close, ref);
-  useEffect(() => () => clearTimeout(hover.current), [open]);
+  const hover = useHoverOpen(open, (o) => (o ? setOpen(true) : close()));
   const counts = tagCounts(design);
   // A tag that no part carries any more (renamed, removed, another design) falls back to everything.
   useEffect(() => {
@@ -246,44 +317,19 @@ export function MoreMenu(p: MoreMenuProps) {
     close();
     fn(...args);
   };
-  const label = (name: string, icon: IconName) => (
-    <span className="menu-label">
-      <Icon name={icon} />
-      {name}
-    </span>
-  );
   const action = (name: string, icon: IconName, onClick: () => void, keys?: string, disabled?: boolean) => (
     <button role="menuitem" className="menu-row" title={keys} disabled={disabled} onClick={act(onClick)}>
-      {label(name, icon)}
+      <MenuLabel name={name} icon={icon} />
     </button>
   );
   const sub = (name: string, icon: IconName, to: NonNullable<typeof page>, hint?: string, disabled?: boolean) => (
-    <>
-      <button
-        role="menuitem"
-        className="menu-row"
-        aria-expanded={page === to}
-        disabled={disabled}
-        onPointerEnter={(e) => {
-          if (e.pointerType === 'mouse' && page !== to && !disabled) hover.current = window.setTimeout(() => setPage(to), HOVER_OPEN_MS);
-        }}
-        onPointerLeave={() => clearTimeout(hover.current)}
-        onClick={() => {
-          clearTimeout(hover.current);
-          setPage(page === to ? null : to);
-        }}
-      >
-        {label(name, icon)}
-        <span className="menu-hint" aria-hidden="true">
-          {hint} <span className="menu-chevron">›</span>
-        </span>
-      </button>
-      {page === to && <div className="menu-sub">{pages[to]}</div>}
-    </>
+    <MenuSub name={name} icon={icon} hint={hint} disabled={disabled} open={page === to} onOpen={(o) => setPage((now) => (o ? to : now === to ? null : now))}>
+      {pages[to]}
+    </MenuSub>
   );
   const check = (name: string, icon: IconName, on: boolean, onClick: () => void, title?: string) => (
     <button role="menuitemcheckbox" aria-checked={on} className="menu-row" title={title} onClick={onClick}>
-      {label(name, icon)}
+      <MenuLabel name={name} icon={icon} />
       {on && <span className="menu-hint" aria-hidden="true">On</span>}
     </button>
   );
@@ -294,8 +340,8 @@ export function MoreMenu(p: MoreMenuProps) {
     settings: design && <DesignSettings design={design} change={p.change} />,
   };
   return (
-    <div className="switcher" ref={ref}>
-      <button className="icon-btn float" aria-haspopup="menu" aria-expanded={open} aria-label="More" title="More" onClick={() => (open ? close() : setOpen(true))}>
+    <div className="switcher" ref={ref} {...hover.area}>
+      <button className="icon-btn float" aria-haspopup="menu" aria-expanded={open} aria-label="More" title="More" {...hover.trigger} onClick={() => (open ? close() : setOpen(true))}>
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M3 8h.01M8 8h.01M13 8h.01" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
@@ -321,7 +367,7 @@ export function MoreMenu(p: MoreMenuProps) {
           {p.onConnections && action('Connections', 'connections', p.onConnections)}
           {p.user && (
             <a role="menuitem" className="menu-row" href="/auth/logout" title={p.user.email}>
-              {label('Sign out', 'signout')}
+              <MenuLabel name="Sign out" icon="signout" />
             </a>
           )}
         </div>

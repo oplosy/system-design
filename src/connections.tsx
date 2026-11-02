@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { type Design } from '../core/schema.ts';
 import { api, type Hook, type HookFormat, type McpServers, type Plugins } from './api.ts';
 import { Prop } from './fields.tsx';
+import { Icon, type IconName } from './icons.tsx';
 import { DialogHead, useDismiss } from './menus.tsx';
 import { errorText } from './format.ts';
 
@@ -14,6 +15,7 @@ const EVENT_CHOICES = [
 ] as const;
 
 const TABS = ['Webhooks', 'Addresses', 'MCP', 'Plugins'] as const;
+const TAB_ICONS: Record<(typeof TABS)[number], IconName> = { Webhooks: 'bolt', Addresses: 'link', MCP: 'connections', Plugins: 'cube' };
 
 /**
  * Where the app meets the rest of the world, one subject at a time: webhooks that get every change, the addresses other
@@ -90,6 +92,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
       </code>
       <span className="designs-actions">
         <button className="text-btn" onClick={() => copy(name, value)}>
+          <Icon name={copied === name ? 'check' : 'copy'} />
           {copied === name ? 'Copied' : 'Copy'}
         </button>
       </span>
@@ -102,6 +105,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
         <div className="seg" role="tablist" aria-label="Connections">
           {TABS.map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+              <Icon name={TAB_ICONS[t]} />
               {t}
             </button>
           ))}
@@ -143,6 +147,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
                     Cancel
                   </button>
                   <button className="btn ink" type="submit" disabled={!url.trim() || (secret.length > 0 && secret.length < 8)}>
+                    <Icon name="plus" />
                     Add webhook
                   </button>
                 </footer>
@@ -160,9 +165,11 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
                       </span>
                       <span className="designs-actions">
                         <button className="text-btn" onClick={() => test(h)}>
+                          <Icon name="send" />
                           Test
                         </button>
                         <button className="text-btn danger" onClick={() => run(() => api.removeHook(h.id))}>
+                          <Icon name="trash" />
                           Remove
                         </button>
                       </span>
@@ -172,6 +179,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
                 </ul>
                 <footer className="dialog-foot">
                   <button className="btn ink" onClick={() => setAdding(true)}>
+                    <Icon name="plus" />
                     Add webhook
                   </button>
                 </footer>
@@ -192,6 +200,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
                     </span>
                     <span className="designs-actions">
                       <button className="text-btn" onClick={() => testMcp(s.name)}>
+                        <Icon name="send" />
                         Test
                       </button>
                     </span>

@@ -37,14 +37,15 @@ test('the menu sets the theme and style directly and unfolds its lists in place'
   await expect(page.locator('.menu')).toHaveCount(0);
 });
 
-test('resting the mouse on a menu row unfolds its list after two seconds', async ({ page }) => {
+test('resting the mouse unfolds a menu row, and leaving folds it again', async ({ page }) => {
   await page.getByRole('button', { name: 'More', exact: true }).click();
   const layout = page.getByRole('menuitem', { name: 'Layout', exact: true });
+  const live = page.getByRole('menuitemcheckbox', { name: 'Live load' });
   const grid = page.getByRole('menuitem', { name: 'Grid' });
 
   // Passing over a row does nothing.
   await layout.hover();
-  await page.getByRole('menuitemcheckbox', { name: 'Live load' }).hover();
+  await live.hover();
   await page.waitForTimeout(2300);
   await expect(grid).toHaveCount(0);
 
@@ -53,12 +54,40 @@ test('resting the mouse on a menu row unfolds its list after two seconds', async
   await expect(grid).toHaveCount(0);
   await expect(grid).toBeVisible({ timeout: 1500 });
 
-  // A click while waiting wins: the list stays closed and nothing opens it again.
+  // Moving into the list keeps it open; leaving both closes it.
+  await grid.hover();
+  await page.waitForTimeout(1000);
+  await expect(grid).toBeVisible();
+  await live.hover();
+  await expect(grid).toHaveCount(0, { timeout: 1500 });
+
+  // What a click opened stays open.
+  await layout.click();
+  await live.hover();
+  await page.waitForTimeout(1000);
+  await expect(grid).toBeVisible();
+  await layout.click();
+
+  // A click while waiting wins: nothing opens the list again.
   await page.getByRole('menuitem', { name: 'Export', exact: true }).hover();
   await page.getByRole('menuitem', { name: 'Export', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Export', exact: true }).click();
   await page.waitForTimeout(2300);
   await expect(page.getByRole('menuitem', { name: 'PNG' })).toHaveCount(0);
+});
+
+test('resting the mouse opens a menu and the parts, and typing keeps them open', async ({ page }) => {
+  await page.getByRole('button', { name: 'More', exact: true }).hover();
+  await expect(page.locator('.menu')).toBeVisible({ timeout: 3000 });
+  await page.mouse.move(400, 300);
+  await expect(page.locator('.menu')).toHaveCount(0, { timeout: 1500 });
+
+  await page.getByRole('button', { name: 'Add a part', exact: true }).hover();
+  await expect(page.getByPlaceholder('Search parts')).toBeVisible({ timeout: 3000 });
+  await page.keyboard.type('cache');
+  await page.mouse.move(400, 300);
+  await page.waitForTimeout(1000);
+  await expect(page.getByPlaceholder('Search parts')).toBeVisible();
 });
 
 test('the overview map is off until asked for, and stays as chosen', async ({ page }) => {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { type FlowAt, type Change, timeText } from './fields.tsx';
+import { Icon } from './icons.tsx';
 
 export function Flows({
   design,
@@ -37,6 +38,7 @@ export function Flows({
   return (
     <section className="insp-sec">
       <h3 className="rule-head">
+        <Icon name="route" />
         Flows
         {flows.length > 0 && <span className="rule-count">{flows.length}</span>}
       </h3>
@@ -52,12 +54,14 @@ export function Flows({
           <p className="quiet">{recording.length ? recording.map(labelOf).join(' → ') : 'Click connected parts in order.'}</p>
           <div className="pop-foot">
             <button type="button" className="text-btn" onClick={() => recording.length && onRecording(recording.slice(0, -1))} disabled={!recording.length}>
+              <Icon name="undo" />
               Undo stop
             </button>
             <button type="button" className="text-btn" onClick={() => (setTitle(''), onRecording(null))}>
               Cancel
             </button>
             <button type="submit" className="btn ink" disabled={recording.length < 2 || !title.trim()}>
+              <Icon name="check" />
               Save flow
             </button>
           </div>
@@ -65,7 +69,7 @@ export function Flows({
       ) : (
         <button className="list-row" onClick={() => onRecording([])} title="Draw a request path by clicking parts in order">
           <span className="flow-play" aria-hidden="true">
-            +
+            <Icon name="plus" />
           </span>
           <span className="list-main quiet">New flow</span>
         </button>
@@ -77,7 +81,7 @@ export function Flows({
           <div key={f.id} className={`flow-entry${at !== null ? ' on' : ''}`}>
             <button className="list-row" aria-pressed={at !== null} onClick={() => onFlow(at !== null ? null : { id: f.id, at: 0 })} title={at !== null ? 'Stop' : 'Play hop by hop'}>
               <span className="flow-play" aria-hidden="true">
-                {at !== null ? '■' : '▶'}
+                <Icon name={at !== null ? 'stop' : 'present'} />
               </span>
               <span className="list-main">{f.title}</span>
               <span className="list-meta">
@@ -87,15 +91,16 @@ export function Flows({
             {at !== null && (
               <div className="flow-steps">
                 <button className="btn" disabled={at === 0} onClick={() => onFlow({ id: f.id, at: at - 1 })} aria-label="Previous hop">
-                  ←
+                  <Icon name="left" />
                 </button>
                 <span className="flow-hop">
                   {at + 1} of {hops}: {labelOf(f.path[at])} → {labelOf(f.path[at + 1])}
                 </span>
                 <button className="btn" disabled={at === hops - 1} onClick={() => onFlow({ id: f.id, at: at + 1 })} aria-label="Next hop">
-                  →
+                  <Icon name="right" />
                 </button>
                 <button className="text-btn" onClick={() => onSequence(f.id)} title="Show as a sequence diagram">
+                  <Icon name="sequence" />
                   Sequence
                 </button>
                 <button
@@ -105,6 +110,7 @@ export function Flows({
                     change((d) => m.removeItem(d, f.id));
                   }}
                 >
+                  <Icon name="trash" />
                   Delete
                 </button>
               </div>

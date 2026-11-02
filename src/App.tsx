@@ -39,6 +39,7 @@ import { useMinimap, useSketch, useTheme } from './use-prefs.ts';
 import { Inspector, StepDetails } from './inspector.tsx';
 import { Connections } from './connections.tsx';
 import { NewDesign } from './new-design.tsx';
+import { Icon } from './icons.tsx';
 
 const boundaryKind = (k: string) => (k.startsWith('boundary:') && (BOUNDARY_KINDS as readonly string[]).includes(k.slice(9)) ? (k.slice(9) as BoundaryKind) : null);
 const isEmpty = (d: Design, id: string) => !d.components.some((c) => c.boundary === id) && !d.boundaries.some((b) => b.parent === id);
@@ -962,10 +963,12 @@ function Shell() {
               </div>
               <h2>No designs yet</h2>
                             <button className="btn ink lg" onClick={() => setCreating(true)}>
+                <Icon name="plus" />
                 New design
               </button>
               {!shared && (
                 <button className="text-btn" onClick={() => setBrowsing(true)}>
+                  <Icon name="folder" />
                   All designs
                 </button>
               )}
@@ -1003,7 +1006,7 @@ function Shell() {
           <div className="toast" role="alert">
             <span className="toast-msg">{error}</span>
             <button className="text-btn" onClick={() => setError(null)} aria-label="Dismiss">
-              ×
+              <Icon name="close" />
             </button>
           </div>
         )}

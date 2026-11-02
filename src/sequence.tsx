@@ -1,5 +1,6 @@
 import { flowLatency, flowSequence, toMermaidSequence } from '../core/export.ts';
 import type { Design, Flow } from '../core/schema.ts';
+import { Icon } from './icons.tsx';
 
 const COL = 170, BOX_W = 140, BOX_H = 34, PAD = 24, ROW = 46, TOP = BOX_H + 44;
 
@@ -21,10 +22,11 @@ export function SequenceView({ design, flow, at, onClose }: { design: Design; fl
           </span>
         )}
         <button className="text-btn" onClick={() => navigator.clipboard?.writeText(toMermaidSequence(design, flow))} title="Copy as a Mermaid sequence diagram">
+          <Icon name="copy" />
           Copy Mermaid
         </button>
         <button className="icon-btn" onClick={onClose} aria-label="Close" title="Close (Esc)">
-          ×
+          <Icon name="close" />
         </button>
       </header>
       <div className="sequence-body">

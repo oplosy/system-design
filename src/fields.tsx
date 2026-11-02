@@ -3,6 +3,7 @@ import { api, type McpPart, type McpQuery } from './api.ts';
 import { REF_KINDS, RefSchema, type ConnectionKind, type Design, type Ref, type RefKind } from '../core/schema.ts';
 import { flowLatency } from '../core/export.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
+import { Icon } from './icons.tsx';
 
 /** A text input; edits commit as you type. */
 export function Ed(props: {
@@ -173,7 +174,7 @@ export function RefsEditor({ refs = [], onChange }: { refs?: Ref[]; onChange: (r
             </code>
           )}
           <button className="icon-btn ref-remove" onClick={() => set(refs.filter((_, j) => j !== i))} aria-label={`Remove ${REF_NAMES[r.kind]} ${r.value}`} title="Remove">
-            ×
+            <Icon name="close" />
           </button>
         </div>
       ))}
@@ -199,6 +200,7 @@ export function RefsEditor({ refs = [], onChange }: { refs?: Ref[]; onChange: (r
           aria-label="Link or identifier"
         />
         <button className="text-btn" type="submit" disabled={!fresh.success}>
+          <Icon name="plus" />
           Add
         </button>
       </form>

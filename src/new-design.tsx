@@ -5,6 +5,7 @@ import { ApiError, api, type Summary } from './api.ts';
 import { guessType } from './shapes.ts';
 import { DialogHead, useDismiss } from './menus.tsx';
 import { errorText } from './format.ts';
+import { Icon } from './icons.tsx';
 
 // Not a valid design id, so no template can take it.
 const MERMAID = ':mermaid';
@@ -86,7 +87,10 @@ export function NewDesign({ templates, onCancel, onCreated }: { templates: Summa
             <button key={t.id || 'blank'} type="button" role="radio" aria-checked={template === t.id} className="choice" title={t.description} onClick={() => setTemplate(t.id)}>
               <span className="radio" aria-hidden="true" />
               <span className="choice-main">
-                <strong>{t.title}</strong>
+                <strong>
+                  <Icon name={!t.id ? 'doc' : t.id === MERMAID ? 'code' : t.id === INFRA ? 'layers' : 'template'} />
+                  {t.title}
+                </strong>
               </span>
               {t.id && t.id !== MERMAID && t.id !== INFRA && <span className="menu-meta">{t.steps} steps</span>}
             </button>
@@ -112,6 +116,7 @@ export function NewDesign({ templates, onCancel, onCreated }: { templates: Summa
         )}
         <footer className="dialog-foot">
           <button type="submit" className="btn ink" disabled={busy}>
+            <Icon name="check" />
             Create design
           </button>
         </footer>
