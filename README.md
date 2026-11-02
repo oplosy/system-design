@@ -158,7 +158,7 @@ The palette has three kits:
 - **Edit** by selecting an item and using the card that opens on the right. Double-click to rename. Press Delete or Backspace to remove.
 - **Find** anything on the sheet with Ctrl+F, or **Find** in the ⋯ menu.
 - **Layout** in the ⋯ menu arranges the sheet: Layered, Tiers, Flow, Tree, Radial, Organic or Grid, for everything or only the selected items.
-- **Appearance** in the ⋯ menu switches the theme (light, dark, system) and the drawing style. **Clean**, the default, is crisp, for docs; **Sketch** is hand-drawn and colored by group, for a whiteboard feel. Both draw the same data. **Overview map** turns on the map of the whole sheet.
+- The top of the ⋯ menu switches the theme, **Light** or **Dark**, and the drawing style. The page follows the system until you pick a theme. **Clean**, the default, is crisp, for docs; **Sketch** is hand-drawn and colored by group, for a whiteboard feel. Both draw the same data. **Overview map** turns on the map of the whole sheet.
 - **Drill down.** A part can open another design that shows its insides, C4-style. Pick one under **Opens**, or choose **New design…** to start an empty one. The badge on the part opens it and a breadcrumb leads back.
 - **Code links.** Under **Code**, a part can say where its code lives: a web address, or a path that opens against the design's **Repo** (set under **Design settings** in the ⋯ menu, such as `https://github.com/acme/shop/tree/main`). Parts with a link get a `</>` badge. Agents set `code` on parts and `repo` with `update_design`; a compose import fills `code` from each service's `build` path.
 - **Tag views.** Tag parts by concern under **Tags**: "payments", "pii", a team. **View** in the ⋯ menu then shows one tag at a time, and the other parts, their lines and notes, and boxes left empty step aside. One model gives a payments view, a PII view and a per-team view.
@@ -400,7 +400,7 @@ It reads the service graph metrics (`traces_service_graph_*`) that the OpenTelem
 
 ## Connections
 
-**Connections** in the design menu lists the webhooks, MCP servers, plugins, and the addresses other tools and agents use.
+**Connections** in the ⋯ menu lists the webhooks, MCP servers, plugins, and the addresses other tools and agents use.
 
 **Typed links.** Each part's **Links** holds references that tie it to the same thing elsewhere: `repo`, `docs`, `runbook`, `dashboard`, `ticket`, `owner`, `oncall`, `slo`, `otel`, `k8s`, `cloud`, `backstage` and `link`. Agents set them with `refs` on `add_component`, `add_step` and `update_component`.
 

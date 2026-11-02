@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as m from '../core/mutations.ts';
-import { api, type Me, type Summary, type Trashed } from './api.ts';
+import { api, type Summary, type Trashed } from './api.ts';
 import { DialogHead, useDismiss } from './menus.tsx';
 import { errorText, MAX_IMPORT } from './format.ts';
 
-export function DesignSwitcher({ designs, current, onPick, onCreate, onAll, onConnections, user }: { designs: Summary[]; current: string | null; onPick: (id: string) => void; onCreate?: () => void; onAll?: () => void; onConnections?: () => void; user: Me }) {
+export function DesignSwitcher({ designs, current, onPick, onCreate, onAll }: { designs: Summary[]; current: string | null; onPick: (id: string) => void; onCreate?: () => void; onAll?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -48,15 +48,9 @@ export function DesignSwitcher({ designs, current, onPick, onCreate, onAll, onCo
               </button>
             ))}
           </div>
-          {(onCreate || onAll || onConnections || user) && <hr className="menu-rule" />}
+          {(onCreate || onAll) && <hr className="menu-rule" />}
           {onCreate && item('New design', onCreate)}
           {onAll && item('All designs', onAll)}
-          {onConnections && item('Connections', onConnections)}
-          {user && (
-            <a className="menu-row" href="/auth/logout" title={user.email}>
-              Sign out
-            </a>
-          )}
         </div>
       )}
     </div>

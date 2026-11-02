@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type Design } from '../core/schema.ts';
-import { shared, type LiveLoad } from './api.ts';
+import { shared, type LiveLoad, type Me } from './api.ts';
 import { LAYOUTS, type LayoutKind } from './layout.ts';
 import { type Editing, type Theme } from './format.ts';
 import { CURRENCIES, Ed, Prop, type Change } from './fields.tsx';
@@ -75,7 +75,6 @@ function Seg<T extends string>({ label, value, options, onPick }: { label: strin
 const THEMES = [
   { key: 'light', title: 'Light' },
   { key: 'dark', title: 'Dark' },
-  { key: 'system', title: 'System' },
 ] as const;
 const STYLES = [
   { key: 'clean', title: 'Clean' },
@@ -83,11 +82,11 @@ const STYLES = [
 ] as const;
 
 function Appearance({ sketch, onSketch, theme, onTheme }: { sketch: boolean; onSketch: (s: boolean) => void; theme: Theme; onTheme: (t: Theme) => void }) {
+  // Until one is picked the page follows the system, so show what that came to.
+  const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   return (
     <div className="menu-form">
-      <span className="field-label">Theme</span>
-      <Seg label="Theme" value={theme} options={THEMES} onPick={onTheme} />
-      <span className="field-label">Drawing style</span>
+      <Seg label="Theme" value={dark ? 'dark' : 'light'} options={THEMES} onPick={onTheme} />
       <Seg label="Drawing style" value={sketch ? 'sketch' : 'clean'} options={STYLES} onPick={(v) => onSketch(v === 'sketch')} />
     </div>
   );
@@ -147,10 +146,12 @@ function LayoutList({ selected, onPick }: { selected: number; onPick: (kind: Lay
   const scoped = onlySelected && selected > 1;
   return (
     <>
-      <label className={`check${selected > 1 ? '' : ' off'}`} title={selected > 1 ? undefined : 'Select two or more items first (Shift or Ctrl + click, or drag a box)'}>
-        <input type="checkbox" checked={scoped} disabled={selected < 2} onChange={(e) => setOnlySelected(e.target.checked)} />
-        Only the selected items
-      </label>
+      {selected > 1 && (
+        <label className="check">
+          <input type="checkbox" checked={onlySelected} onChange={(e) => setOnlySelected(e.target.checked)} />
+          Only the selected items
+        </label>
+      )}
       {LAYOUTS.map((x) => (
         <button key={x.key} role="menuitem" className="menu-row" title={x.desc} onClick={() => onPick(x.key, scoped)}>
           {x.title}
@@ -204,13 +205,15 @@ type MoreMenuProps = {
   theme: Theme;
   onTheme: (theme: Theme) => void;
   change: Change;
+  onConnections?: () => void;
+  user: Me;
 };
 
-/** Everything that is not the sheet: one menu, with longer lists and settings on a page of their own. */
+/** Everything that is not the sheet: one menu, with longer lists unfolding in place. */
 export function MoreMenu(p: MoreMenuProps) {
   const { design, tag, onTag } = p;
   const [open, setOpen] = useState(false);
-  const [page, setPage] = useState<'view' | 'layout' | 'export' | 'settings' | 'appearance' | null>(null);
+  const [page, setPage] = useState<'view' | 'layout' | 'export' | 'settings' | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => {
     setOpen(false);
@@ -233,10 +236,15 @@ export function MoreMenu(p: MoreMenuProps) {
     </button>
   );
   const sub = (name: string, to: NonNullable<typeof page>, hint?: string, disabled?: boolean) => (
-    <button role="menuitem" className="menu-row" aria-haspopup="menu" disabled={disabled} onClick={() => setPage(to)}>
-      {name}
-      <span className="menu-hint" aria-hidden="true">{hint} ›</span>
-    </button>
+    <>
+      <button role="menuitem" className="menu-row" aria-expanded={page === to} disabled={disabled} onClick={() => setPage(page === to ? null : to)}>
+        {name}
+        <span className="menu-hint" aria-hidden="true">
+          {hint} <span className="menu-chevron">›</span>
+        </span>
+      </button>
+      {page === to && <div className="menu-sub">{pages[to]}</div>}
+    </>
   );
   const check = (name: string, on: boolean, onClick: () => void, title?: string) => (
     <button role="menuitemcheckbox" aria-checked={on} className="menu-row" title={title} onClick={onClick}>
@@ -249,7 +257,6 @@ export function MoreMenu(p: MoreMenuProps) {
     layout: <LayoutList selected={p.selectedCount} onPick={act(p.onArrange)} />,
     export: <ExportList extra={p.exportExtras} onPick={act(p.onExport)} />,
     settings: design && <DesignSettings design={design} change={p.change} />,
-    appearance: <Appearance sketch={p.sketch} onSketch={p.onSketch} theme={p.theme} onTheme={p.onTheme} />,
   };
   return (
     <div className="switcher" ref={ref}>
@@ -259,30 +266,28 @@ export function MoreMenu(p: MoreMenuProps) {
         </svg>
       </button>
       {open && (
-        <div className={`menu menu-right${page ? '' : ' menu-short'}`} role="menu" aria-label="More">
-          {page ? (
-            <>
-              <button className="menu-back" onClick={() => setPage(null)}>
-                ‹ Back
-              </button>
-              {pages[page]}
-            </>
-          ) : (
-            <>
-              {action('Undo', () => p.onUndo(true), 'Ctrl+Z', !p.canUndo)}
-              {action('Redo', () => p.onUndo(false), 'Ctrl+Shift+Z', !p.canRedo)}
-              {action('Find', p.onFind, 'Ctrl+F', !design)}
-              <hr className="menu-rule" />
-              {counts.size > 0 && sub('View', 'view', tag ?? undefined)}
-              {design && !shared && check('Live load', p.liveOn, act(p.onLiveToggle), [p.live?.unmatched.length && `No line for: ${p.live.unmatched.join(', ')}`, p.live?.failed?.length && `Not answering: ${p.live.failed.join('; ')}`].filter(Boolean).join('. ') || 'Show measured load and latency on the lines')}
-              {sub('Layout', 'layout', undefined, !design)}
-              {sub('Export', 'export', undefined, !design)}
-              {action('Present', p.onPresent, undefined, !design)}
-              <hr className="menu-rule" />
-              {check('Overview map', p.minimap, () => p.onMinimap(!p.minimap))}
-              {sub('Design settings', 'settings', undefined, !design)}
-              {sub('Appearance', 'appearance')}
-            </>
+        <div className="menu menu-right" role="menu" aria-label="More">
+          <Appearance sketch={p.sketch} onSketch={p.onSketch} theme={p.theme} onTheme={p.onTheme} />
+          <hr className="menu-rule" />
+          <div className="menu-pair">
+            {action('Undo', () => p.onUndo(true), 'Ctrl+Z', !p.canUndo)}
+            {action('Redo', () => p.onUndo(false), 'Ctrl+Shift+Z', !p.canRedo)}
+          </div>
+          {action('Find', p.onFind, 'Ctrl+F', !design)}
+          {action('Present', p.onPresent, undefined, !design)}
+          <hr className="menu-rule" />
+          {counts.size > 0 && sub('View', 'view', tag ?? undefined)}
+          {sub('Layout', 'layout', undefined, !design)}
+          {sub('Export', 'export', undefined, !design)}
+          {sub('Design settings', 'settings', undefined, !design)}
+          <hr className="menu-rule" />
+          {design && !shared && check('Live load', p.liveOn, act(p.onLiveToggle), [p.live?.unmatched.length && `No line for: ${p.live.unmatched.join(', ')}`, p.live?.failed?.length && `Not answering: ${p.live.failed.join('; ')}`].filter(Boolean).join('. ') || 'Show measured load and latency on the lines')}
+          {check('Overview map', p.minimap, () => p.onMinimap(!p.minimap))}
+          {p.onConnections && action('Connections', p.onConnections)}
+          {p.user && (
+            <a role="menuitem" className="menu-row" href="/auth/logout" title={p.user.email}>
+              Sign out
+            </a>
           )}
         </div>
       )}

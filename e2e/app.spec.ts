@@ -24,13 +24,17 @@ test('the design opens with only the sheet, the + and the review bar', async ({ 
   await expect(page.locator('.review-sheet')).toHaveCount(0);
 });
 
-test('the menu opens its pages and closes', async ({ page }) => {
-  for (const name of ['Appearance', 'Export', 'Layout']) {
-    await more(page, name);
-    await expect(page.getByRole('button', { name: /Back/ })).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(page.locator('.menu')).toHaveCount(0);
-  }
+test('the menu sets the theme and style directly and unfolds its lists in place', async ({ page }) => {
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await page.getByRole('radio', { name: 'Dark' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.getByRole('menuitem', { name: 'Export', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'PNG image' })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Layout', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'PNG image' })).toHaveCount(0);
+  await expect(page.getByRole('menuitem', { name: 'Grid' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.menu')).toHaveCount(0);
 });
 
 test('the overview map is off until asked for, and stays as chosen', async ({ page }) => {
@@ -90,16 +94,16 @@ test('presenting shows the present bar and exits', async ({ page }) => {
   await expect(exit).toHaveCount(0);
 });
 
-test('the design switcher opens connections, all designs and a new design', async ({ page }) => {
-  const open = async (item: RegExp, heading: RegExp) => {
-    await page.getByRole('button', { name: /^Three-tier web app/ }).click();
-    await page.getByRole('button', { name: item }).click();
-    await expect(page.getByRole('dialog').getByText(heading).first()).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-  };
-  await open(/^Connections/, /^Connections/);
-  await open(/^All designs/, /^Designs/);
+test('connections, all designs and a new design each open in one step', async ({ page }) => {
+  await more(page, 'Connections');
+  await expect(page.getByRole('dialog').getByText(/^Connections/).first()).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: /^Three-tier web app/ }).click();
+  await page.getByRole('button', { name: /^All designs/ }).click();
+  await expect(page.getByRole('dialog').getByText(/^Designs/).first()).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: /^Three-tier web app/ }).click();
   await page.getByRole('button', { name: 'New design', exact: true }).click();
   await expect(page.getByRole('dialog').getByText('Blank sheet')).toBeVisible();
@@ -152,7 +156,7 @@ test('pasting a Mermaid flowchart adds a step, and undo removes it', async ({ pa
 test('the clean style is the default and has no hatching; sketch hatching is clipped to the shape', async ({ page }) => {
   const hatched = page.locator('.react-flow__node path[clip-path]');
   await expect(hatched).toHaveCount(0);
-  await more(page, 'Appearance');
+  await page.getByRole('button', { name: 'More', exact: true }).click();
   await page.getByRole('radio', { name: 'Sketch' }).click();
   await expect(hatched.first()).toBeAttached();
 });

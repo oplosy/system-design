@@ -5,7 +5,7 @@ import { FindBox } from './bars.tsx';
 import { DesignSwitcher } from './designs.tsx';
 import { MoreMenu } from './menus.tsx';
 
-export type TopBarProps = ComponentProps<typeof MoreMenu> & {
+export type TopBarProps = Omit<ComponentProps<typeof MoreMenu>, 'user'> & {
   design: Design | null;
   designs: Summary[];
   currentId: string | null;
@@ -31,8 +31,6 @@ export function TopBar(p: TopBarProps) {
             onPick={p.onPickDesign}
             onCreate={shared || viewOnly ? undefined : p.onCreate}
             onAll={shared ? undefined : p.onBrowse}
-            onConnections={shared || me ? undefined : p.onConnections}
-            user={me}
           />
         ) : (
           <span className="wordmark">system design</span>
@@ -51,7 +49,7 @@ export function TopBar(p: TopBarProps) {
       </div>
       {p.find && <FindBox {...p.find} />}
       <div className="bar">
-        <MoreMenu {...p} />
+        <MoreMenu {...p} onConnections={shared || me ? undefined : p.onConnections} user={me} />
       </div>
     </header>
   );
