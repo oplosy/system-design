@@ -131,11 +131,12 @@ A typical round:
 
 A part can also carry a technology, description, monthly cost, capacity (req/s), tags, code link, typed links to other tools, and a link to another design that shows its insides.
 
-The palette has three kits:
+The palette has four kits:
 
 - **System**: cloud architecture, including transit gateways, private links, autoscalers, dead-letter queues, schema registries, policy engines, vulnerability scanners, status pages, data catalogs, LLM gateways and MCP servers.
 - **Network**: routers, switches, PCs, printers, racks, links.
 - **Software**: use cases, classes, objects, enums, deployment nodes, lifelines, ports and adapters, DDD and CQRS, activity, state and data flows.
+- **Security**: threat actors, threats, vulnerabilities, assets, mitigations and trust boundaries, next to the defences they point at.
 
 ## Reviewing steps
 

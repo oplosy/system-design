@@ -3,7 +3,7 @@ import { type Spec, gen, line, glyph, tiled } from './base.ts';
 
 /** Parts added after the first release. guessType ranks them last (see FALLBACK in shapes.ts). */
 export const added = {
-  'policy-engine': tiled('Policy engine', 'edge', 'opa open policy agent kyverno cedar authz authorization policy as code rego pdp pep gatekeeper access control abac rbac', glyph.gear, 170),
+  'policy-engine': tiled('Policy engine', 'edge', 'opa open policy agent kyverno cedar authz authorization policy as code rego pdp pep gatekeeper access control abac rbac', glyph.gear, 170, { kits: ['system', 'security'] }),
   autoscaler: tiled('Autoscaler', 'compute', 'autoscaling hpa vpa keda cluster autoscaler karpenter asg auto scaling group scale out scale in elastic capacity', glyph.updown, 160),
   'dead-letter-queue': {
     name: 'Dead-letter queue',
@@ -26,7 +26,7 @@ export const added = {
   },
   'schema-registry': tiled('Schema registry', 'messaging', 'schema registry confluent avro protobuf json schema apicurio glue schema registry contract compatibility evolution', glyph.doc, 190),
   'status-page': tiled('Status page', 'ops', 'status page statuspage atlassian statuspage instatus betteruptime uptime kuma cachet gatus statping incident communication public status sla', glyph.bars, 160),
-  'vulnerability-scanner': tiled('Vulnerability scanner', 'ops', 'vulnerability scanner trivy snyk sonarqube sast dast sca dependabot grype clair security scan cve supply chain sbom', glyph.eye, 220),
+  'vulnerability-scanner': tiled('Vulnerability scanner', 'ops', 'vulnerability scanner trivy snyk sonarqube sast dast sca dependabot grype clair security scan cve supply chain sbom', glyph.eye, 220, { kits: ['system', 'security'] }),
   'data-catalog': tiled('Data catalog', 'analytics', 'data catalog datahub amundsen collibra alation unity catalog glue data catalog lineage governance metadata data quality discovery', glyph.list, 170),
   'transit-gateway': {
     name: 'Transit gateway',

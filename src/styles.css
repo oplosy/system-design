@@ -665,6 +665,10 @@ button:disabled {
   padding: 12px 12px 6px;
 }
 
+.palette .seg button {
+  padding: 0 6px;
+}
+
 .palette-search {
   height: 34px;
   padding: 0 12px;

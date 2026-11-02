@@ -19,7 +19,8 @@ export const BOUNDARY_SPECS: Record<BoundaryKind, { name: string; color: string;
   system: { name: 'System boundary', color: '#2F9FB8', strokeWidth: 1.6, kits: ['software'] },
   context: { name: 'Bounded context', color: '#1D9E75', dash: '10 5', strokeWidth: 1.5, kits: ['software'] },
   lane: { name: 'Swimlane', color: '#A8742E', strokeWidth: 1.2, kits: ['software'] },
-  group: { name: 'Group', color: '#888780', dash: '6 6', strokeWidth: 1.2, kits: ['system', 'network', 'software'] },
+  trust: { name: 'Trust boundary', color: '#C2413B', dash: '10 4 2 4', strokeWidth: 1.6, kits: ['security'] },
+  group: { name: 'Group', color: '#888780', dash: '6 6', strokeWidth: 1.2, kits: ['system', 'network', 'software', 'security'] },
 };
 
 /**

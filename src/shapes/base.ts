@@ -3,11 +3,12 @@ import type { Drawable, Options } from 'roughjs/bin/core';
 
 export const gen = rough.generator();
 
-/** Palette kits: system architecture, a physical / office network, or software design (UML, patterns, flows). */
+/** Palette kits: system architecture, a physical / office network, software design (UML, patterns, flows), or a threat model. */
 export const KITS = [
   { key: 'system', title: 'System' },
   { key: 'network', title: 'Network' },
   { key: 'software', title: 'Software' },
+  { key: 'security', title: 'Security' },
 ] as const;
 export type Kit = (typeof KITS)[number]['key'];
 
@@ -30,6 +31,7 @@ export const GROUPS = [
   { key: 'sw-arch', title: 'Architecture', color: '#7F77DD', kit: 'software' },
   { key: 'sw-ddd', title: 'Domain', color: '#1D9E75', kit: 'software' },
   { key: 'sw-flow', title: 'Flow and state', color: '#A8742E', kit: 'software' },
+  { key: 'threat', title: 'Threat model', color: '#C2413B', kit: 'security' },
 ] as const;
 
 export type Group = (typeof GROUPS)[number]['key'];

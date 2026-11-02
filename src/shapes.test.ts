@@ -38,6 +38,20 @@ test('the software kit has diagram parts plus actors, services and stores', () =
   assert.ok(!software.includes('router'), 'network gear stays out of the software kit');
 });
 
+test('the security kit has threat parts plus the defences and systems they point at', () => {
+  const security = COMPONENT_TYPES.filter((t) => kitsOf(t).includes('security'));
+  for (const t of ['threat-actor', 'threat', 'vulnerability', 'asset', 'mitigation', 'firewall', 'waf', 'identity', 'user', 'service', 'sql-db'] as const) assert.ok(security.includes(t), `${t} missing from security kit`);
+  assert.ok(!security.includes('router'), 'network gear stays out of the security kit');
+  assert.ok(kitsOf('waf').includes('system'), 'shared parts stay in the system kit');
+  assert.ok(kitsOf('policy-engine').includes('system'), 'shared parts stay in the system kit');
+});
+
+test('threat parts do not take words from older parts or ordinary names', () => {
+  assert.equal(guessType('Vulnerability'), 'vulnerability-scanner');
+  assert.equal(guessType('attacker'), 'threat-actor');
+  assert.equal(guessType('Asset service'), undefined);
+});
+
 test('a word that several parts list is never guessed as a part that does not list it, and later parts do not take old words', () => {
   const words = (t: ComponentType) => new Set(`${SHAPES[t].name} ${SHAPES[t].keywords}`.toLowerCase().split(/\s+/));
   for (const t of COMPONENT_TYPES) {

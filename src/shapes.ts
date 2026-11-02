@@ -5,6 +5,7 @@ import { GROUPS, GROUP_COLOR, type Kit, type Spec, gen } from './shapes/base.ts'
 import { added } from './shapes/added.ts';
 import { network } from './shapes/network.ts';
 import { networkMore } from './shapes/network-more.ts';
+import { security } from './shapes/security.ts';
 import { software } from './shapes/software.ts';
 import { system } from './shapes/system.ts';
 import { systemMore } from './shapes/system-more.ts';
@@ -12,7 +13,7 @@ import { systemMore } from './shapes/system-more.ts';
 export { GROUPS, GROUP_COLOR, KITS, NOTE_COLOR, type Kit } from './shapes/base.ts';
 
 /** Every part. Earlier parts win a shared word in guessType, so the order here is the order of those tables. */
-export const SHAPES: Record<ComponentType, Spec> = { ...system, ...network, ...systemMore, ...networkMore, ...software, ...added };
+export const SHAPES: Record<ComponentType, Spec> = { ...system, ...network, ...systemMore, ...networkMore, ...software, ...added, ...security };
 
 /** Kits whose palette lists `t`. */
 export const kitsOf = (t: ComponentType): Kit[] => SHAPES[t].kits ?? [GROUPS.find((g) => g.key === SHAPES[t].group)!.kit];
@@ -70,7 +71,7 @@ export function insideOf(type: ComponentType): string[] {
 export { gen };
 
 // Words too common across parts to say anything about the type.
-const GENERIC = new Set('api app apps server servers web data service services system the and for with main core new application node'.split(' '));
+const GENERIC = new Set('api app apps server servers web data service services system the and for with main core new application node asset'.split(' '));
 /**
  * Parts whose words only count when no other part has them, so a name like "Status page" or "Schema registry" never
  * takes "page" from UI or "registry" from the container registry. Every other tie goes to the part listed first above.
@@ -78,7 +79,7 @@ const GENERIC = new Set('api app apps server servers web data service services s
 const FALLBACK = new Set<ComponentType>([
   'policy-engine', 'transit-gateway', 'private-link', 'autoscaler', 'dead-letter-queue', 'schema-registry', 'status-page',
   'vulnerability-scanner', 'data-catalog', 'llm-gateway', 'mcp-server', 'object', 'enum', 'deployment-node', 'lifeline',
-  'subprocess', 'document', 'data-store',
+  'subprocess', 'document', 'data-store', 'threat-actor', 'threat', 'vulnerability', 'asset', 'mitigation',
 ]);
 const WORDS = Object.entries(SHAPES)
   .map(([type, s]) => [type, new Set(`${s.name} ${s.keywords}`.toLowerCase().split(/\s+/))] as const)

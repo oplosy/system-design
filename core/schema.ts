@@ -181,12 +181,18 @@ export const COMPONENT_TYPES = [
   'state',
   'signal',
   'timer',
+  // Threat models
+  'threat-actor',
+  'threat',
+  'vulnerability',
+  'asset',
+  'mitigation',
 ] as const;
 
 export type ComponentType = (typeof COMPONENT_TYPES)[number];
 
 /** Boxes that group components: cloud regions, networks, VLANs, sites, clusters, system boundaries, swimlanes. */
-export const BOUNDARY_KINDS = ['region', 'zone', 'datacenter', 'vpc', 'subnet', 'vlan', 'cluster', 'site', 'system', 'context', 'lane', 'group'] as const;
+export const BOUNDARY_KINDS = ['region', 'zone', 'datacenter', 'vpc', 'subnet', 'vlan', 'cluster', 'site', 'system', 'context', 'lane', 'trust', 'group'] as const;
 export type BoundaryKind = (typeof BOUNDARY_KINDS)[number];
 
 /** Version of the design file format this app writes. */
