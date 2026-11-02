@@ -54,20 +54,36 @@ async function readFrom(dir: string, id: string): Promise<Design> {
   return parseDesign(JSON.parse(raw));
 }
 
+/** What a list shows of a design. */
+async function summarize(dir: string, id: string, updated: number) {
+  const d = await readFrom(dir, id);
+  return { id: d.id, title: d.title, description: d.description, steps: d.steps.length, unseen: d.steps.filter((s) => !s.seen).length, updated };
+}
+type Summary = Awaited<ReturnType<typeof summarize>>;
+
+/** Per folder, each file's summary with the time and size it was read at. Agents write often, and each write lists every design again. */
+const summaries = new Map<string, Map<string, { stamp: string; summary: Summary }>>();
+
 async function listFrom(dir: string) {
   await fs.mkdir(dir, { recursive: true });
   const files = (await fs.readdir(dir)).filter((f) => f.endsWith('.json'));
-  const out = [];
-  for (const f of files) {
-    try {
-      const d = await readFrom(dir, f.slice(0, -5));
-      const updated = (await fs.stat(path.join(dir, f))).mtimeMs;
-      out.push({ id: d.id, title: d.title, description: d.description, steps: d.steps.length, unseen: d.steps.filter((s) => !s.seen).length, updated });
-    } catch {
-      // A broken file must not hide the others; readDesign reports its error when opened.
-    }
-  }
-  return out.sort((a, b) => a.title.localeCompare(b.title));
+  const known = summaries.get(dir);
+  const fresh = new Map<string, { stamp: string; summary: Summary }>();
+  await Promise.all(
+    files.map(async (f) => {
+      try {
+        // Stamped before reading: a write in between makes the next list read the file again.
+        const { mtimeMs, size } = await fs.stat(path.join(dir, f));
+        const stamp = `${mtimeMs}:${size}`;
+        const hit = known?.get(f);
+        fresh.set(f, hit?.stamp === stamp ? hit : { stamp, summary: await summarize(dir, f.slice(0, -5), mtimeMs) });
+      } catch {
+        // A broken file must not hide the others; readDesign reports its error when opened.
+      }
+    }),
+  );
+  summaries.set(dir, fresh);
+  return [...fresh.values()].map((x) => x.summary).sort((a, b) => a.title.localeCompare(b.title));
 }
 
 export const listDesigns = () => listFrom(DESIGNS_DIR);

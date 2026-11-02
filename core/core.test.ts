@@ -14,6 +14,30 @@ const store = await import('./store.ts');
 const m = await import('./mutations.ts');
 const { parseDesign } = await import('./schema.ts');
 
+test('the list keeps up with every change to the files, without reading ones that did not change', async () => {
+  const file = path.join(store.DESIGNS_DIR, 'listed.json');
+  const title = async () => (await store.listDesigns()).find((x) => x.id === 'listed')?.title;
+  await store.createDesign({ id: 'listed', title: 'First' });
+  assert.equal(await title(), 'First');
+  await store.updateDesign('listed', (x) => void (x.title = 'Second'));
+  assert.equal(await title(), 'Second');
+
+  // Same size and time: only a read could notice this, so a list that still shows the design did not read it.
+  const raw = await fs.readFile(file, 'utf8'), at = new Date(1_700_000_000_000);
+  await fs.utimes(file, at, at);
+  assert.equal(await title(), 'Second');
+  await fs.writeFile(file, 'x'.repeat(Buffer.byteLength(raw)));
+  await fs.utimes(file, at, at);
+  assert.equal(await title(), 'Second');
+
+  await fs.writeFile(file, '{ broken');
+  assert.equal(await title(), undefined, 'a file that breaks leaves the list');
+  await fs.writeFile(file, raw);
+  assert.equal(await title(), 'Second');
+  await fs.rm(file);
+  assert.equal(await title(), undefined);
+});
+
 test('create, edit through mutations, and reject stale writes', async () => {
   const d = await store.createDesign({ id: 'demo', title: 'Demo' });
   assert.equal(d.rev, 0);
