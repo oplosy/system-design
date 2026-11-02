@@ -28,14 +28,15 @@ import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES, guessType } 
 import { type AddKind, DRAG_MIME, Palette, ShapePreview } from './palette.tsx';
 import { type FlowAt } from './fields.tsx';
 import { errorText, type Editing, MAX_IMPORT } from './format.ts';
-import { type ExportKind, TagMenu, LayoutMenu, ExportMenu, AppearanceMenu, InlineEdit } from './menus.tsx';
-import { DesignSwitcher, Designs } from './designs.tsx';
-import { FindBox, PresentBar, ReviewBar } from './bars.tsx';
+import { type ExportKind, InlineEdit } from './menus.tsx';
+import { Designs } from './designs.tsx';
+import { PresentBar, ReviewBar } from './bars.tsx';
 import { Dock } from './dock.tsx';
 import { exportDesign, readSource } from './transfer.ts';
+import { TopBar } from './topbar.tsx';
 import { deriveSheet } from './derive.ts';
 import { useDesignStore } from './use-design-store.ts';
-import { DOCKS, useDocks, useSketch, useTheme, type Docks } from './use-prefs.ts';
+import { DOCKS, useDocks, useSketch, useTheme } from './use-prefs.ts';
 import { Inspector } from './inspector.tsx';
 import { Connections } from './connections.tsx';
 import { NewDesign } from './new-design.tsx';
@@ -776,82 +777,42 @@ function Shell() {
     };
   });
 
-  const icon = (d: string) => (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-  const dockToggle = (k: keyof Docks) => (
-    <button
-      className="icon-btn"
-      aria-pressed={docks[k].open}
-      onClick={() => toggleDock(k)}
-      title={`${docks[k].open ? 'Hide' : 'Show'} the ${k === 'left' ? 'parts' : 'details'} panel`}
-      aria-label={`${k === 'left' ? 'Parts' : 'Details'} panel`}
-    >
-      {icon(k === 'left' ? 'M2.5 3.5h11v9h-11zM6.5 3.5v9' : 'M2.5 3.5h11v9h-11zM9.5 3.5v9')}
-    </button>
-  );
-
   return (
     <SketchContext.Provider value={sketch}>
       <div
         className={`app${presenting ? ' presenting' : ''}`}
         style={{ '--left': `${inset('left')}px`, '--right': `${inset('right')}px` } as React.CSSProperties}
       >
-        <header className="topbar">
-          <div className="bar">
-            {design && dockToggle('left')}
-            <span className="wordmark">
-              system<span>/</span>design
-            </span>
-            {designs.length > 0 && <DesignSwitcher designs={designs} current={id} onPick={(x) => (setTrail([]), setId(x))} onAll={shared ? undefined : () => setBrowsing(true)} onConnections={shared || me ? undefined : () => setConnecting(true)} user={me} meta={design ? `rev ${design.rev} · ${design.components.length} parts · ${design.decisions.length} decisions` : undefined} />}
-          </div>
-          {design && (
-            <FindBox design={design} visible={nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id))} onPick={findPick} inputRef={findRef} />
-          )}
-          <div className="bar">
-            <button className="icon-btn" disabled={!hist.current.past.length} onClick={() => undo(true)} title="Undo (Ctrl+Z)" aria-label="Undo">
-              {icon('M5.5 3 2.5 6l3 3M3 6h6.5a4 4 0 0 1 0 8H7')}
-            </button>
-            <button className="icon-btn" disabled={!hist.current.future.length} onClick={() => undo(false)} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
-              {icon('M10.5 3l3 3-3 3M13 6H6.5a4 4 0 0 0 0 8H9')}
-            </button>
-            <span className="vrule" />
-            {design && <TagMenu design={design} tag={tag} onPick={setTag} />}
-            {design && !shared && (
-              <button
-                className="text-btn"
-                aria-pressed={liveOn}
-                onClick={() => setLiveOn((on) => !on)}
-                title={[live?.unmatched.length && `No line for: ${live.unmatched.join(', ')}`, live?.failed?.length && `Not answering: ${live.failed.join('; ')}`].filter(Boolean).join('. ') || 'Show measured load and latency on the lines'}
-              >
-                Live
-              </button>
-            )}
-            <LayoutMenu disabled={!design} selected={nodes.filter((n) => n.selected).length} onPick={arrange} />
-            <ExportMenu disabled={!design} extra={pluginExports} onPick={exportAs} />
-            <button className="text-btn" disabled={!design} onClick={() => present(true)} title="Walk through the steps full screen">
-              Present
-            </button>
-            <span className="vrule" />
-            <AppearanceMenu sketch={sketch} onSketch={setStyle} theme={theme} onTheme={setTheme} icon={icon} />
-            {design && dockToggle('right')}
-            {shared ? (
-              <span className="shared-tag" title="Opened from a shared file. You can walk the steps and try changes, but nothing is saved.">
-                Shared copy
-              </span>
-            ) : me?.canEdit === false ? (
-              <span className="shared-tag" title="You have view access on this hub. You can walk the steps and try changes, but nothing is saved.">
-                View only
-              </span>
-            ) : (
-              <button className="btn ink" onClick={() => setCreating(true)}>
-                New design
-              </button>
-            )}
-          </div>
-        </header>
+        <TopBar
+          design={design}
+          designs={designs}
+          currentId={id}
+          me={me}
+          docks={docks}
+          onToggleDock={toggleDock}
+          canUndo={!!hist.current.past.length}
+          canRedo={!!hist.current.future.length}
+          onUndo={undo}
+          tag={tag}
+          onTag={setTag}
+          live={live}
+          liveOn={liveOn}
+          onLiveToggle={() => setLiveOn((on) => !on)}
+          selectedCount={nodes.filter((n) => n.selected).length}
+          onArrange={arrange}
+          exportExtras={pluginExports}
+          onExport={exportAs}
+          onPresent={() => present(true)}
+          sketch={sketch}
+          onSketch={setStyle}
+          theme={theme}
+          onTheme={setTheme}
+          onCreate={() => setCreating(true)}
+          onPickDesign={(x) => (setTrail([]), setId(x))}
+          onBrowse={() => setBrowsing(true)}
+          onConnections={() => setConnecting(true)}
+          find={design ? { design, visible: nodes.filter((n) => !n.hidden).map((n) => n.id).concat(derived.edges.map((e) => e.id)), onPick: findPick, inputRef: findRef } : null}
+        />
 
         {design && current ? (
           <div className="workspace">
