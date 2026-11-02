@@ -54,3 +54,10 @@ test('a word that several parts list is never guessed as a part that does not li
   assert.equal(guessType('Schema registry'), 'registry');
   assert.equal(guessType('uptime-kuma'), 'status-page');
 });
+
+test('the part tables keep their order, so a shared word still means what it always did', () => {
+  assert.equal(guessType('switch'), 'switch');
+  assert.equal(guessType('hub'), 'hub');
+  assert.equal(guessType('cell tower'), 'cell-tower');
+  assert.equal(guessType('NAS backup'), 'nas');
+});
