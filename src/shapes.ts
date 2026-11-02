@@ -1811,7 +1811,7 @@ export const SHAPES: Record<ComponentType, Spec> = {
     },
   },
   'schema-registry': tiled('Schema registry', 'messaging', 'schema registry confluent avro protobuf json schema apicurio glue schema registry contract compatibility evolution', glyph.doc, 190),
-  'status-page': tiled('Status page', 'ops', 'status page statuspage atlassian statuspage instatus betteruptime uptime incident communication public status sla', glyph.bars, 160),
+  'status-page': tiled('Status page', 'ops', 'status page statuspage atlassian statuspage instatus betteruptime uptime kuma cachet gatus statping incident communication public status sla', glyph.bars, 160),
   'vulnerability-scanner': tiled('Vulnerability scanner', 'ops', 'vulnerability scanner trivy snyk sonarqube sast dast sca dependabot grype clair security scan cve supply chain sbom', glyph.eye, 220),
   'data-catalog': tiled('Data catalog', 'analytics', 'data catalog datahub amundsen collibra alation unity catalog glue data catalog lineage governance metadata data quality discovery', glyph.list, 170),
   'transit-gateway': {

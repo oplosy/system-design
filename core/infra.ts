@@ -56,12 +56,13 @@ export function readInfra(text: string) {
   if (values.length === 1 && Array.isArray(obj(values[0].deployment).resources)) return { format: 'pulumi', ...pulumi(values[0]) };
   if (values.length === 1 && (typeof values[0].openapi === 'string' || values[0].swagger)) return { format: 'openapi', ...openapi(values[0]) };
   if (values.length === 1 && values[0].asyncapi) return { format: 'asyncapi', ...asyncapi(values[0]) };
+  if (values.length === 1 && Object.keys(obj(values[0].mcpServers)).length) return { format: 'mcp', ...mcpConfig(values[0]) };
   if (values.length === 1 && Object.keys(obj(values[0].services)).length) return { format: 'compose', ...compose(values[0]) };
   // Backstage entities have a kind: too, so they go before Kubernetes.
   if (isBackstage(values)) return { format: 'backstage', ...backstage(values) };
   if (values.some((v) => typeof v.kind === 'string')) return { format: 'kubernetes', ...kube(values) };
   throw new Error(
-    'Paste a docker-compose file (with services:), Kubernetes manifests (with kind:), "terraform show -json" output, a CloudFormation or CDK template, a Pulumi stack export, a Backstage catalog, an OpenAPI or AsyncAPI document, or OpenTelemetry (OTLP JSON) or Jaeger traces.',
+    'Paste a docker-compose file (with services:), Kubernetes manifests (with kind:), "terraform show -json" output, a CloudFormation or CDK template, a Pulumi stack export, a Backstage catalog, an MCP client config (.mcp.json), an OpenAPI or AsyncAPI document, or OpenTelemetry (OTLP JSON) or Jaeger traces.',
   );
 }
 
@@ -107,6 +108,9 @@ const TF_TYPES: Record<string, [ComponentType, string]> = {
   aws_inspector2_enabler: ['vulnerability-scanner', 'Inspector'],
   aws_glue_catalog_database: ['data-catalog', 'Glue Data Catalog'],
   aws_bedrock_guardrail: ['llm-gateway', 'Bedrock Guardrails'],
+  aws_bedrockagentcore_gateway: ['mcp-server', 'AgentCore Gateway'],
+  betteruptime_status_page: ['status-page', 'Better Stack'],
+  statuspage_component_group: ['status-page', 'Statuspage'],
   google_compute_instance: ['vm', 'Compute Engine'],
   google_cloudfunctions_function: ['function', 'Cloud Functions'],
   google_cloudfunctions2_function: ['function', 'Cloud Functions'],
@@ -451,6 +455,24 @@ function pulumi(file: Doc) {
   return { ...tf, parts, groups, skipped: tf.skipped.map((s) => s.replace(/^\S+/, (t) => types.get(t) ?? t)) };
 }
 
+/** Images and names that say a part is an MCP server: Docker's "mcp/github" namespace, or "...-mcp-server". */
+const MCP_IMAGE = /(^|\/)mcp\/|mcp[-_]server/i;
+const mcpOr = (type: ComponentType, ...names: (string | undefined)[]): ComponentType => (names.some((n) => n && MCP_IMAGE.test(n)) ? 'mcp-server' : type);
+
+/**
+ * Reads an MCP client config (.mcp.json, mcp-servers.json): each entry under mcpServers is an MCP server. Env values and
+ * headers hold tokens and arguments can hold connection strings, so only a package-like argument, the command or the
+ * host of the address is kept.
+ */
+function mcpConfig(file: Doc) {
+  const parts: Part[] = Object.entries(obj(file.mcpServers)).map(([key, s]) => {
+    const arg = list(obj(s).args).find((a): a is string => typeof a === 'string' && /^[@\w][\w@./-]*$/.test(a));
+    const host = str(obj(s).url) && URL.canParse(String(obj(s).url)) ? new URL(String(obj(s).url)).host : undefined;
+    return { key, label: key, type: 'mcp-server', tech: host ?? arg ?? str(obj(s).command) };
+  });
+  return { parts, links: [] as Link[], groups: [] as Group[], skipped: [] as string[] };
+}
+
 function compose(file: Doc) {
   const services = obj(file.services);
   const names = Object.keys(services);
@@ -466,7 +488,7 @@ function compose(file: Doc) {
     // build is a context path, or { context } in the long form.
     const build = typeof s.build === 'string' ? s.build : obj(s.build).context;
     const code = typeof build === 'string' ? build : undefined;
-    return { key, label: key, image, type: 'service', group: used.size > 1 ? nets(s)[0] : undefined, code };
+    return { key, label: key, image, type: mcpOr('service', image, key), group: used.size > 1 ? nets(s)[0] : undefined, code };
   });
   const groups: Group[] = used.size > 1 ? [...used].map((n) => ({ key: n, label: n, kind: 'subnet' })) : [];
   return { parts, links, groups, skipped: [] as string[] };
@@ -495,7 +517,7 @@ function kube(docs: Doc[]) {
     const containers = list(obj(template.spec).containers).map(obj);
     const key = `${ns(d)}/${d.kind}/${name(d)}`;
     const image = containers.map((c) => c.image).find((i) => typeof i === 'string');
-    parts.push({ key, label: name(d), image, type: w[1], group: ns(d) });
+    parts.push({ key, label: name(d), image, type: mcpOr(w[1], image, name(d)), group: ns(d) });
     pods.push({ key, ns: ns(d), labels: obj(obj(template.metadata).labels), containers });
   }
   // A Service is not a part of its own: it names the workloads its selector picks.

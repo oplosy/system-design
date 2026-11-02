@@ -2027,8 +2027,8 @@ test('on a hub the server decides who wrote a comment', async () => {
 test('Terraform network and scaling resources draw as their own parts', async () => {
   const { readInfra } = await import('./infra.ts');
   const res = (type: string) => ({ address: `${type}.x`, mode: 'managed', type, name: 'x', values: {} });
-  const state = JSON.stringify({ format_version: '1.0', values: { root_module: { resources: ['aws_ec2_transit_gateway', 'aws_vpc_endpoint', 'aws_autoscaling_group', 'azurerm_private_endpoint'].map(res) } } });
-  assert.deepEqual(readInfra(state).parts.map((p) => p.type), ['transit-gateway', 'private-link', 'autoscaler', 'private-link']);
+  const state = JSON.stringify({ format_version: '1.0', values: { root_module: { resources: ['aws_ec2_transit_gateway', 'aws_vpc_endpoint', 'aws_autoscaling_group', 'azurerm_private_endpoint', 'betteruptime_status_page', 'aws_bedrockagentcore_gateway'].map(res) } } });
+  assert.deepEqual(readInfra(state).parts.map((p) => p.type), ['transit-gateway', 'private-link', 'autoscaler', 'private-link', 'status-page', 'mcp-server']);
 
   const queues = JSON.stringify({
     format_version: '1.0',
@@ -2043,4 +2043,18 @@ test('Terraform network and scaling resources draw as their own parts', async ()
     },
   });
   assert.deepEqual(readInfra(queues).parts.map((p) => `${p.label}:${p.type}`), ['jobs:queue', 'parked:dead-letter-queue', 'mail-dlq:dead-letter-queue']);
+});
+
+test('MCP servers and status pages are read from configs and images', async () => {
+  const { readInfra } = await import('./infra.ts');
+  const { guessType } = await import('../src/shapes.ts');
+  const cfg = JSON.stringify({ mcpServers: { github: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], env: { TOKEN: 'secret' } }, db: { command: 'npx', args: ['-y', 'pkg', 'postgres://u:pw@h/db'] }, remote: { url: 'https://user:pw@mcp.example.com/sse?key=abc' } } });
+  const read = readInfra(cfg);
+  assert.equal(read.format, 'mcp');
+  assert.deepEqual(read.parts.map((p) => `${p.label}:${p.type}:${p.tech}`), ['github:mcp-server:@modelcontextprotocol/server-github', 'db:mcp-server:pkg', 'remote:mcp-server:mcp.example.com']);
+  assert.ok(!JSON.stringify(read).match(/secret|pw|abc/), 'tokens and connection strings never reach a part');
+  const compose = ['services:', '  git:', '    image: mcp/github:latest', '  tools:', '    image: acme/fs-mcp-server', '  app:', '    image: acme/app'].join('\n');
+  assert.deepEqual(readInfra(compose).parts.map((p) => p.type), ['mcp-server', 'mcp-server', 'service']);
+  assert.equal(guessType('louislam/uptime-kuma'), 'status-page');
+  assert.equal(guessType('cachet'), 'status-page');
 });
