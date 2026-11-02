@@ -21,8 +21,8 @@ export function useDismiss(active: boolean, onDismiss: () => void, ref?: React.R
 }
 
 /** How long the mouse rests on something before it opens, and how soon after leaving it closes again. */
-const HOVER_OPEN_MS = 2000;
-const HOVER_CLOSE_MS = 700;
+const HOVER_OPEN_MS = 1000;
+const HOVER_CLOSE_MS = 500;
 
 /**
  * Opens something when the mouse rests on its trigger, and closes it soon after the mouse leaves. `trigger` goes on what

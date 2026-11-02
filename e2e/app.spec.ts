@@ -46,13 +46,13 @@ test('resting the mouse unfolds a menu row, and leaving folds it again', async (
   // Passing over a row does nothing.
   await layout.hover();
   await live.hover();
-  await page.waitForTimeout(2300);
+  await page.waitForTimeout(1300);
   await expect(grid).toHaveCount(0);
 
   await layout.hover();
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(600);
   await expect(grid).toHaveCount(0);
-  await expect(grid).toBeVisible({ timeout: 1500 });
+  await expect(grid).toBeVisible({ timeout: 1000 });
 
   // Moving into the list keeps it open; leaving both closes it.
   await grid.hover();
@@ -72,7 +72,7 @@ test('resting the mouse unfolds a menu row, and leaving folds it again', async (
   await page.getByRole('menuitem', { name: 'Export', exact: true }).hover();
   await page.getByRole('menuitem', { name: 'Export', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Export', exact: true }).click();
-  await page.waitForTimeout(2300);
+  await page.waitForTimeout(1300);
   await expect(page.getByRole('menuitem', { name: 'PNG' })).toHaveCount(0);
 });
 
