@@ -5,6 +5,7 @@ import { LAYOUTS, type LayoutKind } from './layout.ts';
 import { type Editing, type Theme } from './format.ts';
 import { CURRENCIES, Ed, Prop, type Change } from './fields.tsx';
 import { Icon, type IconName } from './icons.tsx';
+import { Select } from './select.tsx';
 
 export function useDismiss(active: boolean, onDismiss: () => void, ref?: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
@@ -167,13 +168,7 @@ function DesignSettings({ design, change }: { design: Design; change: Change }) 
         />
       </Prop>
       <Prop label="Currency">
-        <select className="ed" value={design.currency ?? 'USD'} onChange={(e) => change((d) => void (d.currency = e.target.value === 'USD' ? undefined : e.target.value))} aria-label="Currency of costs">
-          {CURRENCIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        <Select label="Currency of costs" value={design.currency ?? 'USD'} onChange={(v) => change((d) => void (d.currency = v === 'USD' ? undefined : v))} options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
       </Prop>
     </div>
   );

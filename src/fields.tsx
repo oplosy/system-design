@@ -4,6 +4,7 @@ import { REF_KINDS, RefSchema, type ConnectionKind, type Design, type Ref, type 
 import { flowLatency } from '../core/export.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { Icon } from './icons.tsx';
+import { Select } from './select.tsx';
 
 /** A text input; edits commit as you type. */
 export function Ed(props: {
@@ -185,13 +186,7 @@ export function RefsEditor({ refs = [], onChange }: { refs?: Ref[]; onChange: (r
           add();
         }}
       >
-        <select className="ed ref-kind" value={kind} onChange={(e) => setKind(e.target.value as RefKind)} aria-label="Kind of link">
-          {REF_KINDS.map((k) => (
-            <option key={k} value={k}>
-              {REF_NAMES[k]}
-            </option>
-          ))}
-        </select>
+        <Select className="ed ref-kind" label="Kind of link" value={kind} onChange={setKind} options={REF_KINDS.map((k) => ({ value: k, label: REF_NAMES[k] }))} />
         <input
           className="ed ref-value"
           value={value}
@@ -221,16 +216,12 @@ export const RELATION_NAMES: Record<ConnectionKind, string> = {
 
 export function InsideSelect({ design, value, exclude, onPick }: { design: Design; value?: string; exclude?: Set<string>; onPick: (id: string | undefined) => void }) {
   return (
-    <select className="ed" value={value ?? ''} onChange={(e) => onPick(e.target.value || undefined)} aria-label="Inside">
-      <option value="">Nothing</option>
-      {design.boundaries
-        .filter((b) => !exclude?.has(b.id))
-        .map((b) => (
-          <option key={b.id} value={b.id}>
-            {BOUNDARY_SPECS[b.kind].name}: {b.label}
-          </option>
-        ))}
-    </select>
+    <Select
+      label="Inside"
+      value={value ?? ''}
+      onChange={(v) => onPick(v || undefined)}
+      options={[{ value: '', label: 'Nothing' }, ...design.boundaries.filter((b) => !exclude?.has(b.id)).map((b) => ({ value: b.id, label: b.label, group: BOUNDARY_SPECS[b.kind].name }))]}
+    />
   );
 }
 

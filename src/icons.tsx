@@ -20,6 +20,7 @@ const PATHS = {
   minus: 'M3 8h10',
   close: 'M4 4l8 8 M12 4l-8 8',
   check: 'M3 8.5 6.5 12 13 4.5',
+  down: 'M3.5 6 8 10.5 12.5 6',
   left: 'M10 3.5 5.5 8l4.5 4.5',
   right: 'M6 3.5 10.5 8 6 12.5',
   stop: 'M4 4h8v8H4z',

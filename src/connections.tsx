@@ -3,6 +3,7 @@ import { type Design } from '../core/schema.ts';
 import { api, type Hook, type HookFormat, type McpServers, type Plugins } from './api.ts';
 import { Prop } from './fields.tsx';
 import { Icon, type IconName } from './icons.tsx';
+import { Select } from './select.tsx';
 import { DialogHead, useDismiss } from './menus.tsx';
 import { errorText } from './format.ts';
 
@@ -119,20 +120,15 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
                   <input className="ed" type="url" autoFocus value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" aria-label="Webhook address" required />
                 </Prop>
                 <Prop label="Format">
-                  <select className="ed" value={format} onChange={(e) => setFormat(e.target.value as HookFormat)} aria-label="Format">
-                    <option value="cloudevents">CloudEvents</option>
-                    <option value="chat">Chat message</option>
-                    <option value="slack">Slack with buttons</option>
-                  </select>
+                  <Select<HookFormat>
+                    label="Format"
+                    value={format}
+                    onChange={setFormat}
+                    options={[{ value: 'cloudevents', label: 'CloudEvents' }, { value: 'chat', label: 'Chat message' }, { value: 'slack', label: 'Slack with buttons' }]}
+                  />
                 </Prop>
                 <Prop label="Events">
-                  <select className="ed" value={choice} onChange={(e) => setChoice(Number(e.target.value))} aria-label="Events">
-                    {EVENT_CHOICES.map((c, i) => (
-                      <option key={c.label} value={i}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select label="Events" value={String(choice)} onChange={(v) => setChoice(Number(v))} options={EVENT_CHOICES.map((c, i) => ({ value: String(i), label: c.label }))} />
                 </Prop>
                 <Prop label="Secret">
                   <input className="ed" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Optional, 8 characters or more" aria-label="Signing secret" autoComplete="new-password" />

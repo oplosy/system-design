@@ -691,7 +691,7 @@ function Shell() {
         findRef.current?.focus();
         return;
       }
-      if (t.closest('input, textarea, select, [contenteditable]')) return;
+      if (t.closest('input, textarea, [role="combobox"], [contenteditable]')) return;
       if (mod) {
         if (key === 'z') undo(!e.shiftKey);
         else if (key === 'y') undo(false);
@@ -756,7 +756,7 @@ function Shell() {
   // Copied parts go to the clipboard as a Mermaid flowchart for other apps, marked so a paste here keeps every detail.
   // A pasted diagram or infrastructure file (Mermaid, C4-PlantUML, compose, Kubernetes, Terraform, traces) becomes a new step.
   useEffect(() => {
-    const ignore = (e: ClipboardEvent) => creating || presenting || !design || !!(e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]');
+    const ignore = (e: ClipboardEvent) => creating || presenting || !design || !!(e.target as HTMLElement).closest?.('input, textarea, [role="combobox"], [contenteditable]');
     const onCopy = (e: ClipboardEvent) => {
       clipKey.current = null;
       if (ignore(e) || window.getSelection()?.toString() || !copy()) return;

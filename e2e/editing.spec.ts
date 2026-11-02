@@ -45,7 +45,8 @@ test('a comment on the step is saved', async ({ page, request }) => {
 test('Opens starts a new design for what is inside a part and links it', async ({ page, request }) => {
   await openCopy(page, request, 'inside-copy');
   await page.locator('.react-flow__node', { hasText: 'App server' }).click();
-  await page.getByLabel('Design that shows the inside').selectOption({ label: 'New design…' });
+  await page.getByRole('combobox', { name: 'Design that shows the inside' }).click();
+  await page.getByRole('option', { name: 'New design…' }).click();
   await expect.poll(async () => (await saved(request, 'inside-copy')).components.find((c) => c.id === 'app')?.detail).toBe('inside-copy-app');
 });
 

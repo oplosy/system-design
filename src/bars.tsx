@@ -7,6 +7,7 @@ import { SHAPES } from './shapes.ts';
 import { type FlowAt, timeText, type Change } from './fields.tsx';
 import { useHoverOpen } from './menus.tsx';
 import { Icon } from './icons.tsx';
+import { Select } from './select.tsx';
 
 export function ReviewBar({
   design,
@@ -181,14 +182,7 @@ export function PresentBar({
         )}
       </div>
       {flows.length > 0 && (
-        <select className="present-flows" value={playing?.id ?? ''} onChange={(e) => (onFlow(e.target.value ? { id: e.target.value, at: 0 } : null), e.target.blur())} aria-label="Play a flow">
-          <option value="">Flows</option>
-          {flows.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.title}
-            </option>
-          ))}
-        </select>
+        <Select className="present-flows" label="Play a flow" value={playing?.id ?? ''} onChange={(v) => onFlow(v ? { id: v, at: 0 } : null)} options={[{ value: '', label: 'Flows' }, ...flows.map((f) => ({ value: f.id, label: f.title }))]} />
       )}
       {playing ? (
         <>

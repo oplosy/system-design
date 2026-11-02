@@ -1,4 +1,4 @@
-import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type BoundaryKind, type ComponentType, type ConnectionKind, type Design } from '../core/schema.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, type ConnectionKind, type Design } from '../core/schema.ts';
 import { codeUrl, costAt, money, stepCostChange } from '../core/export.ts';
 import { failureImpact, loadOf } from '../core/lint.ts';
 import * as m from '../core/mutations.ts';
@@ -6,6 +6,7 @@ import { BOUNDARY_SPECS } from './boundaries.ts';
 import { GROUPS, SHAPES } from './shapes.ts';
 import { type FlowAt, type Change, Prop, Ed, Num, RefsEditor, Connected, InsideSelect, RELATION_NAMES } from './fields.tsx';
 import { BoundaryPreview, ShapePreview } from './palette.tsx';
+import { Select } from './select.tsx';
 import { Flows } from './flows.tsx';
 import { Comments } from './bars.tsx';
 import { Icon, type IconName } from './icons.tsx';
@@ -99,17 +100,12 @@ export function Inspector({
           <section className="insp-sec">
             <h3 className="rule-head"><Icon name="info" />General</h3>
             <Prop label="Type">
-              <select className="ed" value={component.type} onChange={(e) => edit((d: Design) => d.components, { type: e.target.value as ComponentType })} aria-label="Type">
-                {GROUPS.map((g) => (
-                  <optgroup key={g.key} label={g.title}>
-                    {COMPONENT_TYPES.filter((t) => SHAPES[t].group === g.key).map((t) => (
-                      <option key={t} value={t}>
-                        {SHAPES[t].name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+              <Select
+                label="Type"
+                value={component.type}
+                onChange={(type) => edit((d: Design) => d.components, { type })}
+                options={GROUPS.flatMap((g) => COMPONENT_TYPES.filter((t) => SHAPES[t].group === g.key).map((t) => ({ value: t, label: SHAPES[t].name, group: g.title, preview: <ShapePreview type={t} width={30} height={20} /> })))}
+              />
             </Prop>
             <Prop label="Technology">
               <Ed label="Technology" value={component.tech} onCommit={(v) => edit((d: Design) => d.components, { tech: v })} />
@@ -204,25 +200,15 @@ export function Inspector({
                   </button>
                 </>
               ) : (
-                <select
-                  className="ed"
+                <Select
+                  label="Design that shows the inside"
                   value=""
-                  onChange={(e) => {
-                    if (e.target.value === NEW_INSIDE) onCreateInside(component.id);
-                    else if (e.target.value) edit((d: Design) => d.components, { detail: e.target.value });
+                  onChange={(v) => {
+                    if (v === NEW_INSIDE) onCreateInside(component.id);
+                    else if (v) edit((d: Design) => d.components, { detail: v });
                   }}
-                  aria-label="Design that shows the inside"
-                >
-                  <option value="">Nothing</option>
-                  <option value={NEW_INSIDE}>New design…</option>
-                  {designs
-                    .filter((x) => x.id !== design.id)
-                    .map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {x.title}
-                      </option>
-                    ))}
-                </select>
+                  options={[{ value: '', label: 'Nothing' }, { value: NEW_INSIDE, label: 'New design…' }, ...designs.filter((x) => x.id !== design.id).map((x) => ({ value: x.id, label: x.title }))]}
+                />
               )}
             </Prop>
             <Prop label="Other links" wide>
@@ -237,13 +223,7 @@ export function Inspector({
         <section className="insp-sec">
           <h3 className="rule-head"><Icon name="info" />General</h3>
           <Prop label="Kind">
-            <select className="ed" value={boundary.kind} onChange={(e) => edit((d: Design) => d.boundaries, { kind: e.target.value as BoundaryKind })} aria-label="Kind">
-              {BOUNDARY_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {BOUNDARY_SPECS[k].name}
-                </option>
-              ))}
-            </select>
+            <Select label="Kind" value={boundary.kind} onChange={(kind) => edit((d: Design) => d.boundaries, { kind })} options={BOUNDARY_KINDS.map((k) => ({ value: k, label: BOUNDARY_SPECS[k].name, preview: <BoundaryPreview kind={k} /> }))} />
           </Prop>
           <Prop label="Detail">
             <Ed label="Detail" value={boundary.detail} onCommit={(v) => edit((d: Design) => d.boundaries, { detail: v })} />
@@ -266,19 +246,12 @@ export function Inspector({
             <Ed label="Label" value={connection.label} onCommit={(v) => edit((d: Design) => d.connections, { label: v })} />
           </Prop>
           <Prop label="Relation">
-            <select
-              className="ed"
+            <Select<ConnectionKind | ''>
+              label="Relation"
               value={connection.kind ?? ''}
-              onChange={(e) => edit((d: Design) => d.connections, { kind: (e.target.value || undefined) as ConnectionKind | undefined })}
-              aria-label="Relation"
-            >
-              <option value="">Arrow</option>
-              {CONNECTION_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {RELATION_NAMES[k]}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => edit((d: Design) => d.connections, { kind: v || undefined })}
+              options={[{ value: '', label: 'Arrow' }, ...CONNECTION_KINDS.map((k) => ({ value: k, label: RELATION_NAMES[k] }))]}
+            />
           </Prop>
           <Prop label="Load">
             <Num label="Requests per second" unit="rps" value={connection.qps} onCommit={(v) => edit((d: Design) => d.connections, { qps: v })} />
