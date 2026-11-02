@@ -20,7 +20,7 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
   use: { viewport: { width: 1400, height: 900 }, trace: 'retain-on-failure' },
   projects: [
-    { name: 'chromium', testMatch: ['app.spec.ts', 'editing.spec.ts', 'plugins.spec.ts'], use: { browserName: 'chromium', baseURL: `http://127.0.0.1:${PORT}` } },
+    { name: 'chromium', testMatch: ['app.spec.ts', 'editing.spec.ts', 'plugins.spec.ts', 'resilience.spec.ts'], use: { browserName: 'chromium', baseURL: `http://127.0.0.1:${PORT}` } },
     { name: 'hub', testMatch: 'hub.spec.ts', use: { browserName: 'chromium', baseURL: `http://127.0.0.1:${HUB_PORT}` } },
   ],
   webServer: [

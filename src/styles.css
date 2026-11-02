@@ -13,7 +13,7 @@
   --ink: #18181b;
   --ink-2: #3f3f46;
   --muted: #6b6b74;
-  --quiet: #9d9da6;
+  --quiet: #73737c;
   --rule: rgb(20 20 25 / 0.07);
   --rule-strong: rgb(20 20 25 / 0.13);
   --dots: #b4b4ad;
@@ -46,7 +46,7 @@
     --ink: #f2f2f3;
     --ink-2: #d2d2d6;
     --muted: #a0a0a8;
-    --quiet: #6e6e76;
+    --quiet: #8e8e96;
     --rule: rgb(255 255 255 / 0.07);
     --rule-strong: rgb(255 255 255 / 0.13);
     --dots: #47474e;
@@ -70,7 +70,7 @@
   --ink: #f2f2f3;
   --ink-2: #d2d2d6;
   --muted: #a0a0a8;
-  --quiet: #6e6e76;
+  --quiet: #8e8e96;
   --rule: rgb(255 255 255 / 0.07);
   --rule-strong: rgb(255 255 255 / 0.13);
   --dots: #47474e;
@@ -145,6 +145,49 @@ button:disabled {
   padding: 8px 0;
 }
 
+.react-flow__node:focus-visible,
+.react-flow__edge:focus-visible {
+  outline: 2px solid var(--select);
+  outline-offset: 2px;
+}
+
+/* Shown in place of what failed to draw. */
+.crash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+}
+
+.crash h2 {
+  font-size: 18px;
+}
+
+.crash p {
+  max-width: 44ch;
+  color: var(--muted);
+}
+
+.crash-detail {
+  max-width: min(560px, 100%);
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--field);
+  font: 12px var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.crash-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
 /* Floating surfaces share one material. */
 .float,
 .switcher-btn,
@@ -192,7 +235,7 @@ button:disabled {
   height: 32px;
   padding: 0 14px;
   border: 1px solid var(--rule-strong);
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--panel);
   font-weight: 500;
   white-space: nowrap;
@@ -301,7 +344,7 @@ button:disabled {
   display: flex;
   gap: 2px;
   padding: 2px;
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--hover);
 }
 
@@ -318,8 +361,8 @@ button:disabled {
   gap: 6px;
   height: 26px;
   padding: 0 10px;
-  border-radius: 7px;
-  font-size: 12.5px;
+  border-radius: 6px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--muted);
   text-align: center;
@@ -611,7 +654,7 @@ button:disabled {
   height: 30px;
   padding: 0 8px;
   border-radius: 6px;
-  font-size: 12.5px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -628,7 +671,7 @@ button:disabled {
   padding: 8px 10px 10px;
   margin-bottom: 4px;
   border-bottom: 1px solid var(--rule);
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-2);
   cursor: pointer;
 }
@@ -756,7 +799,7 @@ button:disabled {
   height: 34px;
   padding: 0 12px;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--hover);
   font-size: 13px;
 }
@@ -829,7 +872,7 @@ button:disabled {
   display: block;
   width: 30px;
   height: 20px;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .note-swatch {
@@ -1223,7 +1266,7 @@ button:disabled {
 }
 
 .insp-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
 }
@@ -1241,7 +1284,7 @@ button:disabled {
 }
 
 .insp-lead {
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.6;
   color: var(--muted);
 }
@@ -1251,7 +1294,7 @@ button:disabled {
 }
 
 .insp-cost {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--ink-2);
 }
@@ -1271,7 +1314,7 @@ button:disabled {
   min-height: 32px;
   padding: 5px 8px;
   border: 1px solid var(--rule-strong);
-  border-radius: 7px;
+  border-radius: 6px;
   background: var(--field);
   font-size: 13px;
   line-height: 1.5;
@@ -1316,7 +1359,7 @@ textarea.ed {
 
 .ed-title,
 textarea.ed-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
   color: var(--ink);
@@ -1407,7 +1450,7 @@ textarea.ed-title {
 
 .select-group {
   padding: 10px 8px 4px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted);
 }
@@ -1463,7 +1506,7 @@ textarea.ed-title {
 }
 
 .prop-label {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1506,12 +1549,12 @@ textarea.ed-title {
   grid-template-columns: 92px minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .ref-kind {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .select-trigger.ref-kind {
@@ -1605,7 +1648,7 @@ code.ref-value {
 }
 
 .decision-body strong {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
 }
@@ -1617,7 +1660,7 @@ code.ref-value {
 }
 
 .decision-line {
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
 }
@@ -1905,7 +1948,7 @@ code.ref-value {
 
 .conn-note {
   padding: 4px 8px;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1986,6 +2029,17 @@ code.ref-value {
   from {
     opacity: 0;
     transform: translateY(4px);
+  }
+}
+
+/* On a phone the selected item's card sits at the bottom, so the sheet stays in view above it. */
+@media (max-width: 640px) {
+  .card {
+    top: auto;
+    bottom: 12px;
+    left: 12px;
+    width: auto;
+    max-height: 45%;
   }
 }
 
@@ -2209,7 +2263,7 @@ code.ref-value {
 /* Sketch mode swaps the canvas typography to handwriting. */
 .sketch .node-label {
   font-family: var(--hand);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -2494,7 +2548,7 @@ code.ref-value {
   color: var(--ink);
   background: var(--panel);
   border: 1.5px solid var(--select);
-  border-radius: 3px;
+  border-radius: 4px;
   box-shadow: var(--lift);
   outline: none;
   pointer-events: all;
@@ -2634,13 +2688,13 @@ code.ref-value {
 }
 
 .present-text strong {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .present-text span {
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.5;
 }

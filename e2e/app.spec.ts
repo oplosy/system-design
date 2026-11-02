@@ -27,7 +27,7 @@ test('the design opens with only the sheet, the + and the review bar', async ({ 
 
 test('the menu sets the theme and style directly and unfolds its lists in place', async ({ page }) => {
   await page.getByRole('button', { name: 'More', exact: true }).click();
-  await page.getByRole('radio', { name: 'Dark' }).click();
+  await page.getByRole('menuitemradio', { name: 'Dark' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.getByRole('menuitem', { name: 'Export', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: 'PNG' })).toBeVisible();
@@ -237,6 +237,6 @@ test('the clean style is the default and has no hatching; sketch hatching is cli
   const hatched = page.locator('.react-flow__node path[clip-path]');
   await expect(hatched).toHaveCount(0);
   await page.getByRole('button', { name: 'More', exact: true }).click();
-  await page.getByRole('radio', { name: 'Sketch' }).click();
+  await page.getByRole('menuitemradio', { name: 'Sketch' }).click();
   await expect(hatched.first()).toBeAttached();
 });

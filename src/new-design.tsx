@@ -6,12 +6,14 @@ import { guessType } from './shapes.ts';
 import { DialogHead, useDismiss } from './menus.tsx';
 import { errorText } from './format.ts';
 import { Icon } from './icons.tsx';
+import { useModal } from './use-modal.ts';
 
 // Not a valid design id, so no template can take it.
 const MERMAID = ':mermaid';
 const INFRA = ':infra';
 
 export function NewDesign({ templates, onCancel, onCreated }: { templates: Summary[]; onCancel: () => void; onCreated: (d: Design) => void }) {
+  const modal = useModal(onCancel);
   const [title, setTitle] = useState('');
   const [template, setTemplate] = useState('');
   const [source, setSource] = useState('');
@@ -65,7 +67,7 @@ export function NewDesign({ templates, onCancel, onCreated }: { templates: Summa
     ...templates,
   ];
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
+    <div className="overlay" {...modal} onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
       <form className="dialog" role="dialog" aria-modal="true" aria-labelledby="new-design-title" onSubmit={submit}>
         <DialogHead id="new-design-title" title="New design" onClose={onCancel} />
         <input

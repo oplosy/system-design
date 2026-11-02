@@ -105,7 +105,7 @@ function Palette({ onAdd }: { onAdd: (kind: AddKind) => void }) {
   // Enter adds the closest match.
   const first: AddKind | undefined = groups.find((g) => g.types.length)?.types[0] ?? (boundaries[0] && `boundary:${boundaries[0]}`) ?? explain[0]?.kind;
   return (
-    <aside className="palette">
+    <aside className="palette" aria-label="Add a part">
       <div className="palette-top">
         <input
           className="palette-search"

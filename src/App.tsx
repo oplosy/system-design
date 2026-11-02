@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   ConnectionMode,
@@ -22,12 +22,12 @@ import { type AddKind, AddMenu, DRAG_MIME } from './palette.tsx';
 import type { FlowAt } from './fields.tsx';
 import { errorText, MAX_IMPORT } from './format.ts';
 import { type ExportKind, InlineEdit } from './menus.tsx';
+import { CrashGuard } from './crash-guard.tsx';
 import { Designs } from './designs.tsx';
 import { PresentBar, ReviewBar, Trail } from './bars.tsx';
 import { exportDesign } from './transfer.ts';
 import { TopBar } from './topbar.tsx';
 import { deriveSheet, withSelection } from './derive.ts';
-import { SequenceView } from './sequence.tsx';
 import { addItem, connectItems, isAddKind, removeItems, sheetItems } from './sheet-edits.ts';
 import { useArrange } from './use-arrange.ts';
 import { useAutoFit } from './use-auto-fit.ts';
@@ -42,10 +42,13 @@ import { useSheetNodes } from './use-sheet-nodes.ts';
 import { useShortcuts } from './use-shortcuts.ts';
 import { useWalkthrough } from './use-walkthrough.ts';
 import { Inspector, StepDetails } from './inspector.tsx';
-import { Connections } from './connections.tsx';
-import { NewDesign } from './new-design.tsx';
 import { NoDesigns } from './no-designs.tsx';
 import { Icon } from './icons.tsx';
+
+// Opened now and then, so they load on first use and leave the first paint lighter.
+const Connections = lazy(() => import('./connections.tsx').then((x) => ({ default: x.Connections })));
+const NewDesign = lazy(() => import('./new-design.tsx').then((x) => ({ default: x.NewDesign })));
+const SequenceView = lazy(() => import('./sequence.tsx').then((x) => ({ default: x.SequenceView })));
 
 /** Sheets at least this big draw only what is on screen; on smaller ones that would save nothing and cost a remount on every pan. */
 const DRAW_VISIBLE_FROM = 100;
@@ -350,6 +353,7 @@ function Shell() {
               }}
               onDrop={onDrop}
             >
+              <CrashGuard key={design.id} title="This sheet could not be drawn" hint="The design is saved and was not changed. Open another design from the top bar, or try again.">
               <EdgeContext.Provider value={edgeActions}>
                 <ReactFlow
                   key={design.id}
@@ -396,8 +400,13 @@ function Shell() {
                   <ViewportPortal>{editing && <InlineEdit key={editing.id} {...editing} onDone={finishEdit} />}</ViewportPortal>
                 </ReactFlow>
               </EdgeContext.Provider>
+              </CrashGuard>
               {nav.trail.length > 0 && !presenting && <Trail trail={nav.trail} title={design.title} onBack={(i) => void nav.backTo(i)} />}
-              {sequenced && !presenting && <SequenceView design={design} flow={sequenced} at={flow?.id === sequenced.id ? flow.at : undefined} onClose={() => setSequence(null)} />}
+              {sequenced && !presenting && (
+                <Suspense fallback={null}>
+                  <SequenceView design={design} flow={sequenced} at={flow?.id === sequenced.id ? flow.at : undefined} onClose={() => setSequence(null)} />
+                </Suspense>
+              )}
               {presenting ? (
                 <PresentBar design={design} viewIndex={view} maxIndex={maxIndex} onView={goTo} onExit={() => present(false)} flow={flow} onFlow={setFlow} />
               ) : (
@@ -429,6 +438,7 @@ function Shell() {
           nav.designs.length === 0 && <NoDesigns onCreate={() => setCreating(true)} onBrowse={() => nav.setBrowsing(true)} />
         )}
 
+        <Suspense fallback={null}>
         {connecting && <Connections design={design} selected={selected} plugins={plugins} onClose={() => setConnecting(false)} />}
         {nav.browsing && (
           <Designs
@@ -454,6 +464,7 @@ function Shell() {
             }}
           />
         )}
+        </Suspense>
         {error && (
           <div className="toast" role="alert">
             <span className="toast-msg">{error}</span>

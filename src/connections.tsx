@@ -3,6 +3,7 @@ import { type Design } from '../core/schema.ts';
 import { api, type Hook, type HookFormat, type McpServers, type Plugins } from './api.ts';
 import { Prop } from './fields.tsx';
 import { Icon, type IconName } from './icons.tsx';
+import { useModal } from './use-modal.ts';
 import { Select } from './select.tsx';
 import { DialogHead, useDismiss } from './menus.tsx';
 import { errorText } from './format.ts';
@@ -24,6 +25,7 @@ const TAB_ICONS: Record<(typeof TABS)[number], IconName> = { Webhooks: 'bolt', A
  * events, MCP), the user's MCP servers, and plugins.
  */
 export function Connections({ design, selected, plugins, onClose }: { design: Design | null; selected: string | null; plugins: Plugins | null; onClose: () => void }) {
+  const modal = useModal(onClose);
   const [tab, setTab] = useState<(typeof TABS)[number]>('Webhooks');
   const [hooks, setHooks] = useState<Hook[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -100,7 +102,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
     </li>
   );
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="overlay" {...modal} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="connections-title">
         <DialogHead id="connections-title" title="Connections" onClose={onClose} />
         <div className="seg" role="tablist" aria-label="Connections">

@@ -3,6 +3,7 @@ import * as m from '../core/mutations.ts';
 import { api, type Summary, type Trashed } from './api.ts';
 import { DialogHead, MenuLabel, useDismiss, useHoverOpen } from './menus.tsx';
 import { Icon, type IconName } from './icons.tsx';
+import { useModal } from './use-modal.ts';
 import { errorText, MAX_IMPORT } from './format.ts';
 
 export function DesignSwitcher({ designs, current, onPick, onCreate, onAll }: { designs: Summary[]; current: string | null; onPick: (id: string) => void; onCreate?: () => void; onAll?: () => void }) {
@@ -67,6 +68,7 @@ const ago = (t?: number) => {
 
 /** Every design on this machine: open, rename, copy, download, delete to the trash and restore, or add one from a file. */
 export function Designs({ designs, current, onOpen, onClose, onChanged }: { designs: Summary[]; current: string | null; onOpen: (id: string) => void; onClose: () => void; onChanged: () => void }) {
+  const modal = useModal(onClose);
   const [query, setQuery] = useState('');
   const [byName, setByName] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -130,7 +132,7 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
     .filter((d) => !q || `${d.title} ${d.description ?? ''}`.toLowerCase().includes(q))
     .sort((a, b) => (byName ? a.title.localeCompare(b.title) : (b.updated ?? 0) - (a.updated ?? 0)));
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="overlay" {...modal} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog wide" role="dialog" aria-modal="true" aria-labelledby="designs-title">
         <DialogHead id="designs-title" title="Designs" onClose={onClose} />
         <div className="designs-tools">
@@ -152,7 +154,7 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
                   aria-label="New title"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') rename(d.id, e.currentTarget.value);
-                    if (e.key === 'Escape') setRenaming(null);
+                    if (e.key === 'Escape') (e.preventDefault(), setRenaming(null));
                   }}
                   onBlur={(e) => rename(d.id, e.currentTarget.value)}
                 />

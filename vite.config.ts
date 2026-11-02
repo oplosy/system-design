@@ -9,5 +9,9 @@ export default defineConfig({
   optimizeDeps: { include: ['yaml'] },
   // The one chunk over Vite's 500 kB default is ELK (1.4 MB), which loads only on the first layout; the page itself is
   // about 700 kB for a local app. The limit still catches a dependency that would double either.
-  build: { chunkSizeWarningLimit: 1500 },
+  build: {
+    chunkSizeWarningLimit: 1500,
+    // Libraries change far less often than the app, so a new release leaves them in the browser's cache.
+    rolldownOptions: { output: { codeSplitting: { groups: [{ name: 'react', test: /node_modules[\/](react|react-dom|scheduler)[\/]/ }, { name: 'flow', test: /node_modules[\/](@xyflow|d3-[a-z]+|zustand|classcat)[\/]/ }, { name: 'schema', test: /node_modules[\/]zod[\/]/ }] } } },
+  },
 });

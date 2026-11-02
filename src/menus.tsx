@@ -123,9 +123,9 @@ export function InlineEdit({ at, value, multiline, onDone }: Editing & { onDone:
 
 function Seg<T extends string>({ label, value, options, onPick }: { label: string; value: T; options: readonly { key: T; title: string; icon: IconName }[]; onPick: (v: T) => void }) {
   return (
-    <div className="seg" role="radiogroup" aria-label={label}>
+    <div className="seg" role="group" aria-label={label}>
       {options.map((o) => (
-        <button key={o.key} role="radio" aria-checked={value === o.key} onClick={() => onPick(o.key)}>
+        <button key={o.key} role="menuitemradio" aria-checked={value === o.key} onClick={() => onPick(o.key)}>
           <Icon name={o.icon} />
           {o.title}
         </button>

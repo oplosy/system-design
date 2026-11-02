@@ -74,7 +74,7 @@ export function Inspector({
     </Prop>
   );
   return (
-    <aside className="inspector" key={item.id}>
+    <aside className="inspector" key={item.id} aria-label="Selected item">
       <header className="insp-head">
         <div className="insp-tagline">
           <span className="tag" title={item.id}>
@@ -387,7 +387,7 @@ export function StepDetails({
   const sofar = changes.reduce((t, c) => t + c, 0);
   const delta = changes[at - 1];
   return (
-    <aside className="inspector">
+    <aside className="inspector" aria-label="Step details">
       <header className="step-head">
         <div className="step-lead">
           {step.summary && <p className="insp-lead">{step.summary}</p>}

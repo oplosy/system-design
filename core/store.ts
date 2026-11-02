@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -77,8 +78,9 @@ async function listFrom(dir: string) {
         const stamp = `${mtimeMs}:${size}`;
         const hit = known?.get(f);
         fresh.set(f, hit?.stamp === stamp ? hit : { stamp, summary: await summarize(dir, f.slice(0, -5), mtimeMs) });
-      } catch {
+      } catch (e) {
         // A broken file must not hide the others; readDesign reports its error when opened.
+        console.warn(`Skipping ${f}: ${e instanceof Error ? e.message : e}`);
       }
     }),
   );
@@ -108,10 +110,21 @@ export async function writeDesign(design: Design, { create = false, actor = 'age
   if (!create && currentRev !== design.rev) throw new ConflictError(`"${design.id}" changed on disk (rev ${currentRev})`);
 
   const next = parseDesign({ ...design, rev: create ? 0 : design.rev + 1 });
-  // Write then rename so the file watcher never sees a half-written file.
-  const tmp = `${file}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(next, null, 2) + '\n');
-  await fs.rename(tmp, file);
+  // Write, flush, then rename: the watcher never sees a half-written file, and a power cut leaves the old one whole.
+  const tmp = `${file}.${randomUUID()}.tmp`;
+  try {
+    const out = await fs.open(tmp, 'w');
+    try {
+      await out.writeFile(JSON.stringify(next, null, 2) + '\n');
+      await out.sync();
+    } finally {
+      await out.close();
+    }
+    await fs.rename(tmp, file);
+  } catch (e) {
+    await fs.rm(tmp, { force: true });
+    throw e;
+  }
   emitDesignEvents(current, next, actor);
   return next;
 }

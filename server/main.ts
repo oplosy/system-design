@@ -97,6 +97,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.on('close', api.close);
+// A plugin or webhook promise nobody awaited must not take everyone connected down with it.
+process.on('unhandledRejection', (e) => console.error('Unhandled rejection:', e));
 // Ends the stdio MCP servers this process started.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => void closeMcp().finally(() => process.exit(0)));
 server.listen(PORT, HOST, () => console.log(`System design on http://${HOST}:${PORT}`));
