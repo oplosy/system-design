@@ -78,3 +78,23 @@ test('an edit is saved to disk and undo takes it back', async ({ page, request }
   await expect(page.locator('.react-flow__node')).toHaveCount(3);
   await expect.poll(components).toBe(before);
 });
+
+test('export downloads a file named after the design', async ({ page }) => {
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('.menu').getByText('Mermaid', { exact: false }).first().click()]);
+  expect(download.suggestedFilename()).toBe('three-tier.mmd');
+});
+
+test('pasting a Mermaid flowchart adds a step, and undo removes it', async ({ page, request }) => {
+  const steps = async () => ((await (await request.get('/api/designs/three-tier')).json()) as { steps: unknown[] }).steps.length;
+  const before = await steps();
+  await page.locator('.react-flow__pane').click({ position: { x: 5, y: 5 } });
+  await page.evaluate(() => {
+    const data = new DataTransfer();
+    data.setData('text/plain', 'flowchart LR\n  a[Mailer] --> b[(Orders DB)]');
+    document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect.poll(steps).toBe(before + 1);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(steps).toBe(before);
+});

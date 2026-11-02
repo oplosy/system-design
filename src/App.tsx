@@ -8,7 +8,6 @@ import {
   ReactFlowProvider,
   ViewportPortal,
   applyNodeChanges,
-  getNodesBounds,
   useReactFlow,
   type Connection as FlowConnection,
   type FitViewOptions,
@@ -16,12 +15,10 @@ import {
   type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { toPng, toSvg } from 'html-to-image';
-import { toDecisionRecord, toMermaid } from '../core/export.ts';
-import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
+import { toMermaid } from '../core/export.ts';
 import { BOUNDARY_KINDS, COMPONENT_TYPES, type BoundaryKind, type ComponentType, type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
-import { ApiError, api, shared, type LiveLoad, type Me, type PluginRead, type Plugins, type Summary } from './api.ts';
+import { ApiError, api, shared, type LiveLoad, type Me, type Plugins, type Summary } from './api.ts';
 import { BOUNDARY_SPECS, EMPTY_BOUNDARY, boundaryAt } from './boundaries.ts';
 import { EdgeContext, SketchContext, edgeTypes, nodeTypes } from './canvas.tsx';
 import type { Pt } from './edges.ts';
@@ -30,11 +27,12 @@ import { SequenceView } from './sequence.tsx';
 import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES, guessType } from './shapes.ts';
 import { type AddKind, DRAG_MIME, Palette, ShapePreview } from './palette.tsx';
 import { type FlowAt } from './fields.tsx';
-import { errorText, downloadText, download, type Editing, MAX_IMPORT } from './format.ts';
+import { errorText, type Editing, MAX_IMPORT } from './format.ts';
 import { type ExportKind, TagMenu, LayoutMenu, ExportMenu, AppearanceMenu, InlineEdit } from './menus.tsx';
 import { DesignSwitcher, Designs } from './designs.tsx';
 import { FindBox, PresentBar, ReviewBar } from './bars.tsx';
 import { Dock } from './dock.tsx';
+import { exportDesign, readSource } from './transfer.ts';
 import { deriveSheet } from './derive.ts';
 import { useDesignStore } from './use-design-store.ts';
 import { DOCKS, useDocks, useSketch, useTheme, type Docks } from './use-prefs.ts';
@@ -77,7 +75,7 @@ function Shell() {
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const store = useDesignStore(setError);
-  const { design, designRef, saveState, hist, commit, flush, change, settle } = store;
+  const { design, designRef, saveState, hist, commit, change, settle } = store;
   const undo = (back: boolean) => {
     if (store.undo(back)) setSelected(null);
   };
@@ -614,48 +612,16 @@ function Shell() {
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
-  const exportAs = async (kind: ExportKind) => {
-    if (!design) return;
-    if (kind === 'mermaid') return downloadText(toMermaid(design), `${design.id}.mmd`);
-    const plugged = pluginExports.find((x) => x.kind === kind);
-    if (kind === 'html' || plugged) {
-      // The server builds the file from what is on disk, so save the last edit first.
-      clearTimeout(saveState.current.timer);
-      if (saveState.current.pending) await flush();
-      try {
-        const res = await fetch(plugged ? `/api/v1/designs/${design.id}/export/${encodeURIComponent(plugged.key)}` : `/api/designs/${design.id}/share`);
-        if (!res.ok) return setError(`Export failed: ${(await res.json().catch(() => ({}))).error ?? res.statusText}`);
-        const url = URL.createObjectURL(await res.blob());
-        download(url, `${design.id}.${plugged?.extension ?? 'html'}`);
-        return setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } catch (e) {
-        return setError(`Export failed: ${errorText(e)}`);
-      }
-    }
-    if (kind === 'decisions') return downloadText(toDecisionRecord(design), `${design.id}-decisions.md`);
-    if (kind === 'structurizr') return downloadText(toStructurizr(design), `${design.id}.dsl`);
-    if (kind === 'plantuml') return downloadText(toPlantUml(design), `${design.id}.puml`);
-    if (kind === 'drawio') return downloadText(toDrawio(design), `${design.id}.drawio`);
-    const el = canvasRef.current?.querySelector<HTMLElement>('.react-flow__viewport');
-    const shown = getNodes().filter((n) => !n.hidden);
-    if (!el || !shown.length) return setError('Nothing on the sheet to export.');
-    const b = getNodesBounds(shown);
-    // Room around the parts for arcs and labels that reach past them.
-    const pad = 48, width = Math.ceil(b.width + 2 * pad), height = Math.ceil(b.height + 2 * pad);
-    const options = {
-      width,
-      height,
-      backgroundColor: getComputedStyle(canvasRef.current!).getPropertyValue('--canvas').trim(),
-      style: { width: `${width}px`, height: `${height}px`, transform: `translate(${pad - b.x}px, ${pad - b.y}px) scale(1)` },
-      // Leave out editing aids and review markers: the image is for docs, not for review.
-      filter: (n: HTMLElement) => !['inline-edit', 'bend-handle', 'unseen-dot', 'comment-badge', 'lint-badge', 'node-open', 'node-code'].some((c) => n.classList?.contains(c)),
-    };
-    try {
-      download(kind === 'png' ? await toPng(el, { ...options, pixelRatio: 2 }) : await toSvg(el, options), `${design.id}.${kind}`);
-    } catch (e) {
-      setError(`Export failed: ${errorText(e)}`);
-    }
-  };
+  const exportAs = (kind: ExportKind) =>
+    design &&
+    exportDesign(kind, {
+      design,
+      plugged: pluginExports.find((x) => x.kind === kind),
+      settle,
+      canvas: canvasRef.current,
+      nodes: getNodes().filter((n) => !n.hidden),
+      onError: setError,
+    });
 
   const findPick = (id: string) => {
     const d = designRef.current;
@@ -758,23 +724,10 @@ function Shell() {
 
   /** Adds a pasted or dropped diagram or infrastructure file to the design as a new step, and shows that step. */
   const importSource = async (raw: string, what: string) => {
-    // Loaded only here, so the YAML parser stays out of the main bundle.
-    const { formatOf, importAsStep, unpack } = await import('../core/importer.ts');
-    let text: string;
-    try {
-      text = await unpack(raw);
-    } catch (e) {
-      return setError(`That ${what} can’t be read: ${errorText(e)}`);
-    }
-    let plugin: PluginRead = null;
-    try {
-      plugin = await api.readWithPlugin(text);
-    } catch (e) {
-      return setError(`That ${what} can’t be read: ${errorText(e)}`);
-    }
-    if (!plugin && !formatOf(text)) return setError(`That ${what} isn’t a diagram or infrastructure file this can read.`);
+    const read = await readSource(raw, what);
+    if (typeof read === 'string') return setError(read);
     const before = designRef.current?.steps.length ?? 0;
-    change((d) => void importAsStep(d, text, { seen: true, guess: guessType, plugin }));
+    change((d) => void read.importAsStep(d, read.text, { seen: true, guess: guessType, plugin: read.plugin }));
     const after = designRef.current?.steps.length ?? 0;
     if (after > before) {
       setSelected(null);
