@@ -629,6 +629,7 @@ Requires Node 24+, which runs TypeScript directly.
 
 ```bash
 npm test
+npm run test:e2e   # browser smoke tests; first run: npx playwright install chromium
 npm run typecheck
 npm run build
 npm run build:cli

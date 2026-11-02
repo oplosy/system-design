@@ -3,3 +3,5 @@ dist
 *.tmp
 designs/
 dist-cli
+test-results/
+playwright-report/
