@@ -4,7 +4,7 @@ import { REF_KINDS, RefSchema, type ConnectionKind, type Design, type Ref, type 
 import { flowLatency } from '../core/export.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 
-/** A borderless text input that reads like the value it holds; edits commit as you type. */
+/** A text input; edits commit as you type. */
 export function Ed(props: {
   value: string | undefined;
   onCommit: (v: string | undefined) => void;
@@ -25,7 +25,7 @@ export function Ed(props: {
     // An invalid value keeps the last valid one until the text is valid again.
     if (!problem(next)) props.onCommit(next.trim() ? next : undefined);
   };
-  const common = { value: v, placeholder: props.placeholder ?? 'Empty', 'aria-label': props.label, 'aria-invalid': !!error || undefined, className: `ed ${props.className ?? ''}` };
+  const common = { value: v, placeholder: props.placeholder, 'aria-label': props.label, 'aria-invalid': !!error || undefined, className: `ed ${props.className ?? ''}` };
   return (
     <>
       {props.multiline ? <textarea {...common} rows={1} onChange={(e) => onChange(e.target.value)} /> : <input {...common} onChange={(e) => onChange(e.target.value)} />}
@@ -51,7 +51,6 @@ export function Num({ label, unit, value, onCommit }: { label: string; unit: str
         min={0}
         inputMode="decimal"
         value={v}
-        placeholder="—"
         aria-label={label}
         aria-invalid={invalid || undefined}
         onChange={(e) => {
@@ -61,25 +60,16 @@ export function Num({ label, unit, value, onCommit }: { label: string; unit: str
           else if (Number.isFinite(x) && x >= 0) onCommit(x);
         }}
       />
-      <span className="quiet">{unit}</span>
+      <span>{unit}</span>
     </label>
   );
 }
 
-export function Prop({ label, children }: { label: string; children: React.ReactNode }) {
+export function Prop({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
   return (
-    <div className="prop">
+    <div className={`prop${wide ? ' wide' : ''}`}>
       <span className="prop-label">{label}</span>
       <div className="prop-value">{children}</div>
-    </div>
-  );
-}
-
-export function Block({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="block">
-      <span className="block-label">{label}</span>
-      {children}
     </div>
   );
 }

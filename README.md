@@ -152,13 +152,14 @@ The palette has three kits:
 ## Working on the canvas
 
 - **Add** a part with the **+** beside the sheet or the `/` key: drag one out or click it. Search with words like `kafka`, `redis` or `s3`. Parts with the word in their name come first, and Enter adds the first match.
-- **Connect** by dragging between two parts. Drag from a note or decision to a part to attach it.
+- **Connect** by dragging between two parts. Drag from a note or decision to a part to attach it. Drag the middle of a selected line to bend it, and double-click it to edit its label.
+- **Boundaries** move with everything in them when you drag their label tab. Drag a part into the box to place it there. Deleting a boundary keeps its parts.
 - **Group** by dropping a part into a box.
 - **Edit** by selecting an item and using the card that opens on the right. Double-click to rename. Press Delete or Backspace to remove.
 - **Find** anything on the sheet with Ctrl+F, or **Find** in the ⋯ menu.
 - **Layout** in the ⋯ menu arranges the sheet: Layered, Tiers, Flow, Tree, Radial, Organic or Grid, for everything or only the selected items.
 - **Appearance** in the ⋯ menu switches the theme (light, dark, system) and the drawing style. **Clean**, the default, is crisp, for docs; **Sketch** is hand-drawn and colored by group, for a whiteboard feel. Both draw the same data. **Overview map** turns on the map of the whole sheet.
-- **Drill down.** A part can open another design that shows its insides, C4-style. Link one under **Opens**, or start an empty one with **New inside**. The badge on the part opens it and a breadcrumb leads back.
+- **Drill down.** A part can open another design that shows its insides, C4-style. Pick one under **Opens**, or choose **New design…** to start an empty one. The badge on the part opens it and a breadcrumb leads back.
 - **Code links.** Under **Code**, a part can say where its code lives: a web address, or a path that opens against the design's **Repo** (set under **Design** in the step details, such as `https://github.com/acme/shop/tree/main`). Parts with a link get a `</>` badge. Agents set `code` on parts and `repo` with `update_design`; a compose import fills `code` from each service's `build` path.
 - **Tag views.** Tag parts by concern under **Tags**: "payments", "pii", a team. **View** in the ⋯ menu then shows one tag at a time, and the other parts, their lines and notes, and boxes left empty step aside. One model gives a payments view, a PII view and a per-team view.
 

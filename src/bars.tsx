@@ -285,7 +285,8 @@ export function Comments({ design, step, target, change, onSelect }: { design: D
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => void api.me().then(setMe, () => undefined), []);
   const list = design.comments.filter((c) => (target ? c.target === target : c.step === step));
-  const label = (id: string) => [...design.components, ...design.boundaries].find((x) => x.id === id)?.label ?? design.decisions.find((x) => x.id === id)?.title ?? id;
+  const open = list.filter((c) => !c.resolved && c.by === 'reviewer').length;
+  const label =(id: string) => [...design.components, ...design.boundaries].find((x) => x.id === id)?.label ?? design.decisions.find((x) => x.id === id)?.title ?? id;
   const send = () => {
     if (!text.trim()) return;
     // A viewer's saves go nowhere, so the comment goes to the server on its own and comes back with the next update.
@@ -309,7 +310,7 @@ export function Comments({ design, step, target, change, onSelect }: { design: D
     <section className="insp-sec">
       <h3 className="rule-head">
         Comments
-        <span className="rule-count">{pad(list.filter((c) => !c.resolved && c.by === 'reviewer').length)}</span>
+        {open > 0 && <span className="rule-count">{open}</span>}
       </h3>
       {list.map((c) => (
         <div key={c.id} className={`comment${c.resolved ? ' resolved' : ''}${c.by === 'agent' ? ' agent' : ''}`}>
@@ -336,14 +337,16 @@ export function Comments({ design, step, target, change, onSelect }: { design: D
           className="ed"
           rows={2}
           value={text}
-          placeholder={target ? 'Comment on this for the agent' : 'Comment on this step for the agent'}
+          placeholder="Add a comment"
           aria-label="New comment"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && send()}
         />
-        <button className="btn" disabled={!text.trim()} onClick={send} title="Ctrl+Enter">
-          Comment
-        </button>
+        {text.trim() && (
+          <button className="btn" onClick={send} title="Ctrl+Enter">
+            Comment
+          </button>
+        )}
       </div>
     </section>
   );

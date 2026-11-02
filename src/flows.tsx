@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { type Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
 import { type FlowAt, type Change, timeText } from './fields.tsx';
-import { pad } from './format.ts';
 
 export function Flows({
   design,
@@ -39,7 +38,7 @@ export function Flows({
     <section className="insp-sec">
       <h3 className="rule-head">
         Flows
-        <span className="rule-count">{pad(flows.length)}</span>
+        {flows.length > 0 && <span className="rule-count">{flows.length}</span>}
       </h3>
       {recording ? (
         <form
@@ -49,8 +48,8 @@ export function Flows({
             save();
           }}
         >
-          <input className="ed" autoFocus value={title} placeholder="What happens, e.g. User logs in" aria-label="Flow title" onChange={(e) => setTitle(e.target.value)} />
-          <p className="quiet">{recording.length ? recording.map(labelOf).join(' → ') : 'Click the parts on the sheet in order. Each one must be connected to the last.'}</p>
+          <input className="ed" autoFocus value={title} placeholder="Flow name" aria-label="Flow title" onChange={(e) => setTitle(e.target.value)} />
+          <p className="quiet">{recording.length ? recording.map(labelOf).join(' → ') : 'Click connected parts in order.'}</p>
           <div className="pop-foot">
             <button type="button" className="text-btn" onClick={() => recording.length && onRecording(recording.slice(0, -1))} disabled={!recording.length}>
               Undo stop

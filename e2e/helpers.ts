@@ -4,7 +4,7 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { DATA_DIR } from '../playwright.config.ts';
 
 type Saved = {
-  components: { id: string; label?: string; position?: { x: number; y: number } }[];
+  components: { id: string; label?: string; detail?: string; position?: { x: number; y: number } }[];
   connections: unknown[];
   comments?: unknown[];
   boundaries?: unknown[];

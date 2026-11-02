@@ -5,6 +5,7 @@
   --panel: #ffffff;
   --float: 0 1px 2px rgb(20 20 25 / 0.06);
   --hover: rgb(20 20 25 / 0.05);
+  --field: rgb(20 20 25 / 0.035);
   --active: rgb(20 20 25 / 0.08);
   --seg-on: #ffffff;
   --ink: #18181b;
@@ -37,6 +38,7 @@
     --panel: #19191c;
     --float: 0 1px 2px rgb(0 0 0 / 0.4);
     --hover: rgb(255 255 255 / 0.06);
+    --field: rgb(255 255 255 / 0.05);
     --active: rgb(255 255 255 / 0.1);
     --seg-on: rgb(255 255 255 / 0.12);
     --ink: #f2f2f3;
@@ -60,6 +62,7 @@
   --panel: #19191c;
   --float: 0 1px 2px rgb(0 0 0 / 0.4);
   --hover: rgb(255 255 255 / 0.06);
+  --field: rgb(255 255 255 / 0.05);
   --active: rgb(255 255 255 / 0.1);
   --seg-on: rgb(255 255 255 / 0.12);
   --ink: #f2f2f3;
@@ -229,7 +232,7 @@ kbd.lead {
 }
 
 .text-btn.danger {
-  color: var(--signal);
+  color: var(--danger);
   margin-left: -10px;
 }
 
@@ -364,13 +367,20 @@ kbd.lead {
   content: '✓ ';
 }
 
-/* Section heading: small caps label and an optional count. */
+/* Section heading and an optional count. */
 .rule-head,
-.block-label,
 .field-label {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.rule-head {
+  font: 600 13px/1.4 var(--sans);
+  color: var(--ink);
+}
+
+.field-label {
   font: 500 12px/1.4 var(--sans);
   color: var(--muted);
 }
@@ -644,7 +654,7 @@ kbd.lead {
   display: flex;
   flex-direction: column;
   width: min(320px, calc(100% - 24px));
-  max-height: calc(100% - 72px);
+  max-height: calc(100% - 132px);
   border-radius: var(--radius);
   box-shadow: var(--lift);
   animation: rise 0.12s ease-out;
@@ -1220,14 +1230,6 @@ kbd.lead {
   color: var(--muted);
 }
 
-.review-ask .ed {
-  width: 100%;
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--rule-strong);
-  border-radius: 6px;
-}
-
 .pop-foot {
   display: flex;
   justify-content: flex-end;
@@ -1235,7 +1237,7 @@ kbd.lead {
   margin-top: 10px;
 }
 
-/* Inspector: reads like a document; every value is edited in place. */
+/* Inspector: three levels. Section headings, field labels, and boxed inputs next to plain text. */
 
 .inspector {
   display: flex;
@@ -1252,19 +1254,12 @@ kbd.lead {
   align-items: center;
   gap: 10px;
   min-height: 28px;
-  margin-bottom: 10px;
-}
-
-.insp-tagline .mono {
-  font-size: 11.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-bottom: 8px;
 }
 
 .insp-tagline .close {
   margin-left: auto;
-  margin-right: -10px;
+  margin-right: -6px;
 }
 
 .insp-title {
@@ -1294,12 +1289,13 @@ kbd.lead {
 
 .insp-cost {
   margin-top: 8px;
-  font: 500 11.5px/1.4 var(--mono);
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--ink-2);
 }
 
 .insp-sec {
-  padding: 12px 16px;
+  padding: 14px 16px;
   border-top: 1px solid var(--rule);
 }
 
@@ -1309,26 +1305,31 @@ kbd.lead {
 
 .ed {
   display: block;
-  width: calc(100% + 12px);
-  margin: 0 -6px;
-  padding: 3px 6px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  line-height: 1.55;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 7px;
+  background: var(--field);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
   resize: none;
   field-sizing: content;
-  transition: background 0.1s;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
 }
 
 .ed:hover {
-  background: var(--hover);
+  border-color: var(--muted);
 }
 
 .ed:focus {
   outline: none;
-  background: var(--hover);
-  box-shadow: inset 0 0 0 1.5px var(--select);
+  background: var(--panel);
+  border-color: var(--select);
+  box-shadow: 0 0 0 1px var(--select);
 }
 
 .ed::placeholder {
@@ -1336,20 +1337,17 @@ kbd.lead {
 }
 
 .ed[aria-invalid='true'] {
-  box-shadow: inset 0 0 0 1.5px var(--signal);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
 }
 
 textarea.ed {
-  min-height: 1.55em;
-  font-size: 13px;
-  color: var(--ink-2);
+  min-height: 60px;
 }
 
 .mermaid-input {
   margin-top: 10px;
   padding: 8px 10px;
-  border: 1px solid var(--rule-strong);
-  border-radius: 6px;
   font: 12.5px/1.5 var(--mono, ui-monospace, monospace);
   resize: vertical;
 }
@@ -1365,8 +1363,8 @@ textarea.ed-title {
 select.ed {
   appearance: none;
   cursor: pointer;
-  padding-right: 22px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Cpath d='M1.5 3.5 5 7l3.5-3.5' fill='none' stroke='%238a8a90' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 6px center;
+  padding-right: 24px;
+  background: var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Cpath d='M1.5 3.5 5 7l3.5-3.5' fill='none' stroke='%238a8a90' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 8px center;
 }
 
 select.ed option {
@@ -1379,24 +1377,26 @@ select.ed option {
   margin-top: 4px;
   font-size: 12px;
   font-style: normal;
-  color: var(--signal);
-}
-
-.props {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  color: var(--danger);
 }
 
 .prop {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  align-items: baseline;
+  grid-template-columns: 84px minmax(0, 1fr);
+  align-items: center;
   gap: 8px;
-  padding: 7px 0;
+  min-height: 32px;
 }
 
 .prop + .prop {
-  border-top: 1px solid var(--rule);
+  margin-top: 8px;
+}
+
+/* Long values and text boxes take the whole width, with the label above. */
+.prop.wide {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  min-height: 0;
 }
 
 .prop-label {
@@ -1407,22 +1407,17 @@ select.ed option {
 .prop-value {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 10px;
+  align-items: center;
+  gap: 4px 10px;
   min-width: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
 }
 
-.prop-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.block-label {
-  margin-bottom: 4px;
-}
-
-.block + .block {
-  margin-top: 16px;
+.prop-note {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .ref {
@@ -1439,7 +1434,8 @@ select.ed option {
 /* A part's links: kind, value (a link or an identifier), remove. */
 .refs {
   display: grid;
-  gap: 4px;
+  gap: 6px;
+  width: 100%;
 }
 
 .ref-row {
@@ -1451,14 +1447,13 @@ select.ed option {
 }
 
 .ref-kind {
-  color: var(--quiet);
-  font-size: 11.5px;
+  color: var(--muted);
+  font-size: 12.5px;
 }
 
-select.ed.ref-kind,
-input.ed.ref-value {
-  width: 100%;
-  margin: 0;
+select.ed.ref-kind {
+  color: var(--ink);
+  font-size: 13px;
 }
 
 .ref-value {
@@ -1501,8 +1496,8 @@ code.ref-value {
 
 .list-meta {
   margin-left: auto;
-  font: 11.5px var(--mono);
-  color: var(--quiet);
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .decision-entry {
@@ -1557,7 +1552,7 @@ code.ref-value {
 .decision-line em {
   font-style: normal;
   font-weight: 500;
-  color: var(--quiet);
+  color: var(--ink-2);
   margin-right: 6px;
 }
 
@@ -2235,15 +2230,13 @@ code.ref-value {
 .num {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .num .ed {
-  width: 90px;
-}
-
-.num .quiet {
-  font: 11px var(--mono);
+  width: 96px;
 }
 
 /* Lint warning: hover shows what looks wrong. */
@@ -2474,14 +2467,6 @@ code.ref-value {
   align-items: flex-end;
   gap: 8px;
   margin-top: 10px;
-}
-
-.comment-new .ed {
-  width: 100%;
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--rule-strong);
-  border-radius: 8px;
 }
 
 .comment-new .btn {

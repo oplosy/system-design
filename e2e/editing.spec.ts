@@ -36,10 +36,17 @@ test('a comment on the step is saved', async ({ page, request }) => {
   const count = async () => ((await saved(request, 'comment-copy')).comments ?? []).length;
   const before = await count();
   await openDetails(page);
-  await page.getByPlaceholder('Comment on this step for the agent').fill('Why a single server?');
+  await page.getByPlaceholder('Add a comment').fill('Why a single server?');
   await page.getByRole('button', { name: 'Comment', exact: true }).click();
   await expect(page.getByText('Why a single server?')).toBeVisible();
   await expect.poll(count).toBe(before + 1);
+});
+
+test('Opens starts a new design for what is inside a part and links it', async ({ page, request }) => {
+  await openCopy(page, request, 'inside-copy');
+  await page.locator('.react-flow__node', { hasText: 'App server' }).click();
+  await page.getByLabel('Design that shows the inside').selectOption({ label: 'New design…' });
+  await expect.poll(async () => (await saved(request, 'inside-copy')).components.find((c) => c.id === 'app')?.detail).toBe('inside-copy-app');
 });
 
 test('Delete removes the selected part, Ctrl+Z brings it back, copy and paste duplicates it', async ({ page, request }) => {
