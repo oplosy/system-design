@@ -59,3 +59,40 @@ test('Delete removes the selected part, Ctrl+Z brings it back, copy and paste du
   await expect(page.locator('.react-flow__node')).toHaveCount(4);
   await expect.poll(parts).toBe(before + 1);
 });
+
+test('adding a boundary from the palette puts a box on the sheet and saves it', async ({ page, request }) => {
+  await openCopy(page, request, 'box-copy');
+  const boxes = async () => ((await saved(request, 'box-copy')).boundaries ?? []).length;
+  const before = await boxes();
+  await page.getByPlaceholder(/^Search: /).fill('vpc');
+  await page.getByRole('button', { name: /^VPC/ }).first().click();
+  await expect(page.locator('.react-flow__node-boundary')).toHaveCount(1);
+  await expect.poll(boxes).toBe(before + 1);
+});
+
+test('Ctrl-click selects several parts and Delete removes them together', async ({ page, request }) => {
+  await openCopy(page, request, 'multi-copy');
+  const parts = async () => (await saved(request, 'multi-copy')).components.length;
+  const before = await parts();
+  await page.locator('.react-flow__node', { hasText: 'Browser' }).click();
+  await page.locator('.react-flow__node', { hasText: 'Database' }).click({ modifiers: ['Control'] });
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(2);
+  await page.keyboard.press('Delete');
+  await expect(page.locator('.react-flow__node')).toHaveCount(1);
+  await expect.poll(parts).toBe(before - 2);
+});
+
+test('presenting walks the steps with the arrow keys and Escape leaves', async ({ page, request }) => {
+  await openCopy(page, request, 'present-copy', { seen: true });
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  const counter = page.getByRole('region', { name: 'Presentation' }).locator('.present-no');
+  await expect(counter).toHaveText('03/03');
+  await page.keyboard.press('ArrowLeft');
+  await expect(counter).toHaveText('02/03');
+  await page.keyboard.press('ArrowLeft');
+  await expect(counter).toHaveText('01/03');
+  await page.keyboard.press('ArrowRight');
+  await expect(counter).toHaveText('02/03');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('region', { name: 'Presentation' })).toHaveCount(0);
+});
