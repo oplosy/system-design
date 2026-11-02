@@ -38,6 +38,7 @@
     "share": "node cli/share.ts",
     "mcp": "node mcp/server.ts",
     "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "build:cli": "vite build --config vite.cli.config.ts",

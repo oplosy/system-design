@@ -606,7 +606,7 @@ The app folder is the parent of the data folder: `%APPDATA%\system-design` on Wi
 - **`readOnlyHint`** is the MCP server's own claim. A server that lies about it isn't caught.
 - **Plugins** can't be stopped if they block the event loop, since they run in the app's process.
 - **MCP servers** using OAuth or the older SSE transport aren't supported.
-- **Phone width** has no layout of its own. The app is meant for a desktop window; at about 375px wide a selected item's card covers most of the sheet.
+- **Phone width** is a reduced layout: a selected item's card sits at the bottom, but the app is meant for a desktop window.
 - **Imports:** draw.io reads the first page only, Helm needs rendering first, and Structurizr is read at container level.
 
 ## Layout of this repository
@@ -638,6 +638,8 @@ npm run typecheck
 npm run build
 npm run build:cli
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 To release, set `version` in `package.json`, commit, and push a matching tag (`git tag v1.1.0 && git push origin v1.1.0`). The release workflow runs the checks, publishes to npm when the `NPM_TOKEN` secret (an npm automation token) is set, and moves the major tag (`v1`) that action users pin to.
 
