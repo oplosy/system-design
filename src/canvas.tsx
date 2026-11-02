@@ -4,6 +4,7 @@ import { money } from '../core/export.ts';
 import type { BoundaryKind, ComponentType, ConnectionKind } from '../core/schema.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { edgeGeometry, type Pt, type Route } from './edges.ts';
+import { asDetail, asTitle } from './format.ts';
 import { Paths, ShapeDrawing } from './shape-drawing.tsx';
 import { DECISION_SIZE, NOTE_COLOR, NOTE_SIZE, SHAPES, gen, hash, options, toPaths } from './shapes.ts';
 
@@ -80,13 +81,13 @@ export const ComponentNodeView = memo(function ComponentNodeView({ id, data, sel
   // Mid-shape labels grow both ways; a caption or a header band grows downwards, away from the drawing.
   const fromTop = caption || spec.labelY <= spec.h * 0.35;
   return (
-    <Frame w={spec.w} h={spec.h} data={data} selected={selected} title={data.tech ? `${data.label}\n${data.tech}` : data.label}>
+    <Frame w={spec.w} h={spec.h} data={data} selected={selected} title={data.tech ? `${asTitle(data.label)}\n${asDetail(data.tech)}` : asTitle(data.label)}>
       <svg width={spec.w} height={spec.h} overflow="visible">
         <ShapeDrawing type={data.type} sketch={sketch} seed={hash(id)} dashed={spec.dashed} />
       </svg>
       <div className={`node-label${fromTop ? ' from-top' : ''}`} style={{ left: labelX, top: spec.labelY, maxWidth }}>
-        <div className="node-name">{data.label}</div>
-        {data.tech && <div className="node-tech">{data.tech}</div>}
+        <div className="node-name">{asTitle(data.label)}</div>
+        {data.tech && <div className="node-tech">{asDetail(data.tech)}</div>}
         {data.cost !== undefined && <div className="node-tech">{money(data.cost, data.currency)} a month</div>}
       </div>
       {data.code && (
@@ -117,7 +118,7 @@ export const NoteNodeView = memo(function NoteNodeView({ id, data, selected }: N
       <svg width={w} height={h} overflow="visible">
         <Paths paths={paths} />
       </svg>
-      <div className="note-text">{data.text}</div>
+      <div className="note-text">{asDetail(data.text)}</div>
     </Frame>
   );
 });
@@ -136,8 +137,8 @@ export const DecisionNodeView = memo(function DecisionNodeView({ id, data, selec
       </svg>
       <div className="decision-text" style={{ height: body - 4 }}>
         <div className="decision-kicker">Decision</div>
-        <div className="decision-title">{data.title}</div>
-        <div className="decision-why">{data.why}</div>
+        <div className="decision-title">{asTitle(data.title)}</div>
+        <div className="decision-why">{asDetail(data.why)}</div>
       </div>
     </Frame>
   );
@@ -165,8 +166,8 @@ export const BoundaryNodeView = memo(function BoundaryNodeView({ id, data, selec
       </svg>
       <div className="boundary-tab" title={`${spec.name}: drag to move everything inside`}>
         {roomy && <span className="boundary-kind">{spec.name}</span>}
-        <span className="boundary-label">{data.label}</span>
-        {data.detail && <span className="boundary-detail">{data.detail}</span>}
+        <span className="boundary-label">{asTitle(data.label)}</span>
+        {data.detail && <span className="boundary-detail">{asDetail(data.detail)}</span>}
         {data.unseen && <span className="unseen-dot inline" title="Not reviewed yet" />}
       </div>
       {selected && <Trash />}

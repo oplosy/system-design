@@ -23,6 +23,7 @@ const instructions = `Local system design canvas. The user reviews every step yo
 - Always record a decision (title, why, alternatives, tradeoffs) for any non-obvious choice, linked to the components it affects.
 - Use notes for short explanations attached to a component.
 - Ids are lowercase-dashed. Positions are optional: the app lays out new items automatically.
+- Write labels and titles in sentence case ("Load balancer"), and keep proper names and acronyms as they are spelled. Start descriptions (tech, detail, why, note text) in lowercase.
 - Component types: ${COMPONENT_TYPES.join(', ')}.
 - Group components with boundaries (${BOUNDARY_KINDS.join(', ')}): a box drawn around its members, nestable through parent (region > vpc > subnet, site > vlan). Give each component its innermost boundary; the box sizes itself.
 - Show the key request paths as flows ("User uploads a photo"): component ids in order, each hop along a connection (either way, so responses can walk back).

@@ -9,6 +9,7 @@ import { BoundaryPreview, ShapePreview } from './palette.tsx';
 import { Select } from './select.tsx';
 import { Flows } from './flows.tsx';
 import { Comments } from './bars.tsx';
+import { asDetail, asTitle } from './format.ts';
 import { Icon, type IconName } from './icons.tsx';
 
 // The "Opens" choice that starts a new design; a design id is a slug, so it can't clash.
@@ -440,8 +441,8 @@ export function StepDetails({
                 {decisions.map((x) => (
                   <button key={x.id} className="decision-entry" onClick={() => onSelect(x.id)}>
                     <span className="decision-body">
-                      <strong>{x.title}</strong>
-                      <span className="decision-why">{x.why}</span>
+                      <strong>{asTitle(x.title)}</strong>
+                      <span className="decision-why">{asDetail(x.why)}</span>
                       {x.alternatives?.length ? (
                         <span className="decision-line">
                           <em>Instead of</em> {x.alternatives.join(', ')}
@@ -463,7 +464,7 @@ export function StepDetails({
                 <h3 className="rule-head"><Icon name="note" />Notes</h3>
                 {notes.map((n) => (
                   <button key={n.id} className="note-entry" onClick={() => onSelect(n.id)}>
-                    {n.text}
+                    {asDetail(n.text)}
                   </button>
                 ))}
               </section>
@@ -479,8 +480,8 @@ export function StepDetails({
                 <button key={b.id} className="list-row" onClick={() => onSelect(b.id)}>
                   <BoundaryPreview kind={b.kind} />
                   <span className="list-text">
-                    <span className="list-main">{b.label}</span>
-                    <span className="list-meta">{b.detail ?? BOUNDARY_SPECS[b.kind].name}</span>
+                    <span className="list-main">{asTitle(b.label)}</span>
+                    <span className="list-meta">{asDetail(b.detail ?? BOUNDARY_SPECS[b.kind].name)}</span>
                   </span>
                 </button>
               ))}
@@ -488,8 +489,8 @@ export function StepDetails({
                 <button key={c.id} className="list-row" onClick={() => onSelect(c.id)}>
                   <ShapePreview type={c.type} width={30} height={20} />
                   <span className="list-text">
-                    <span className="list-main">{c.label}</span>
-                    {c.tech && <span className="list-meta">{c.tech}</span>}
+                    <span className="list-main">{asTitle(c.label)}</span>
+                    {c.tech && <span className="list-meta">{asDetail(c.tech)}</span>}
                   </span>
                 </button>
               ))}
