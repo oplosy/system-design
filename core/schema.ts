@@ -181,6 +181,30 @@ export const COMPONENT_TYPES = [
   'state',
   'signal',
   'timer',
+  'abstract-class',
+  'artifact',
+  'activation',
+  'fragment',
+  'db-view',
+  'junction-table',
+  'dto',
+  'middleware',
+  'event-handler',
+  'api-client',
+  'test-suite',
+  'domain-service',
+  'factory',
+  'loop',
+  'error-event',
+  'manual-task',
+  'composite-state',
+  'page',
+  'route',
+  'ui-component',
+  'form',
+  'state-store',
+  'hook',
+  'modal',
   // Threat models and security programmes
   'threat-actor',
   'threat',
@@ -361,11 +385,39 @@ export const DecisionSchema = z.object({
   step: Id,
 });
 
+export const FRAGMENT_KINDS = ['alt', 'opt', 'loop', 'par'] as const;
+
+/** A UML frame around hops of a flow, by hop number from 0, both ends included. `split` is the hop that starts the second branch of an alt or par. */
+export const FragmentSchema = z.object({
+  kind: z.enum(FRAGMENT_KINDS),
+  label: z.string().optional(),
+  from: z.number().int().min(0),
+  to: z.number().int().min(0),
+  split: z.number().int().min(0).optional(),
+});
+
+export type Fragment = z.infer<typeof FragmentSchema>;
+
+/** Why these frames cannot sit on a flow of `hops` hops: each stays in range, and two frames nest or stay apart. */
+export function fragmentProblem(fragments: Fragment[], hops: number) {
+  for (const f of fragments) {
+    if (f.from > f.to || f.to >= hops) return `fragment hops ${f.from} to ${f.to} do not fit a flow of ${hops} hops`;
+    if (f.split !== undefined && (f.kind === 'opt' || f.kind === 'loop')) return `a ${f.kind} fragment has one branch, so it takes no split`;
+    if (f.split !== undefined && (f.split <= f.from || f.split > f.to)) return `split ${f.split} is not inside hops ${f.from} to ${f.to}`;
+  }
+  for (const a of fragments) {
+    for (const b of fragments) {
+      if (a.from < b.from && b.from <= a.to && a.to < b.to) return `fragments at hops ${a.from} to ${a.to} and ${b.from} to ${b.to} overlap without nesting`;
+    }
+  }
+}
+
 /** A request path walked hop by hop ("User logs in"): component ids in order, each hop along a connection either way. */
 export const FlowSchema = z.object({
   id: Id,
   title: z.string().min(1),
   path: z.array(Id).min(2),
+  fragments: z.array(FragmentSchema).optional(),
   option: Option,
   step: Id,
 });
@@ -454,6 +506,8 @@ export const DesignSchema = z
     // Hops may lose their connection when the reviewer edits; the canvas skips those, so only the stops are checked.
     for (const f of d.flows) {
       for (const p of f.path) if (!componentIds.has(p)) issue(`flow "${f.id}" passes unknown "${p}"`);
+      const problem = f.fragments && fragmentProblem(f.fragments, f.path.length - 1);
+      if (problem) issue(`flow "${f.id}": ${problem}`);
     }
     const parents = new Map(d.boundaries.map((b) => [b.id, b.parent]));
     for (const c of d.components) {

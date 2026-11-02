@@ -31,6 +31,7 @@ export const GROUPS = [
   { key: 'sw-arch', title: 'Architecture', color: '#7F77DD', kit: 'software' },
   { key: 'sw-ddd', title: 'Domain', color: '#1D9E75', kit: 'software' },
   { key: 'sw-flow', title: 'Flow and state', color: '#A8742E', kit: 'software' },
+  { key: 'sw-front', title: 'Frontend', color: '#D4537E', kit: 'software' },
   { key: 'threat', title: 'Threat model', color: '#C2413B', kit: 'security' },
   { key: 'sec-access', title: 'Access', color: '#7F77DD', kit: 'security' },
   { key: 'sec-detect', title: 'Detection and response', color: '#3F7FD9', kit: 'security' },

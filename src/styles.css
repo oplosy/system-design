@@ -1002,6 +1002,26 @@ button:disabled {
   stroke: var(--danger);
 }
 
+.seq-bar {
+  fill: var(--panel);
+  stroke: var(--rule-strong);
+}
+
+.seq-frame rect {
+  fill: none;
+  stroke: var(--rule-strong);
+}
+
+.seq-frame line {
+  stroke: var(--rule-strong);
+  stroke-dasharray: 6 4;
+}
+
+.seq-frame text {
+  fill: var(--muted);
+  font: 600 11px var(--sans);
+}
+
 /* Review: where the walkthrough is and what to do next, with the step's details unfolding above. */
 .review {
   position: absolute;

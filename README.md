@@ -135,7 +135,7 @@ The palette has four kits:
 
 - **System**: cloud architecture, including transit gateways, private links, autoscalers, dead-letter queues, schema registries, policy engines, vulnerability scanners, status pages, data catalogs, LLM gateways and MCP servers.
 - **Network**: routers, switches, PCs, printers, racks, links.
-- **Software**: use cases, classes, objects, enums, deployment nodes, lifelines, ports and adapters, DDD and CQRS, activity, state and data flows.
+- **Software**: use cases, classes, objects, enums, deployment nodes, lifelines, activations and fragments, tables and views, ports and adapters, DTOs and middleware, DDD and CQRS, activity, state and data flows, and frontend pages, components and stores.
 - **Security**: threat models (actors, threats, exploits, attack steps, assets, risks, mitigations), access (MFA, privileged access, zero trust, roles), detection and response (SIEM, EDR, SOC, incidents), data protection (DLP, HSM, keys, masking), application security (SAST, DAST, SBOM, code signing, compliance), and trust, DMZ and attack-surface boundaries.
 
 ## Reviewing steps

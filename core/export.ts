@@ -54,6 +54,25 @@ export function flowSequence(d: Design, flow: Flow) {
   return { participants, messages };
 }
 
+/**
+ * When each participant is busy, in hop numbers: from the call that reaches it to the reply it sends, or to the last hop
+ * when none comes. A call nested in another on the same participant gets the next `depth`. Async hops wait for nothing.
+ */
+export function flowActivations(messages: { from: string; to: string; reply: boolean; async: boolean }[]) {
+  const done: { id: string; from: number; to: number; depth: number }[] = [];
+  const open: { id: string; from: number; depth: number }[] = [];
+  messages.forEach((m, i) => {
+    if (m.reply) {
+      const k = open.findLastIndex((a) => a.id === m.from);
+      if (k >= 0) for (const a of open.splice(k).reverse()) done.push({ ...a, to: i });
+    } else if (!m.async) {
+      open.push({ id: m.to, from: i, depth: open.filter((a) => a.id === m.to).length });
+    }
+  });
+  for (const a of open) done.push({ ...a, to: messages.length - 1 });
+  return done;
+}
+
 /** Total time of a flow from its lines' latencies; `unknown` counts hops whose line has none. */
 export function flowLatency(d: Design, flow: Flow) {
   const { messages } = flowSequence(d, flow);
@@ -107,10 +126,14 @@ export function toMermaidSequence(d: Design, flow: Flow) {
   const { participants, messages } = flowSequence(d, flow);
   const out = ['sequenceDiagram', `  title ${flow.title.replace(/\n/g, ' ')}`, '  autonumber'];
   for (const p of participants) out.push(`  participant ${mid(p.id)} as ${p.label.replace(/[\n;:]/g, ' ')}`);
-  for (const x of messages) {
+  const frames = flow.fragments ?? [];
+  messages.forEach((x, i) => {
+    for (const f of frames.filter((g) => g.from === i).sort((a, b) => b.to - a.to)) out.push(`  ${f.kind} ${(f.label ?? '').replace(/[\n;]/g, ' ')}`.trimEnd());
+    for (const f of frames.filter((g) => g.split === i)) out.push(f.kind === 'par' ? '  and' : '  else');
     const arrow = x.reply ? '-->>' : x.async ? '-)' : '->>';
     out.push(`  ${mid(x.from)}${arrow}${mid(x.to)}: ${(x.label ?? (x.reply ? 'reply' : 'call')).replace(/[\n;]/g, ' ')}`);
-  }
+    for (const _ of frames.filter((g) => g.to === i)) out.push('  end');
+  });
   return out.join('\n') + '\n';
 }
 

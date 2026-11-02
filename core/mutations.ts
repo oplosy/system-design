@@ -1,4 +1,4 @@
-import { SCHEMA_VERSION, type BoundaryKind, type Comment, type ComponentType, type Connection, type ConnectionKind, type Design, type Ref } from './schema.ts';
+import { SCHEMA_VERSION, fragmentProblem, type BoundaryKind, type Comment, type ComponentType, type Connection, type ConnectionKind, type Design, type Fragment, type Ref } from './schema.ts';
 
 // Pure, browser-safe edits shared by the UI and the MCP server. Each one mutates `d` in place.
 
@@ -218,20 +218,29 @@ export function addDecision(
   return id;
 }
 
+/** A flow with stops gone. Its fragments count hops, so they go when the hops change. */
+function keepStops(f: Design['flows'][number], keep: (id: string) => boolean) {
+  const path = f.path.filter(keep).filter((p, i, a) => p !== a[i - 1]);
+  const { fragments, ...rest } = f;
+  return { ...rest, path, ...(path.length === f.path.length && fragments ? { fragments } : {}) };
+}
+
 /** The connection a flow hop runs along, in either direction. */
 export function hopConnection(d: Design, a: string, b: string) {
   return d.connections.find((c) => (c.from === a && c.to === b) || (c.from === b && c.to === a));
 }
 
 /** Adds a request path through components in order; every hop must follow an existing connection. */
-export function addFlow(d: Design, input: Edit & { title: string; path: string[] }) {
+export function addFlow(d: Design, input: Edit & { title: string; path: string[]; fragments?: Fragment[] }) {
   if (input.path.length < 2) throw new Error('A flow needs at least two components.');
   for (const p of input.path) if (!d.components.some((c) => c.id === p)) throw new Error(`unknown component "${p}"`);
   for (let i = 1; i < input.path.length; i++) {
     if (!hopConnection(d, input.path[i - 1], input.path[i])) throw new Error(`no connection between "${input.path[i - 1]}" and "${input.path[i]}"`);
   }
+  const problem = input.fragments && fragmentProblem(input.fragments, input.path.length - 1);
+  if (problem) throw new Error(problem);
   const id = uniqueId(d, `flow-${input.title}`);
-  d.flows.push({ id, title: input.title, path: input.path, ...placed(d, input) });
+  d.flows.push({ id, title: input.title, path: input.path, ...(input.fragments?.length ? { fragments: input.fragments } : {}), ...placed(d, input) });
   return id;
 }
 
@@ -252,7 +261,7 @@ export function removeItem(d: Design, id: string) {
   // A flow skips a removed stop, and goes when fewer than two stops are left.
   d.flows = d.flows
     .filter((f) => f.id !== id)
-    .map((f) => ({ ...f, path: f.path.filter((p) => p !== id).filter((p, i, a) => p !== a[i - 1]) }))
+    .map((f) => keepStops(f, (p) => p !== id))
     .filter((f) => f.path.length >= 2);
   if (before === count()) throw new Error(`unknown item "${id}"`);
   // Feedback about a removed item stays on its step.
@@ -339,7 +348,7 @@ function dropDangling(d: Design) {
   for (const n of d.notes) if (n.attachTo && !components.has(n.attachTo)) n.attachTo = undefined;
   for (const x of d.decisions) x.links = x.links.filter((l) => components.has(l));
   d.flows = d.flows
-    .map((f) => ({ ...f, path: f.path.filter((p) => components.has(p)).filter((p, i, a) => p !== a[i - 1]) }))
+    .map((f) => keepStops(f, (p) => components.has(p)))
     .filter((f) => f.path.length >= 2);
 }
 

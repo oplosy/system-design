@@ -3,7 +3,7 @@ import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, RefSchema, type Design } from '../core/schema.ts';
+import { BOUNDARY_KINDS, COMPONENT_TYPES, CONNECTION_KINDS, FragmentSchema, RefSchema, type Design } from '../core/schema.ts';
 import { toDecisionRecord, toMermaid } from '../core/export.ts';
 import { infraDrift, syncInfra } from '../core/infra.ts';
 import { importAsStep, unpack } from '../core/importer.ts';
@@ -98,6 +98,7 @@ const decisionFields = {
 const flowFields = {
   title: z.string().min(1).describe('What happens, e.g. "User uploads a photo"'),
   path: z.array(z.string()).min(2).describe('Component ids in the order the request visits them; each hop must follow a connection'),
+  fragments: z.array(FragmentSchema).optional().describe('Sequence frames (alt, opt, loop, par) around hops, numbered from 0, both ends included; split is the hop that starts the second branch of an alt or par. Frames nest or stay apart.'),
 };
 
 const ok = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] });

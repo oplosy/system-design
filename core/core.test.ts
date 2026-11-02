@@ -152,6 +152,30 @@ test('exports Mermaid and a decision record', async () => {
   assert.match(adr, /- MySQL/);
 });
 
+test('a flow carries sequence fragments and activations', async () => {
+  const { flowActivations, flowSequence, toMermaidSequence } = await import('./export.ts');
+  const x = await store.createDesign({ id: 'frames', title: 'Frames' });
+  const user = m.addComponent(x, { type: 'user', label: 'User' });
+  const api = m.addComponent(x, { type: 'service', label: 'API' });
+  const db = m.addComponent(x, { type: 'sql-db', label: 'DB' });
+  m.connect(x, { from: user, to: api });
+  m.connect(x, { from: api, to: db });
+  const path = [user, api, db, api, user];
+  assert.throws(() => m.addFlow(x, { title: 'Long', path, fragments: [{ kind: 'opt', from: 0, to: 4 }] }), /do not fit/);
+  assert.throws(() => m.addFlow(x, { title: 'Cross', path, fragments: [{ kind: 'opt', from: 0, to: 2 }, { kind: 'opt', from: 1, to: 3 }] }), /overlap/);
+  assert.throws(() => m.addFlow(x, { title: 'Split', path, fragments: [{ kind: 'loop', from: 0, to: 2, split: 1 }] }), /no split/);
+  m.addFlow(x, { title: 'Read', path, fragments: [{ kind: 'alt', label: 'cached', from: 0, to: 3, split: 2 }, { kind: 'loop', label: 'retry', from: 1, to: 1 }] });
+  assert.equal(
+    toMermaidSequence(x, x.flows[0]).split('\n').slice(6).join('\n'),
+    ['  alt cached', '  user->>api: call', '  loop retry', '  api->>db: call', '  end', '  else', '  db-->>api: reply', '  api-->>user: reply', '  end', ''].join('\n'),
+  );
+  assert.deepEqual(flowActivations(flowSequence(x, x.flows[0]).messages).map((a) => [a.id, a.from, a.to]), [[db, 1, 2], [api, 0, 3]]);
+  assert.deepEqual(flowActivations([{ from: 'a', to: 'b', reply: false, async: false }, { from: 'b', to: 'c', reply: false, async: true }]).map((a) => [a.id, a.from, a.to]), [['b', 0, 1]]);
+  await store.writeDesign(x);
+  m.removeItem(x, db);
+  assert.equal(x.flows[0].fragments, undefined, 'hop numbers mean nothing once the hops change');
+});
+
 test('flows follow connections and skip removed stops', async () => {
   const x = await store.createDesign({ id: 'flows', title: 'Flows' });
   const user = m.addComponent(x, { type: 'user', label: 'User' });
