@@ -133,9 +133,9 @@ A part can also carry a technology, description, monthly cost, capacity (req/s),
 
 The palette has three kits:
 
-- **System**: cloud architecture.
+- **System**: cloud architecture, including transit gateways, private links, autoscalers, dead-letter queues, schema registries, policy engines, vulnerability scanners, status pages, data catalogs, LLM gateways and MCP servers.
 - **Network**: routers, switches, PCs, printers, racks, links.
-- **Software**: use cases, classes, ports and adapters, DDD and CQRS, activity and state flows.
+- **Software**: use cases, classes, objects, enums, deployment nodes, lifelines, ports and adapters, DDD and CQRS, activity, state and data flows.
 
 ## Reviewing steps
 
@@ -214,7 +214,8 @@ Paste any of these onto the sheet, or drop the file itself. It becomes a new ste
 | **Mermaid** C4, architecture-beta, **C4-PlantUML** | People, containers, stores and boundaries |
 | **draw.io** (`.drawio`, or shapes copied out of it) | Keeps the arrangement. Shapes are typed from their icon (AWS, Azure, GCP and Kubernetes libraries) or shape (actor, cylinder). A shape holding others, nested or drawn around them, becomes a boundary. Compressed files are read, first page only |
 | **Structurizr DSL** | Read at container level. A software system with containers becomes a boundary around them, groups become boundaries, a component's relationships move to its container, dynamic views become flows |
-| **docker-compose** | Services become parts typed from their image. `depends_on` and environment values that address another service become lines. More than one network becomes boundaries |
+| **MCP client config** (`.mcp.json`, `mcp-servers.json`) | Each entry under `mcpServers` becomes an MCP server part. Only the package name, command or the host of its address is kept; environment values, headers and connection strings never reach the design |
+| **docker-compose** | Services become parts typed from their image (`mcp/…` images become MCP servers). `depends_on` and environment values that address another service become lines. More than one network becomes boundaries |
 | **Kubernetes** manifests | Workloads become parts. Ingress backends and service addresses become lines. More than one namespace becomes boundaries. Kinds that draw nothing (ConfigMap, Secret…) are listed. Render Helm first with `helm template` |
 | **Terraform** (`terraform show -json`, state or saved plan) | Known resources on AWS, GCP and Azure become parts. `depends_on` and, in a plan, configuration references become lines, also through undrawn resources: a load balancer reaches its services through listeners and target groups, a queue its consumer through the event source mapping. More than one module becomes boundaries. IAM, security groups and other plumbing are listed as left out |
 | **CloudFormation** / **CDK** | YAML with `!Ref`, `!GetAtt`, `!Sub`, or JSON, so `cdk synth` output too, where parts take their construct names. Each resource maps to its Terraform counterpart |
@@ -618,7 +619,7 @@ The app folder is the parent of the data folder: `%APPDATA%\system-design` on Wi
 | `action.yml`, `action/` | GitHub Action for pull requests |
 | `examples/` | Example design and compose file the action is tested on, an example plugin and an example MCP server |
 | `mcp/server.ts` | MCP server for agents |
-| `src/` | React Flow canvas, shapes, panels |
+| `src/` | React Flow canvas (`App.tsx`, `canvas.tsx`), shapes and palette (`shapes.ts`, `palette.tsx`), inspector and its fields (`inspector.tsx`, `fields.tsx`, `flows.tsx`), review and present bars (`bars.tsx`), menus and dialogs (`menus.tsx`, `designs.tsx`, `connections.tsx`, `new-design.tsx`) |
 | `templates/` | Starting designs |
 | `designs/` | Where designs lived before the data folder; read once to copy them over, then ignored |
 
