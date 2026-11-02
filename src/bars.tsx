@@ -345,3 +345,21 @@ export function Comments({ design, step, target, change, onSelect }: { design: D
     </section>
   );
 }
+
+/** The way back from a part's inside: the designs left to get here, outermost first. */
+export function Trail({ trail, title, onBack }: { trail: { id: string; title: string; via: string }[]; title: string; onBack: (i: number) => void }) {
+  return (
+    <nav className="trail" aria-label="Opened from">
+      {trail.map((t, i) => (
+        <span key={`${t.id}-${i}`}>
+          <button className="text-btn" onClick={() => onBack(i)} title={`Back to ${t.title}`}>
+            {t.title}
+          </button>
+          {/* The part's name only when the design it opened is called something else. */}
+          <span className="quiet">› {t.via !== (trail[i + 1]?.title ?? title) && `${t.via} ›`}</span>
+        </span>
+      ))}
+      <strong>{title}</strong>
+    </nav>
+  );
+}
