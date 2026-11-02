@@ -32,11 +32,12 @@ import { SequenceView } from './sequence.tsx';
 import { DECISION_SIZE, GROUP_COLOR, NOTE_COLOR, NOTE_SIZE, SHAPES, guessType } from './shapes.ts';
 import { type AddKind, DRAG_MIME, Palette, ShapePreview } from './palette.tsx';
 import { type FlowAt } from './fields.tsx';
-import { errorText, downloadText, download, type Theme, type Editing, MAX_IMPORT } from './format.ts';
+import { errorText, downloadText, download, type Editing, MAX_IMPORT } from './format.ts';
 import { type ExportKind, TagMenu, LayoutMenu, ExportMenu, AppearanceMenu, InlineEdit } from './menus.tsx';
 import { DesignSwitcher, Designs } from './designs.tsx';
 import { FindBox, PresentBar, ReviewBar } from './bars.tsx';
 import { Dock } from './dock.tsx';
+import { DOCKS, useDocks, useSketch, useTheme, type Docks } from './use-prefs.ts';
 import { Inspector } from './inspector.tsx';
 import { Connections } from './connections.tsx';
 import { NewDesign } from './new-design.tsx';
@@ -47,11 +48,6 @@ const isEmpty = (d: Design, id: string) => !d.components.some((c) => c.boundary 
 const emptyBoundaries = (d: Design) => d.boundaries.filter((b) => isEmpty(d, b.id));
 const isAddKind = (k: string): k is AddKind => k === 'note' || k === 'decision' || !!boundaryKind(k) || (COMPONENT_TYPES as readonly string[]).includes(k);
 
-type Docks = { left: { open: boolean; w: number }; right: { open: boolean; w: number } };
-const DOCKS: Docks = { left: { open: true, w: 248 }, right: { open: true, w: 352 } };
-const DOCK_LIMITS = { left: [200, 420], right: [280, 600] } as const;
-/** Gap between a floating panel and the window edge. */
-const GAP = 12;
 /** Marks clipboard content copied from this sheet. */
 const CLIP_MIME = 'application/x-system-design';
 /** Largest file a drop imports; bigger ones would hang the page while parsing. */
@@ -71,45 +67,6 @@ function ghosts(removed: NonNullable<Design['steps'][number]['removed']>, live: 
       { id: `ghost-${r.id}`, type: 'component', position: { x: at.x, y: at.y }, selectable: false, draggable: false, connectable: false, deletable: false, data: { type: r.type, label: r.label, removed: true, unseen: false, faded: false } },
     ];
   });
-}
-
-function loadStyle() {
-  try {
-    return localStorage.getItem('sd-style') !== 'clean';
-  } catch {
-    return true;
-  }
-}
-
-function loadTheme(): Theme {
-  try {
-    const t = localStorage.getItem('sd-theme');
-    return t === 'light' || t === 'dark' ? t : 'system';
-  } catch {
-    return 'system';
-  }
-}
-
-function loadDocks(): Docks {
-  try {
-    const d = JSON.parse(localStorage.getItem('sd-docks') ?? 'null') as Docks | null;
-    const side = (k: keyof Docks) => ({
-      open: typeof d?.[k]?.open === 'boolean' ? d[k].open : DOCKS[k].open,
-      w: Number.isFinite(d?.[k]?.w) ? Math.min(Math.max(d![k].w, DOCK_LIMITS[k][0]), DOCK_LIMITS[k][1]) : DOCKS[k].w,
-    });
-    return { left: side('left'), right: side('right') };
-  } catch {
-    return DOCKS;
-  }
-}
-
-/** Saves a view preference; blocked storage only loses the convenience. */
-function remember(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // ignore
-  }
 }
 
 export function App() {
@@ -135,7 +92,6 @@ function Shell() {
   const [design, setDesign] = useState<Design | null>(null);
   const [viewIndex, setViewIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
-  const [sketch, setSketch] = useState(loadStyle);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [browsing, setBrowsing] = useState(false);
@@ -153,6 +109,9 @@ function Shell() {
   const [liveOn, setLiveOn] = useState(false);
   const [diff, setDiff] = useState(false);
   const [presenting, setPresenting] = useState(false);
+  const [theme, setTheme] = useTheme();
+  const [sketch, setStyle] = useSketch();
+  const { docks, toggleDock, resizeDock, inset } = useDocks(presenting);
   const [flow, setFlow] = useState<FlowAt | null>(null);
   // Stops of a flow being drawn by clicking parts on the sheet.
   const [recording, setRecording] = useState<string[] | null>(null);
@@ -163,8 +122,6 @@ function Shell() {
   // Which option of a step with options is on the sheet; its first until another is chosen.
   const [optionView, setOptionView] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Editing | null>(null);
-  const [theme, setThemeState] = useState<Theme>(loadTheme);
-  const [docks, setDocks] = useState<Docks>(loadDocks);
   const designRef = useRef<Design | null>(null);
   const saveState = useRef({ timer: undefined as number | undefined, pending: false, inFlight: false, dirty: false });
   // Undo history of whole designs. It restarts whenever the design is replaced from disk.
@@ -178,7 +135,6 @@ function Shell() {
   const fittedFor = useRef<string | null>(null);
   const { screenToFlowPosition, fitView, getNodes, getInternalNode } = useReactFlow();
   // Floating panels cover the canvas edges, so fitting leaves room for them, the top bar and the review bar.
-  const inset = (k: keyof Docks) => (docks[k].open && !presenting ? docks[k].w + GAP : 0);
   const fitOpts = useRef<FitViewOptions>({});
   fitOpts.current = {
     padding: { left: `${inset('left') + 40}px`, right: `${inset('right') + 40}px`, top: presenting ? '40px' : '84px', bottom: '120px' },
@@ -186,23 +142,6 @@ function Shell() {
     maxZoom: 1.2,
   };
 
-  useEffect(() => {
-    if (theme === 'system') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = theme;
-  }, [theme]);
-  const setTheme = (t: Theme) => {
-    setThemeState(t);
-    remember('sd-theme', t);
-  };
-  const updateDocks = (fn: (d: Docks) => Docks) =>
-    setDocks((d) => {
-      const next = fn(d);
-      remember('sd-docks', JSON.stringify(next));
-      return next;
-    });
-  const toggleDock = (k: keyof Docks) => updateDocks((d) => ({ ...d, [k]: { ...d[k], open: !d[k].open } }));
-  const resizeDock = (k: keyof Docks, w: number) =>
-    updateDocks((d) => ({ ...d, [k]: { ...d[k], w: Math.round(Math.min(Math.max(w, DOCK_LIMITS[k][0]), DOCK_LIMITS[k][1])) } }));
 
   // The design as last loaded or saved: what local edits are replayed from when a save meets a newer file.
   const baseRef = useRef<Design | null>(null);
@@ -950,11 +889,6 @@ function Shell() {
     change((d) => m.requestChanges(d, current.id, text));
     setSelected(null);
     if (!wasSeen) setViewIndex(Math.min(view + 1, design.steps.length - 1));
-  };
-
-  const setStyle = (s: boolean) => {
-    setSketch(s);
-    remember('sd-style', s ? 'sketch' : 'clean');
   };
 
   const goTo = (i: number) => {
