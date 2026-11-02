@@ -23,9 +23,21 @@ export async function openCopy(page: Page, request: APIRequestContext, id: strin
   await expect.poll(async () => (await saved(request, id)).components.every((c) => c.position)).toBe(true);
 }
 
-/** The middle of an element on the page. */
+/**
+ * The middle of an element on the page, once it has stopped moving: the sheet animates to fit its parts after a layout,
+ * and a slower machine is still mid-animation when a test would otherwise aim at it.
+ */
 export async function centerOf(page: Page, selector: string, text?: string) {
-  const box = await page.locator(selector, text ? { hasText: text } : undefined).first().boundingBox();
-  if (!box) throw new Error(`${selector} is not on the page`);
-  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const target = page.locator(selector, text ? { hasText: text } : undefined).first();
+  let last = '';
+  for (let tries = 0; tries < 40; tries++) {
+    const box = await target.boundingBox();
+    if (box) {
+      const now = JSON.stringify([box.x, box.y, box.width, box.height].map(Math.round));
+      if (now === last) return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      last = now;
+    }
+    await page.waitForTimeout(150);
+  }
+  throw new Error(`${selector} never settled on the page`);
 }
