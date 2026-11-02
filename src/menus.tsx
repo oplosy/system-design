@@ -82,12 +82,12 @@ export function MenuLabel({ name, icon }: { name: string; icon: IconName }) {
 
 export function DialogHead({ id, title, onClose }: { id: string; title: string; onClose: () => void }) {
   return (
-    <header className="dialog-head">
+    <div className="dialog-head">
       <h2 id={id}>{title}</h2>
       <button type="button" className="icon-btn" onClick={onClose} aria-label="Close" title="Close (Esc)">
         <Icon name="close" />
       </button>
-    </header>
+    </div>
   );
 }
 

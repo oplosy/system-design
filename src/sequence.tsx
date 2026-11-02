@@ -22,7 +22,7 @@ export function SequenceView({ design, flow, at, onClose }: { design: Design; fl
   };
   return (
     <div className="sequence" role="dialog" aria-label={`Sequence: ${flow.title}`}>
-      <header className="sequence-head">
+      <div className="sequence-head">
         <strong>{flow.title}</strong>
         {time.unknown < messages.length && (
           <span title={time.unknown ? `${time.unknown} hops have no latency yet` : 'Sum of the hops’ latencies'}>
@@ -37,7 +37,7 @@ export function SequenceView({ design, flow, at, onClose }: { design: Design; fl
         <button className="icon-btn" onClick={onClose} aria-label="Close" title="Close (Esc)">
           <Icon name="close" />
         </button>
-      </header>
+      </div>
       <div className="sequence-body">
         <svg width={w} height={h} role="img" aria-label={`${messages.length} messages between ${participants.map((p) => p.label).join(', ')}`}>
           <defs>

@@ -8,6 +8,7 @@ Newest first. Versions follow [semantic versioning](https://semver.org).
 
 - A failed sheet or app render now shows what happened and a way back instead of a blank window.
 - Dialogs keep Tab inside, close on Escape and give focus back.
+- Browser tests scan the sheet, menu, selected part and Designs dialog with axe in both themes.
 - Panels and bars are translucent over the sheet.
 - Box text follows one format: headings start with a capital, descriptions with a small letter.
 - On a phone, a selected item's card sits at the bottom of the sheet.
