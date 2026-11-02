@@ -7,7 +7,7 @@ const mid = (id: string) => (RESERVED.has(id) ? `${id}_` : id.replace(/-/g, '_')
 const text = (s: string) => `"${s.replace(/"/g, '#quot;').replace(/\n/g, ' ')}"`;
 
 const CYLINDER: ComponentType[] = ['sql-db', 'nosql-db', 'key-value', 'cache', 'graph-db', 'time-series', 'vector-db', 'warehouse', 'data-lake', 'nas'];
-const STADIUM: ComponentType[] = ['queue', 'pubsub', 'stream', 'event-bus'];
+const STADIUM: ComponentType[] = ['queue', 'dead-letter-queue', 'pubsub', 'stream', 'event-bus'];
 const HEXAGON: ComponentType[] = ['api-gateway', 'load-balancer', 'reverse-proxy', 'router', 'switch', 'l3-switch'];
 const CIRCLE: ComponentType[] = ['user', 'internet'];
 

@@ -5,7 +5,7 @@ export type Issue = { id: string; rule: string; message: string };
 
 const DATASTORES = new Set<ComponentType>(['sql-db', 'nosql-db', 'key-value', 'cache', 'graph-db', 'time-series', 'vector-db', 'search', 'warehouse', 'data-lake', 'olap', 'ledger']);
 const CLIENTS = new Set<ComponentType>(['user', 'client', 'mobile', 'iot', 'desktop-app', 'ui']);
-const MESSAGING = new Set<ComponentType>(['queue', 'pubsub', 'stream', 'event-bus', 'mqtt']);
+const MESSAGING = new Set<ComponentType>(['queue', 'dead-letter-queue', 'pubsub', 'stream', 'event-bus', 'mqtt']);
 const BALANCERS = new Set<ComponentType>(['load-balancer', 'reverse-proxy']);
 
 export function lint(d: Design): Issue[] {

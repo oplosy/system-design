@@ -10,7 +10,7 @@ export const DATASTORE = new Set<ComponentType>([
   'sql-db', 'nosql-db', 'key-value', 'cache', 'graph-db', 'time-series', 'vector-db', 'search', 'object-storage', 'file-storage',
   'warehouse', 'data-lake', 'olap', 'block-storage', 'local-db', 'backup', 'ledger', 'nas',
 ]);
-export const QUEUE = new Set<ComponentType>(['queue', 'pubsub', 'stream', 'event-bus', 'mqtt']);
+export const QUEUE = new Set<ComponentType>(['queue', 'dead-letter-queue', 'pubsub', 'stream', 'event-bus', 'mqtt']);
 const role = (c: Component) => (PEOPLE.has(c.type) ? 'person' : EXTERNAL.has(c.type) ? 'external' : DATASTORE.has(c.type) ? 'db' : QUEUE.has(c.type) ? 'queue' : 'container');
 
 /** Ids are lowercase-dashed; both tools want letters, digits and underscores, and not a leading digit. */
