@@ -32,7 +32,7 @@ export function useAutoFit({ design, view, nodes, presenting, detailsOpen, canva
     fittedFor.current = key;
     // fitView skips nodes React Flow has not measured yet, so wait until every shown node has a size.
     const fit = (tries: number) => {
-      const ready = getNodes().every((n) => n.hidden || getInternalNode(n.id)?.measured.width);
+      const ready = getNodes().every((n) => n.hidden || n.width || getInternalNode(n.id)?.measured.width);
       if (!ready && tries > 0) return void setTimeout(() => fit(tries - 1), 50);
       void fitView(fitOpts.current);
     };

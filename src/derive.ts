@@ -7,7 +7,7 @@ import type { LiveLoad } from './api.ts';
 import { boundaryBoxes } from './boundaries.ts';
 import type { FlowEdge } from './canvas.tsx';
 import type { FlowAt } from './fields.tsx';
-import { SHAPES } from './shapes.ts';
+import { DECISION_SIZE, NOTE_SIZE, SHAPES } from './shapes.ts';
 
 /** Removed components drawn where they stood; one that a live part now covers moves down until it is clear. */
 function ghosts(removed: NonNullable<Design['steps'][number]['removed']>, live: Design['components']) {
@@ -20,7 +20,7 @@ function ghosts(removed: NonNullable<Design['steps'][number]['removed']>, live: 
     for (let i = 0; i < 50 && hits(at); i++) at.y += at.h + 20;
     taken.push(at);
     return [
-      { id: `ghost-${r.id}`, type: 'component', position: { x: at.x, y: at.y }, selectable: false, draggable: false, connectable: false, deletable: false, data: { type: r.type, label: r.label, removed: true, unseen: false, faded: false } },
+      { id: `ghost-${r.id}`, type: 'component', position: { x: at.x, y: at.y }, width: at.w, height: at.h, selectable: false, draggable: false, connectable: false, deletable: false, data: { type: r.type, label: r.label, removed: true, unseen: false, faded: false } },
     ];
   });
 }
@@ -29,7 +29,6 @@ export type SheetInput = {
   design: Design | null;
   current: Design['steps'][number] | undefined;
   view: number;
-  selected: string | null;
   diff: boolean;
   presenting: boolean;
   flow: FlowAt | null;
@@ -40,8 +39,11 @@ export type SheetInput = {
   live: LiveLoad | null;
 };
 
-/** The nodes, lines and boundary boxes the sheet shows for the open design at the step in view. */
-export function deriveSheet({ design, current, view, selected, diff, presenting, flow, recording, inOption, tag, live }: SheetInput) {
+/**
+ * The nodes, lines and boundary boxes the sheet shows for the open design at the step in view. Every node states its
+ * size, so React Flow can leave nodes off screen unmounted without having measured them.
+ */
+export function deriveSheet({ design, current, view, diff, presenting, flow, recording, inOption, tag, live }: SheetInput) {
   if (!design || !current) return { nodes: [] as Node[], edges: [] as FlowEdge[], boxes: new Map() as ReturnType<typeof boundaryBoxes> };
   const idx = m.stepIndex(design);
   const visibleStep = (step: string) => idx.get(step)! <= view;
@@ -77,9 +79,9 @@ export function deriveSheet({ design, current, view, selected, diff, presenting,
   const open = new Map<string, number>();
   for (const c of design.comments) if (c.target && c.by === 'reviewer' && !c.resolved) open.set(c.target, (open.get(c.target) ?? 0) + 1);
   const shown = new Set<string>();
-  const node = (id: string, type: 'component' | 'note' | 'decision', position: { x: number; y: number } | undefined, data: object, step: string): Node => {
+  const node = (id: string, type: 'component' | 'note' | 'decision', size: { w: number; h: number }, position: { x: number; y: number } | undefined, data: object, step: string): Node => {
     shown.add(id);
-    return { id, type, position: position ?? { x: 0, y: 0 }, hidden: !position, selected: id === selected, data: { ...data, ...flags(step, id), comments: open.get(id), issues: issues.get(id) } };
+    return { id, type, position: position ?? { x: 0, y: 0 }, width: size.w, height: size.h, hidden: !position, data: { ...data, ...flags(step, id), comments: open.get(id), issues: issues.get(id) } };
   };
   // A tag view hides untagged parts, notes on them and boxes left with nothing inside.
   const hidden = new Set<string>();
@@ -106,17 +108,18 @@ export function deriveSheet({ design, current, view, selected, diff, presenting,
           id: b.id,
           type: 'boundary',
           position: { x: box.x, y: box.y },
+          width: box.w,
+          height: box.h,
           className: 'boundary-node',
           dragHandle: '.boundary-tab',
           connectable: false,
-          selected: b.id === selected,
           data: { kind: b.kind, label: b.label, detail: b.detail, w: box.w, h: box.h, ...flags(b.step, b.id) },
         };
       }),
     ...ghosts(diff ? current.removed ?? [] : [], design.components.filter(onSheet)),
-    ...design.components.filter(show).map((c) => node(c.id, 'component', c.position, { type: c.type, label: c.label, tech: c.tech, detail: c.detail, cost: costAt(design, c, current.id), currency: design.currency, code: codeUrl(design, c.code) }, c.step)),
-    ...design.notes.filter(show).map((n) => node(n.id, 'note', n.position, { text: n.text }, n.step)),
-    ...design.decisions.filter(onSheet).map((x) => node(x.id, 'decision', x.position, { title: x.title, why: x.why }, x.step)),
+    ...design.components.filter(show).map((c) => node(c.id, 'component', SHAPES[c.type], c.position, { type: c.type, label: c.label, tech: c.tech, detail: c.detail, cost: costAt(design, c, current.id), currency: design.currency, code: codeUrl(design, c.code) }, c.step)),
+    ...design.notes.filter(show).map((n) => node(n.id, 'note', NOTE_SIZE, n.position, { text: n.text }, n.step)),
+    ...design.decisions.filter(onSheet).map((x) => node(x.id, 'decision', DECISION_SIZE, x.position, { title: x.title, why: x.why }, x.step)),
   ];
   const both = (a: string, b: string) => shown.has(a) && shown.has(b);
   const link = (id: string, source: string, target: string, step: string): FlowEdge => ({
@@ -137,7 +140,6 @@ export function deriveSheet({ design, current, view, selected, diff, presenting,
           source: c.from,
           target: c.to,
           type: 'rough',
-          selected: c.id === selected,
           data: { kind: 'flow', label: c.label, async: c.async, relation: c.kind, route: c.route, bend: c.bend, ...(live?.lines[c.id] ? { ...live.lines[c.id], live: true } : { qps: c.qps, latency: c.latency }), hops: hops.get(c.id), hopOn: c.id === hopOn, ...flags(c.step, c.id) },
         }),
       ),
@@ -145,4 +147,10 @@ export function deriveSheet({ design, current, view, selected, diff, presenting,
     ...design.decisions.flatMap((x) => x.links.filter((l) => both(l, x.id)).map((l) => link(`link-${x.id}-${l}`, l, x.id, x.step))),
   ];
   return { nodes, edges, boxes };
+}
+
+/** Marks the selected item apart from deriveSheet, so a click reuses everything else and only that item redraws. */
+export function withSelection<S extends { nodes: Node[]; edges: FlowEdge[] }>(sheet: S, selected: string | null): S {
+  if (!selected) return sheet;
+  return { ...sheet, nodes: sheet.nodes.map((n) => (n.id === selected ? { ...n, selected: true } : n)), edges: sheet.edges.map((e) => (e.id === selected ? { ...e, selected: true } : e)) };
 }

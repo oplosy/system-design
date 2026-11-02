@@ -2,14 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { parseDesign } from '../core/schema.ts';
-import { deriveSheet, type SheetInput } from './derive.ts';
+import { deriveSheet, withSelection, type SheetInput } from './derive.ts';
 
 const design = parseDesign(JSON.parse(fs.readFileSync(new URL('../templates/three-tier.json', import.meta.url), 'utf8')));
 const base = (over: Partial<SheetInput> = {}): SheetInput => ({
   design,
   current: design.steps[0],
   view: 0,
-  selected: null,
   diff: false,
   presenting: false,
   flow: null,
@@ -31,7 +30,7 @@ test('the first step shows only its own parts, and the lines between them', () =
 
 test('a later step adds its parts, and the selected part is marked', () => {
   const last = design.steps.length - 1;
-  const s = deriveSheet(base({ current: design.steps[last], view: last, selected: design.components[0].id }));
+  const s = withSelection(deriveSheet(base({ current: design.steps[last], view: last })), design.components[0].id);
   assert.equal(shown(s).length, design.components.length);
   assert.deepEqual(s.nodes.filter((n) => n.selected).map((n) => n.id), [design.components[0].id]);
 });

@@ -26,7 +26,7 @@ import { Designs } from './designs.tsx';
 import { PresentBar, ReviewBar, Trail } from './bars.tsx';
 import { exportDesign } from './transfer.ts';
 import { TopBar } from './topbar.tsx';
-import { deriveSheet } from './derive.ts';
+import { deriveSheet, withSelection } from './derive.ts';
 import { SequenceView } from './sequence.tsx';
 import { addItem, connectItems, isAddKind, removeItems, sheetItems } from './sheet-edits.ts';
 import { useArrange } from './use-arrange.ts';
@@ -46,6 +46,12 @@ import { Connections } from './connections.tsx';
 import { NewDesign } from './new-design.tsx';
 import { NoDesigns } from './no-designs.tsx';
 import { Icon } from './icons.tsx';
+
+/** Sheets at least this big draw only what is on screen; on smaller ones that would save nothing and cost a remount on every pan. */
+const DRAW_VISIBLE_FROM = 100;
+
+/** Waits until React Flow has drawn what a state change asked for. */
+const nextPaint = () => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done))));
 
 export function App() {
   return (
@@ -83,6 +89,8 @@ function Shell() {
   const [sequence, setSequence] = useState<string | null>(null);
   // Which option of a step with options is on the sheet; its first until another is chosen.
   const [optionView, setOptionView] = useState<Record<string, string>>({});
+  // A picture is made from the page, so it needs every node drawn, on screen or not.
+  const [picturing, setPicturing] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const findRef = useRef<HTMLInputElement>(null);
   const { screenToFlowPosition, fitView, getNodes } = useReactFlow();
@@ -118,10 +126,11 @@ function Shell() {
     (x: { step: string; option?: string }) => !x.option || x.option === (optionView[x.step] ?? design?.steps.find((s) => s.id === x.step)?.options?.[0].id),
     [optionView, design],
   );
-  const sheet = useMemo(
-    () => deriveSheet({ design, current, view, selected, diff, presenting, flow, recording, inOption, tag, live }),
-    [design, current, view, selected, diff, presenting, flow, recording, inOption, tag, live],
+  const derived = useMemo(
+    () => deriveSheet({ design, current, view, diff, presenting, flow, recording, inOption, tag, live }),
+    [design, current, view, diff, presenting, flow, recording, inOption, tag, live],
   );
+  const sheet = useMemo(() => withSelection(derived, selected), [derived, selected]);
   const { nodes, onNodesChange, drag, selectNext, clearSelection } = useSheetNodes(sheet, selected, store);
   const { fitOpts, refit } = useAutoFit({ design, view, nodes, presenting, detailsOpen, canvasRef });
   const arrange = useArrange({ store, refit, setError });
@@ -176,8 +185,7 @@ function Shell() {
     if (store.undo(back)) setSelected(null);
   };
 
-  const edgeActions = {
-    locked: presenting,
+  const actions = {
     onOpen: (target: string, via: string) => void nav.drill(target, via),
     onBend: (id: string, bend: number | undefined) =>
       change((d) => {
@@ -187,6 +195,19 @@ function Shell() {
     onEditLabel: startEdit,
     onDelete: (id: string) => discard([id]),
   };
+  // The context value stays the same across renders, or every node and line on the sheet would redraw with each one.
+  const latestActions = useRef(actions);
+  latestActions.current = actions;
+  const edgeActions = useMemo(
+    () => ({
+      locked: presenting,
+      onOpen: (target: string, via: string) => latestActions.current.onOpen(target, via),
+      onBend: (id: string, bend: number | undefined) => latestActions.current.onBend(id, bend),
+      onEditLabel: (id: string, at: { x: number; y: number }) => latestActions.current.onEditLabel(id, at),
+      onDelete: (id: string) => latestActions.current.onDelete(id),
+    }),
+    [presenting],
+  );
 
   // Drawing a flow clears any selection so clicks only add stops.
   const startRecording = (r: string[] | null) => {
@@ -201,16 +222,26 @@ function Shell() {
     setRecording(null);
     cancelEdit();
   };
-  const exportAs = (kind: ExportKind) =>
-    design &&
-    exportDesign(kind, {
-      design,
-      plugged: pluginExports.find((x) => x.kind === kind),
-      settle,
-      canvas: canvasRef.current,
-      nodes: getNodes().filter((n) => !n.hidden),
-      onError: setError,
-    });
+  const exportAs = async (kind: ExportKind) => {
+    if (!design) return;
+    const picture = kind === 'png' || kind === 'svg';
+    if (picture) {
+      setPicturing(true);
+      await nextPaint();
+    }
+    try {
+      await exportDesign(kind, {
+        design,
+        plugged: pluginExports.find((x) => x.kind === kind),
+        settle,
+        canvas: canvasRef.current,
+        nodes: getNodes().filter((n) => !n.hidden),
+        onError: setError,
+      });
+    } finally {
+      setPicturing(false);
+    }
+  };
   const findPick = (id: string) => {
     const conn = designRef.current?.connections.find((c) => c.id === id);
     setSelected(id);
@@ -334,6 +365,7 @@ function Shell() {
                   onPaneClick={() => setSelected(null)}
                   {...drag}
                   elevateNodesOnSelect={false}
+                  onlyRenderVisibleElements={!picturing && nodes.length >= DRAW_VISIBLE_FROM}
                   onConnect={onConnect}
                   onDelete={({ nodes: ns, edges: es }) => remove([...ns.map((n) => n.id), ...es.filter(isLine).map((e) => e.id)])}
                   deleteKeyCode={presenting ? null : ['Delete', 'Backspace']}

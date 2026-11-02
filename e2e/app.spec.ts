@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { more, openCopy, openDetails, openParts } from './helpers.ts';
 
@@ -192,6 +193,30 @@ test('export downloads a file named after the design', async ({ page }) => {
   await more(page, 'Export');
   const [download] = await Promise.all([page.waitForEvent('download'), page.locator('.menu').getByText('Mermaid', { exact: false }).first().click()]);
   expect(download.suggestedFilename()).toBe('three-tier.mmd');
+});
+
+test('a big sheet draws only what is on screen, and a picture of it still holds every part', async ({ page, request }) => {
+  const count = 120;
+  await openCopy(page, request, 'big-sheet', {
+    seen: true,
+    edit: (d) => {
+      d.steps = [{ id: 'all', title: 'All', seen: true }];
+      d.components = Array.from({ length: count }, (_, i) => ({ id: `p${i}`, type: 'service', label: `Part ${i}`, step: 'all', position: { x: (i % 12) * 220, y: Math.floor(i / 12) * 170 } }));
+      d.connections = Array.from({ length: count - 1 }, (_, i) => ({ id: `l${i}`, from: `p${i}`, to: `p${i + 1}`, step: 'all' }));
+      d.decisions = d.notes = d.boundaries = d.flows = [];
+    },
+  });
+  await page.mouse.move(700, 300);
+  for (let i = 0; i < 8; i++) await page.mouse.wheel(0, -240);
+  await expect.poll(() => page.locator('.react-flow__node').count()).toBeLessThan(count);
+
+  const download = page.waitForEvent('download');
+  await more(page, 'Export');
+  await page.locator('.menu').getByText('SVG', { exact: true }).click();
+  const svg = fs.readFileSync(await (await download).path(), 'utf8');
+  expect(svg).toContain('Part 0<');
+  expect(svg).toContain(`Part ${count - 1}<`);
+  await expect.poll(() => page.locator('.react-flow__node').count()).toBeLessThan(count);
 });
 
 test('pasting a Mermaid flowchart adds a step, and undo removes it', async ({ page, request }) => {

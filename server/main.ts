@@ -2,6 +2,8 @@
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import { promisify } from 'node:util';
+import { gzip } from 'node:zlib';
 import { closeMcp } from '../core/mcp-client.ts';
 import { createApi } from './api.ts';
 import { createHub, hubConfig } from './auth.ts';
@@ -39,16 +41,33 @@ if (!gate && !['127.0.0.1', 'localhost', '::1'].includes(HOST)) console.warn(`Wa
 
 const api = createApi();
 
-async function serveFile(pathname: string, res: http.ServerResponse) {
+const compress = promisify(gzip);
+/** Compressed assets: their names carry a content hash, so what is here never goes stale. */
+const zipped = new Map<string, Promise<Buffer>>();
+const zippedAsset = (file: string) => {
+  let z = zipped.get(file);
+  if (!z) {
+    z = fs.readFile(file).then((body) => compress(body));
+    zipped.set(file, z);
+    z.catch(() => zipped.delete(file));
+  }
+  return z;
+};
+
+async function serveFile(pathname: string, accepts: string | undefined, res: http.ServerResponse) {
   // Resolve inside dist/ only; anything that climbs out, or isn't a file, gets the app shell.
   let file = path.join(DIST, decodeURIComponent(pathname));
   if (!file.startsWith(DIST) || !(await fs.stat(file).catch(() => null))?.isFile()) file = path.join(DIST, 'index.html');
+  const zip = pathname.startsWith('/assets/') && /\.(js|css)$/.test(file) && /\bgzip\b/.test(accepts ?? '');
+  const body = await (zip ? zippedAsset(file) : fs.readFile(file));
   res.writeHead(200, {
     'Content-Type': TYPES[path.extname(file)] ?? 'application/octet-stream',
     // Vite puts a content hash in asset names, so they never change; the shell must always be fresh.
     'Cache-Control': pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
+    Vary: 'Accept-Encoding',
+    ...(zip && { 'Content-Encoding': 'gzip' }),
   });
-  res.end(await fs.readFile(file));
+  res.end(body);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -69,7 +88,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   try {
-    await serveFile(pathname, res);
+    await serveFile(pathname, req.headers['accept-encoding'], res);
   } catch (e) {
     console.error(e);
     if (!res.headersSent) res.writeHead(500);

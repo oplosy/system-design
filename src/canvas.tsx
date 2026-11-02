@@ -23,7 +23,7 @@ export const EdgeContext = createContext<{
   onOpen: () => {},
 });
 
-/** A delete button over the top-right corner, shown while this node is the only one selected. */
+/** A delete button over the top-right corner, shown while this node is the only one selected. Mount it on selected nodes only: each toolbar scans every node on each change of the sheet. */
 function Trash() {
   const { locked, onDelete } = useContext(EdgeContext);
   const id = useNodeId();
@@ -47,7 +47,7 @@ export type DecisionNode = Node<Common & { title: string; why: string }, 'decisi
 export type BoundaryNode = Node<Common & { kind: BoundaryKind; label: string; detail?: string; w: number; h: number }, 'boundary'>;
 export type FlowEdge = Edge<{ kind: 'flow' | 'link'; label?: string; async?: boolean; relation?: ConnectionKind; route?: Route; bend?: number; qps?: number; latency?: number; errors?: number; live?: boolean; unseen: boolean; faded: boolean; added?: boolean; hops?: number[]; hopOn?: boolean }, 'rough'>;
 
-function Frame({ w, h, data, title, children }: { w: number; h: number; data: Common; title?: string; children: React.ReactNode }) {
+function Frame({ w, h, data, selected, title, children }: { w: number; h: number; data: Common; selected: boolean; title?: string; children: React.ReactNode }) {
   return (
     <div className={`sd-node${data.faded ? ' faded' : ''}${data.added ? ' added' : ''}${data.changed ? ' changed' : ''}${data.removed ? ' removed' : ''}`} style={{ width: w, height: h }} title={title}>
       {children}
@@ -64,12 +64,12 @@ function Frame({ w, h, data, title, children }: { w: number; h: number; data: Co
       )}
       <Handle type="target" position={Position.Top} />
       <Handle type="source" position={Position.Bottom} />
-      <Trash />
+      {selected && <Trash />}
     </div>
   );
 }
 
-export const ComponentNodeView = memo(function ComponentNodeView({ id, data }: NodeProps<ComponentNode>) {
+export const ComponentNodeView = memo(function ComponentNodeView({ id, data, selected }: NodeProps<ComponentNode>) {
   const sketch = useContext(SketchContext);
   const { onOpen } = useContext(EdgeContext);
   const spec = SHAPES[data.type];
@@ -80,7 +80,7 @@ export const ComponentNodeView = memo(function ComponentNodeView({ id, data }: N
   // Mid-shape labels grow both ways; a caption or a header band grows downwards, away from the drawing.
   const fromTop = caption || spec.labelY <= spec.h * 0.35;
   return (
-    <Frame w={spec.w} h={spec.h} data={data} title={data.tech ? `${data.label}\n${data.tech}` : data.label}>
+    <Frame w={spec.w} h={spec.h} data={data} selected={selected} title={data.tech ? `${data.label}\n${data.tech}` : data.label}>
       <svg width={spec.w} height={spec.h} overflow="visible">
         <ShapeDrawing type={data.type} sketch={sketch} seed={hash(id)} dashed={spec.dashed} />
       </svg>
@@ -105,7 +105,7 @@ export const ComponentNodeView = memo(function ComponentNodeView({ id, data }: N
   );
 });
 
-export const NoteNodeView = memo(function NoteNodeView({ id, data }: NodeProps<NoteNode>) {
+export const NoteNodeView = memo(function NoteNodeView({ id, data, selected }: NodeProps<NoteNode>) {
   const sketch = useContext(SketchContext);
   const { w, h } = NOTE_SIZE;
   const paths = useMemo(
@@ -113,7 +113,7 @@ export const NoteNodeView = memo(function NoteNodeView({ id, data }: NodeProps<N
     [sketch, id, w, h],
   );
   return (
-    <Frame w={w} h={h} data={data}>
+    <Frame w={w} h={h} data={data} selected={selected}>
       <svg width={w} height={h} overflow="visible">
         <Paths paths={paths} />
       </svg>
@@ -122,14 +122,14 @@ export const NoteNodeView = memo(function NoteNodeView({ id, data }: NodeProps<N
   );
 });
 
-export const DecisionNodeView = memo(function DecisionNodeView({ id, data }: NodeProps<DecisionNode>) {
+export const DecisionNodeView = memo(function DecisionNodeView({ id, data, selected }: NodeProps<DecisionNode>) {
   const sketch = useContext(SketchContext);
   const { w, h } = DECISION_SIZE;
   const body = h - 16;
   const outline = `M2 2 H${w - 2} V${body} H52 L34 ${h - 2} L36 ${body} H2 Z`;
   const paths = useMemo(() => toPaths([gen.path(outline, options(sketch, undefined, hash(id), { stroke: sketch ? NOTE_COLOR : 'var(--rule-strong)', strokeWidth: sketch ? 1.6 : 1.2 }))]), [sketch, id, outline]);
   return (
-    <Frame w={w} h={h} data={data}>
+    <Frame w={w} h={h} data={data} selected={selected}>
       <svg width={w} height={h} overflow="visible">
         <path d={outline} style={{ fill: 'var(--panel)', stroke: 'none' }} />
         <Paths paths={paths} dashed={sketch} />
@@ -144,7 +144,7 @@ export const DecisionNodeView = memo(function DecisionNodeView({ id, data }: Nod
 });
 
 /** A box around a group of components. Only its label tab takes the pointer, so the parts inside stay clickable. */
-export const BoundaryNodeView = memo(function BoundaryNodeView({ id, data }: NodeProps<BoundaryNode>) {
+export const BoundaryNodeView = memo(function BoundaryNodeView({ id, data, selected }: NodeProps<BoundaryNode>) {
   const sketch = useContext(SketchContext);
   const spec = BOUNDARY_SPECS[data.kind];
   const { w, h } = data;
@@ -169,7 +169,7 @@ export const BoundaryNodeView = memo(function BoundaryNodeView({ id, data }: Nod
         {data.detail && <span className="boundary-detail">{data.detail}</span>}
         {data.unseen && <span className="unseen-dot inline" title="Not reviewed yet" />}
       </div>
-      <Trash />
+      {selected && <Trash />}
     </div>
   );
 });
@@ -182,7 +182,7 @@ export function rate(n: number) {
 
 function box(n: InternalNode) {
   const { x, y } = n.internals.positionAbsolute;
-  const w = n.measured.width ?? 0, h = n.measured.height ?? 0;
+  const w = n.measured.width ?? n.width ?? 0, h = n.measured.height ?? n.height ?? 0;
   return { x: x + w / 2, y: y + h / 2, w, h };
 }
 
@@ -190,7 +190,7 @@ function box(n: InternalNode) {
  * Excalidraw-style "floating" edge between node borders, drawn with rough.js.
  * When selected, its middle (or its label) can be dragged to bend it; double-click edits the label.
  */
-export function RoughEdge({ id, source, target, data, selected }: EdgeProps<FlowEdge>) {
+export const RoughEdge = memo(function RoughEdge({ id, source, target, data, selected }: EdgeProps<FlowEdge>) {
   const sketch = useContext(SketchContext);
   const { locked, onBend, onEditLabel } = useContext(EdgeContext);
   const { screenToFlowPosition } = useReactFlow();
@@ -287,7 +287,7 @@ export function RoughEdge({ id, source, target, data, selected }: EdgeProps<Flow
       )}
     </>
   );
-}
+});
 
 export const nodeTypes = { component: ComponentNodeView, note: NoteNodeView, decision: DecisionNodeView, boundary: BoundaryNodeView };
 export const edgeTypes = { rough: RoughEdge };
