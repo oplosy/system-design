@@ -31,6 +31,7 @@ import { deriveSheet, withSelection } from './derive.ts';
 import { addItem, connectItems, isAddKind, removeItems, sheetItems } from './sheet-edits.ts';
 import { useArrange } from './use-arrange.ts';
 import { useAutoFit } from './use-auto-fit.ts';
+import { useCardReveal } from './use-card-reveal.ts';
 import { useClipboard } from './use-clipboard.ts';
 import { useDesignNav } from './use-design-nav.ts';
 import { useDesignStore } from './use-design-store.ts';
@@ -96,6 +97,7 @@ function Shell() {
   // A picture is made from the page, so it needs every node drawn, on screen or not.
   const [picturing, setPicturing] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const findRef = useRef<HTMLInputElement>(null);
   const { screenToFlowPosition, fitView, getNodes } = useReactFlow();
 
@@ -137,6 +139,7 @@ function Shell() {
   const sheet = useMemo(() => withSelection(derived, selected), [derived, selected]);
   const { nodes, onNodesChange, drag, selectNext, clearSelection } = useSheetNodes(sheet, selected, store);
   const { fitOpts, refit } = useAutoFit({ design, view, nodes, presenting, detailsOpen, canvasRef });
+  useCardReveal(selected, canvasRef, cardRef);
   const arrange = useArrange({ store, refit, setError });
   const { editing, startEdit, finishEdit, cancelEdit } = useInlineEdit(store, presenting);
 
@@ -431,7 +434,7 @@ function Shell() {
             </div>
             {!presenting && <AddMenu open={adding} onOpen={setAdding} onAdd={(k) => add(k)} />}
             {!presenting && focused && (
-              <div className="card">
+              <div className="card" ref={cardRef}>
                 <Inspector design={design} selected={selected} stepId={current.id} inOption={inOption} designs={nav.designs} onOpenInside={(c) => void nav.drill(c.detail!, c.label)} onCreateInside={(c) => void nav.createInside(c)} change={change} onSelect={setSelected} onDelete={(x) => discard([x])} />
               </div>
             )}

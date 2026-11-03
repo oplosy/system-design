@@ -16,6 +16,7 @@ Newest first. Versions follow [semantic versioning](https://semver.org).
 - Unit tests drive the MCP server over stdio, as an agent does.
 - Screen readers hear which option of a list is active while arrow keys move through it.
 - CI runs `npm audit`, and a release runs the same checks as CI, browser tests included.
+- Browser tests cover the phone layout on Chromium and WebKit.
 - Box text follows one format: headings start with a capital, descriptions with a small letter.
 - On a phone, a selected item's card sits at the bottom of the sheet.
 
@@ -26,9 +27,12 @@ Newest first. Versions follow [semantic versioning](https://semver.org).
 - Quiet text has enough contrast in both themes.
 - Type sizes and corner radii use one scale.
 - `src/styles.css` and the core tests are split by area.
+- React, React Flow and html-to-image are build-time dependencies, so installing the command no longer pulls them in.
+- The cloud readers (Terraform, CloudFormation, Pulumi) live in `core/infra-cloud.ts`, and the step details in `src/step-details.tsx`.
 
 ### Fixed
 
+- On a phone, the fit button no longer sits on the review bar, the selected item's card is opaque, and a part the card would cover moves up into view.
 - Unfolding a step's details moves the parts out from under them.
 - Copying and pasting parts in Firefox no longer adds them as a new step.
 - The theme and style choices in the menu use valid menu roles.

@@ -17,6 +17,14 @@
   overflow: hidden;
 }
 
+/* On a phone the review bar spans the bottom, so the fit button moves under the menu button. */
+@media (max-width: 640px) {
+  .react-flow__panel.react-flow__controls {
+    top: 60px;
+    bottom: auto;
+  }
+}
+
 .react-flow .react-flow__controls-button {
   width: 30px;
   height: 30px;

@@ -356,6 +356,8 @@
     left: 12px;
     width: auto;
     max-height: 45%;
+    /* It covers the review bar and part of the sheet; see-through, the three would read as one. */
+    background: var(--panel);
   }
 }
 
