@@ -7,6 +7,9 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Later versions draw the PNG/SVG export wrong; React Flow's own export example pins this version for the same reason.
+      - dependency-name: html-to-image
   - package-ecosystem: github-actions
     directory: /
     schedule:

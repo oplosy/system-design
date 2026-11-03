@@ -13,6 +13,9 @@ Newest first. Versions follow [semantic versioning](https://semver.org).
 - Browser tests also run on Firefox and WebKit.
 - Browser tests scan the sheet, menu, selected part and Designs dialog with axe in both themes.
 - Panels and bars are translucent over the sheet.
+- Unit tests drive the MCP server over stdio, as an agent does.
+- Screen readers hear which option of a list is active while arrow keys move through it.
+- CI runs `npm audit`, and a release runs the same checks as CI, browser tests included.
 - Box text follows one format: headings start with a capital, descriptions with a small letter.
 - On a phone, a selected item's card sits at the bottom of the sheet.
 

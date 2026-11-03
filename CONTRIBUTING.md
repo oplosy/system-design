@@ -36,6 +36,8 @@ npm run build
 - Add a test with every fix or feature, and a line in `CHANGELOG.md` under Unreleased.
 - Commit subjects use the imperative mood and stay under 72 characters.
 - Ask in an issue before adding a dependency.
+- `html-to-image` stays at 1.11.11: later versions draw the export wrong. Dependabot is told to leave it.
+- Lint warnings fail the build. An effect that runs on a chosen trigger, or a mouse-only handler with a keyboard path elsewhere, says so at the line with a `biome-ignore` and its reason.
 
 ## Reporting a security problem
 
