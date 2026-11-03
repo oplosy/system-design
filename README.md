@@ -624,7 +624,7 @@ The app folder is the parent of the data folder: `%APPDATA%\system-design` on Wi
 | `action.yml`, `action/` | GitHub Action for pull requests |
 | `examples/` | Example design and compose file the action is tested on, an example plugin and an example MCP server |
 | `mcp/server.ts` | MCP server for agents |
-| `src/` | React Flow canvas (`App.tsx`, `canvas.tsx`), shapes and palette (`shapes.ts` and the part tables in `shapes/`, `palette.tsx`), inspector and its fields (`inspector.tsx`, `fields.tsx`, `flows.tsx`), review and present bars (`bars.tsx`), menus and dialogs (`menus.tsx`, `designs.tsx`, `connections.tsx`, `new-design.tsx`) |
+| `src/` | React Flow canvas (`App.tsx`, `canvas.tsx`), shapes and palette (`shapes.ts` and the part tables in `shapes/`, `palette.tsx`), inspector, step details and their fields (`inspector.tsx`, `step-details.tsx`, `fields.tsx`, `flows.tsx`), review and present bars (`bars.tsx`), menus and dialogs (`menus.tsx`, `designs.tsx`, `connections.tsx`, `new-design.tsx`) |
 | `templates/` | Starting designs |
 | `designs/` | Where designs lived before the data folder; read once to copy them over, then ignored |
 

@@ -41,7 +41,8 @@ import { usePresenting } from './use-presenting.ts';
 import { useSheetNodes } from './use-sheet-nodes.ts';
 import { useShortcuts } from './use-shortcuts.ts';
 import { useWalkthrough } from './use-walkthrough.ts';
-import { Inspector, StepDetails } from './inspector.tsx';
+import { Inspector } from './inspector.tsx';
+import { StepDetails } from './step-details.tsx';
 import { NoDesigns } from './no-designs.tsx';
 import { Icon } from './icons.tsx';
 
