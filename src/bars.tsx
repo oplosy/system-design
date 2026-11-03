@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, type Me } from './api.ts';
 import type { Design } from '../core/schema.ts';
 import * as m from '../core/mutations.ts';
+import * as review from '../core/review.ts';
 import { BOUNDARY_SPECS } from './boundaries.ts';
 import { SHAPES } from './shapes.ts';
 import { type FlowAt, timeText, type Change } from './fields.tsx';
@@ -290,7 +291,7 @@ export function Comments({ design, step, target, change, onSelect }: { design: D
       );
       return;
     }
-    change((d) => m.addComment(d, { step: target ? undefined : step, target, text, by: 'reviewer', author: me?.name }));
+    change((d) => review.addComment(d, { step: target ? undefined : step, target, text, by: 'reviewer', author: me?.name }));
     setText('');
   };
   const toggle = (id: string) =>

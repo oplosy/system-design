@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { toMermaid } from '../core/export.ts';
-import * as m from '../core/mutations.ts';
+import * as clipboard from '../core/clipboard.ts';
 import { guessType } from './shapes.ts';
 import { readSource } from './transfer.ts';
 import type { useDesignStore } from './use-design-store.ts';
@@ -25,31 +25,31 @@ type Options = {
 
 /** Copy, cut and paste on the sheet, and bringing in diagrams and infrastructure files from elsewhere. */
 export function useClipboard({ store: { design, designRef, change }, active, stepId, selectedIds, remove, selectPasted, showImported, setError }: Options) {
-  const clip = useRef<{ items: m.Clip; pastes: number } | null>(null);
+  const clip = useRef<{ items: clipboard.Clip; pastes: number } | null>(null);
   /** The text last copied from this sheet: Firefox drops the custom type, so this is how a paste knows it as ours. */
   const copiedText = useRef<string | null>(null);
   /** A copy, cut or paste key still waiting for its clipboard event. */
   const clipKey = useRef<string | null>(null);
 
-  const pasteClip = (c: { items: m.Clip; pastes: number }) => {
+  const pasteClip = (c: { items: clipboard.Clip; pastes: number }) => {
     if (!stepId) return;
     c.pastes++;
     let ids: string[] = [];
     change((d) => {
-      ids = m.pasteItems(d, c.items, { step: stepId, offset: 40 * c.pastes });
+      ids = clipboard.pasteItems(d, c.items, { step: stepId, offset: 40 * c.pastes });
     });
     selectPasted(ids);
   };
   const copy = () => {
     const d = designRef.current, ids = selectedIds();
     if (!d || !ids.length) return false;
-    clip.current = { items: m.copyItems(d, ids), pastes: 0 };
+    clip.current = { items: clipboard.copyItems(d, ids), pastes: 0 };
     return true;
   };
   const cut = () => remove(selectedIds());
   const duplicate = () => {
     const d = designRef.current, ids = selectedIds();
-    if (d && ids.length) pasteClip({ items: m.copyItems(d, ids), pastes: 0 });
+    if (d && ids.length) pasteClip({ items: clipboard.copyItems(d, ids), pastes: 0 });
   };
 
   /** Ctrl+C, X or V: the browser follows with a clipboard event (so text travels to and from other apps); where none comes, the key acts on the sheet's own clipboard. */

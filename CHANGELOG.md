@@ -28,7 +28,7 @@ Newest first. Versions follow [semantic versioning](https://semver.org).
 - Type sizes and corner radii use one scale.
 - `src/styles.css` and the core tests are split by area.
 - React, React Flow and html-to-image are build-time dependencies, so installing the command no longer pulls them in.
-- The cloud readers (Terraform, CloudFormation, Pulumi) live in `core/infra-cloud.ts`, and the step details in `src/step-details.tsx`.
+- The cloud readers (Terraform, CloudFormation, Pulumi) live in `core/infra-cloud.ts`, review feedback in `core/review.ts`, copy and paste in `core/clipboard.ts`, and the step details in `src/step-details.tsx`.
 
 ### Fixed
 

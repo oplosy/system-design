@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import * as m from './mutations.ts';
+import * as review from './review.ts';
 import type { Design } from './schema.ts';
 
 // Review from Slack: a `slack` hook posts new steps with Approve and Send back buttons, and Slack calls back with the
@@ -47,7 +47,7 @@ export function slackClick(body: string) {
 export function applyClick(d: Design, click: NonNullable<ReturnType<typeof slackClick>>) {
   const step = d.steps.find((s) => s.id === click.step);
   if (!step) throw new Error(`unknown step "${click.step}"`);
-  if (click.action === 'send_back') return m.requestChanges(d, click.step, `Sent back from Slack by ${click.user}`);
+  if (click.action === 'send_back') return review.requestChanges(d, click.step, `Sent back from Slack by ${click.user}`);
   step.seen = true;
   step.changesRequested = undefined;
 }

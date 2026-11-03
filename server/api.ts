@@ -7,7 +7,7 @@ import { addHook, listHooks, publicHook, removeHook, testHook } from '../core/ho
 import { queryPrometheus, readLoad } from '../core/live.ts';
 import { PartContext, closeMcp, mcpList, mcpQueries, runMcp, testMcp } from '../core/mcp-client.ts';
 import { exportWithPlugin, pluginLinks, pluginList, pluginMetrics, readWithPlugins } from '../core/plugins.ts';
-import * as m from '../core/mutations.ts';
+import * as review from '../core/review.ts';
 import { RefSchema, ValidationError, type Comment } from '../core/schema.ts';
 import { answerSlack, applyClick, slackClick, verifySlack } from '../core/slack.ts';
 import {
@@ -210,7 +210,7 @@ export function createApi() {
         if (id && sub === 'comments' && req.method === 'POST') {
           const input = z.object({ step: z.string().optional(), target: z.string().optional(), text: z.string().min(1).max(5000) }).parse(await readBody(req));
           let comment = '';
-          await updateDesign(id, (d) => void (comment = m.addComment(d, { ...input, by: 'reviewer', author: signedIn(req)?.name })), 'app');
+          await updateDesign(id, (d) => void (comment = review.addComment(d, { ...input, by: 'reviewer', author: signedIn(req)?.name })), 'app');
           return send(res, 201, { id: comment });
         }
         if (sub) return send(res, 404, { error: 'not found' });
@@ -219,7 +219,7 @@ export function createApi() {
           const body = (await readBody(req)) as { id?: unknown; comments?: unknown };
           if (body.id !== id) throw new ValidationError('id in body must match the URL');
           const person = signedIn(req);
-          if (person && Array.isArray(body.comments)) m.keepAuthors(body.comments as Comment[], (await readDesign(id)).comments, person.name);
+          if (person && Array.isArray(body.comments)) review.keepAuthors(body.comments as Comment[], (await readDesign(id)).comments, person.name);
           return send(res, 200, await writeDesign(body as never, { actor: 'app' }));
         }
       }

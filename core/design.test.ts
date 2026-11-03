@@ -7,6 +7,8 @@ import './test-env.ts';
 
 const store = await import('./store.ts');
 const m = await import('./mutations.ts');
+const review = await import('./review.ts');
+const clipboard = await import('./clipboard.ts');
 const { parseDesign } = await import('./schema.ts');
 
 test('the list keeps up with every change to the files, without reading ones that did not change', async () => {
@@ -97,20 +99,20 @@ test('feedback goes back to the agent and returns the step for review', async ()
   const x = await store.createDesign({ id: 'review', title: 'Review' });
   const step = m.addStep(x, { title: 'Add cache' });
   const cache = m.addComponent(x, { type: 'cache', label: 'Cache' });
-  const onItem = m.addComment(x, { target: cache, text: 'Why not CDN?', by: 'reviewer' });
-  m.requestChanges(x, step, 'Size it first');
+  const onItem = review.addComment(x, { target: cache, text: 'Why not CDN?', by: 'reviewer' });
+  review.requestChanges(x, step, 'Size it first');
   assert.equal(x.steps[1].seen, true);
   assert.deepEqual(
-    m.feedback(x).map((f) => [f.step, f.comments.length, f.comments[0].about]),
+    review.feedback(x).map((f) => [f.step, f.comments.length, f.comments[0].about]),
     [[step, 2, { id: cache, label: 'Cache' }]],
   );
 
-  m.resolveFeedback(x, { comments: [onItem], reply: 'Reads repeat per user, a CDN would not hit.' });
+  review.resolveFeedback(x, { comments: [onItem], reply: 'Reads repeat per user, a CDN would not hit.' });
   assert.equal(x.steps[1].changesRequested, true, 'one comment is still open');
-  m.resolveFeedback(x, { step });
+  review.resolveFeedback(x, { step });
   assert.equal(x.steps[1].changesRequested, undefined);
   assert.equal(x.steps[1].seen, false, 'the step goes back to the reviewer');
-  assert.deepEqual(m.feedback(x), []);
+  assert.deepEqual(review.feedback(x), []);
 
   m.removeItem(x, cache);
   assert.equal(x.comments[0].target, undefined, 'feedback outlives the item');
@@ -127,9 +129,9 @@ test('reverting a step removes what it added, and paste makes fresh copies', asy
   m.addNote(x, { text: 'Primary only', attachTo: db });
   m.addFlow(x, { title: 'Read', path: [api, db, api] });
 
-  const clip = m.copyItems(x, [vpc, x.notes[0].id]);
+  const clip = clipboard.copyItems(x, [vpc, x.notes[0].id]);
   assert.deepEqual(clip.components.map((c) => c.id), [api, db], 'a boundary brings its contents');
-  const pasted = m.pasteItems(x, clip, { step, offset: 40 });
+  const pasted = clipboard.pasteItems(x, clip, { step, offset: 40 });
   assert.deepEqual(pasted, ['vpc-2', 'api-2', 'db-2', 'note-2']);
   const copy = x.components.find((c) => c.id === 'db-2')!;
   assert.deepEqual([copy.boundary, copy.position], ['vpc-2', { x: 40, y: 140 }]);

@@ -5,6 +5,7 @@ import './test-env.ts';
 
 const store = await import('./store.ts');
 const m = await import('./mutations.ts');
+const review = await import('./review.ts');
 
 test('every write turns into named events: steps, parts, lines, comments; layout moves are not changes', async () => {
   const { designEvents } = await import('./events.ts');
@@ -198,7 +199,7 @@ test('two people on a hub: the later save merges instead of losing the first', a
   await store.createDesign({ id: 'together', title: 'Together' });
   const base = await store.readDesign('together');
   const ann = structuredClone(base), bo = structuredClone(base);
-  m.addComment(ann, { step: 'start', text: 'From Ann', by: 'reviewer', author: 'Ann' });
+  review.addComment(ann, { step: 'start', text: 'From Ann', by: 'reviewer', author: 'Ann' });
   m.addComponent(bo, { type: 'cache', label: 'Cache' });
   await store.writeDesign(ann);
   await assert.rejects(store.writeDesign(bo), store.ConflictError);
@@ -393,7 +394,7 @@ test('on a hub the server decides who wrote a comment', async () => {
   const { createHub } = await import('../server/auth.ts');
   const saved = [{ id: 'c1', step: 'start', text: 'old', by: 'reviewer' as const, author: 'Ann', at: 'x' }];
   const incoming = [{ ...saved[0], author: 'Forged' }, { ...saved[0], id: 'c2', author: 'Forged' }];
-  m.keepAuthors(incoming, saved, 'Bo');
+  review.keepAuthors(incoming, saved, 'Bo');
   assert.deepEqual(incoming.map((c) => c.author), ['Ann', 'Bo']);
 
   // Two servers with one secret accept each other's sessions.
@@ -419,7 +420,7 @@ test('on a hub the server decides who wrote a comment', async () => {
     assert.equal(await (await fetch(`${base}/designs/authors/comments`, { method: 'POST', headers, body: JSON.stringify({ text: '' }) })).status, 400);
     const d = await store.readDesign('authors');
     assert.equal(d.comments[0].author, 'Bo');
-    m.addComment(d, { step: 'start', text: 'Saved', by: 'reviewer', author: 'Forged' });
+    review.addComment(d, { step: 'start', text: 'Saved', by: 'reviewer', author: 'Forged' });
     d.comments[0].author = 'Forged';
     assert.equal((await fetch(`${base}/designs/authors`, { method: 'PUT', headers, body: JSON.stringify(d) })).status, 200);
     assert.deepEqual((await store.readDesign('authors')).comments.map((c) => c.author), ['Bo', 'Bo']);

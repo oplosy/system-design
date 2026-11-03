@@ -12,6 +12,7 @@ import { toDrawio, toPlantUml, toStructurizr } from '../core/interop.ts';
 import { failureImpact, lint } from '../core/lint.ts';
 import { exportWithPlugin, pluginList, readWithPlugins } from '../core/plugins.ts';
 import * as m from '../core/mutations.ts';
+import * as review from '../core/review.ts';
 import { createDesign, listDesigns, listTemplates, readDesign, updateDesign } from '../core/store.ts';
 import { guessType } from '../src/shapes.ts';
 
@@ -335,7 +336,7 @@ server.registerTool(
 server.registerTool(
   'get_feedback',
   { description: 'Steps the reviewer sent back, with their open comments (a comment may be about one item)', inputSchema: { id: design } },
-  async ({ id }) => ok(m.feedback(await readDesign(id))),
+  async ({ id }) => ok(review.feedback(await readDesign(id))),
 );
 
 server.registerTool(
@@ -351,7 +352,7 @@ server.registerTool(
   },
   async ({ design: id, ...input }) => {
     if (!input.comments?.length && !input.step) throw new Error('Pass comments or step.');
-    return edit(id, (d) => m.resolveFeedback(d, input));
+    return edit(id, (d) => review.resolveFeedback(d, input));
   },
 );
 

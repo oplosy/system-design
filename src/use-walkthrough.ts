@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import * as m from '../core/mutations.ts';
+import * as review from '../core/review.ts';
 import type { Design } from '../core/schema.ts';
 import type { useDesignStore } from './use-design-store.ts';
 
@@ -39,7 +39,7 @@ export function useWalkthrough({ design, change, setSelected, setError }: Option
   const requestChanges = (text: string) => {
     if (!design || !current) return;
     const wasSeen = current.seen;
-    change((d) => m.requestChanges(d, current.id, text));
+    change((d) => review.requestChanges(d, current.id, text));
     setSelected(null);
     if (!wasSeen) setViewIndex(Math.min(view + 1, design.steps.length - 1));
   };

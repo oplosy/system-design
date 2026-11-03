@@ -1,4 +1,4 @@
-import { SCHEMA_VERSION, fragmentProblem, type BoundaryKind, type Comment, type ComponentType, type Connection, type ConnectionKind, type Design, type Fragment, type Ref } from './schema.ts';
+import { SCHEMA_VERSION, fragmentProblem, type BoundaryKind, type ComponentType, type Connection, type ConnectionKind, type Design, type Fragment, type Ref } from './schema.ts';
 
 // Pure, browser-safe edits shared by the UI and the MCP server. Each one mutates `d` in place.
 
@@ -268,7 +268,8 @@ export function removeItem(d: Design, id: string) {
   for (const c of d.comments) if (c.target === id) c.target = undefined;
 }
 
-const items = (d: Design) => [...d.components, ...d.connections, ...d.notes, ...d.decisions, ...d.boundaries, ...d.flows];
+/** Every item a design draws, of any kind. */
+export const items = (d: Design) => [...d.components, ...d.connections, ...d.notes, ...d.decisions, ...d.boundaries, ...d.flows];
 
 // Agent edits to earlier items are recorded on the step they land in (latest by default), which reopens for review.
 // Items that step added itself need no record: the diff already shows them as new.
@@ -375,126 +376,10 @@ export function revertStep(d: Design, id: string) {
   }
 }
 
-function labelOf(d: Design, id: string) {
+/** What an item is called: its label, or its title, else its id. */
+export function labelOf(d: Design, id: string) {
   const x = items(d).find((i) => i.id === id);
   return x && ('label' in x && x.label ? x.label : 'title' in x ? x.title : x.id);
-}
-
-/** Adds review feedback to a step, or to one item (then the step defaults to the item's). */
-export function addComment(d: Design, input: { step?: string; target?: string; text: string; by: Comment['by']; author?: string; resolved?: boolean }) {
-  const target = input.target ? items(d).find((x) => x.id === input.target) : undefined;
-  if (input.target && !target) throw new Error(`unknown item "${input.target}"`);
-  if (!input.text.trim()) throw new Error('A comment needs text.');
-  const step = input.step ?? target?.step ?? d.steps.at(-1)!.id;
-  if (!d.steps.some((s) => s.id === step)) throw new Error(`unknown step "${step}"`);
-  const id = uniqueId(d, 'comment');
-  d.comments.push({ id, step, target: input.target, text: input.text.trim(), by: input.by, author: input.author, at: new Date().toISOString(), resolved: input.resolved });
-  return id;
-}
-
-/** On a save from a signed-in person: comments already saved keep their author, and new ones get this person's name. */
-export function keepAuthors(comments: Comment[], saved: Comment[], name: string) {
-  const known = new Map(saved.map((c) => [c.id, c.author]));
-  for (const c of comments) c.author = known.has(c.id) ? known.get(c.id) : name;
-}
-
-/** The reviewer sends a step back. It counts as reviewed so the walkthrough can go on. */
-export function requestChanges(d: Design, step: string, text?: string) {
-  const s = d.steps.find((x) => x.id === step);
-  if (!s) throw new Error(`unknown step "${step}"`);
-  if (text?.trim()) addComment(d, { step, text, by: 'reviewer' });
-  s.changesRequested = true;
-  s.seen = true;
-}
-
-/** Steps with open feedback, for the agent to act on. */
-export function feedback(d: Design) {
-  return d.steps
-    .map((s) => ({
-      step: s.id,
-      title: s.title,
-      changesRequested: !!s.changesRequested,
-      comments: d.comments
-        .filter((c) => c.step === s.id && c.by === 'reviewer' && !c.resolved)
-        .map((c) => ({ id: c.id, about: c.target && { id: c.target, label: labelOf(d, c.target) }, text: c.text })),
-    }))
-    .filter((s) => s.changesRequested || s.comments.length);
-}
-
-/**
- * The agent answers feedback: resolves the given comments (or every open one on `step`), optionally with a reply.
- * A step whose feedback is all resolved stops asking for changes and goes back to the reviewer.
- */
-export function resolveFeedback(d: Design, input: { comments?: string[]; step?: string; reply?: string }) {
-  if (input.step && !d.steps.some((s) => s.id === input.step)) throw new Error(`unknown step "${input.step}"`);
-  for (const id of input.comments ?? []) if (!d.comments.some((c) => c.id === id)) throw new Error(`unknown comment "${id}"`);
-  const resolving = d.comments.filter((c) => !c.resolved && (input.comments?.includes(c.id) || (input.step && c.step === input.step && c.by === 'reviewer')));
-  const touched = new Set([...resolving.map((c) => c.step), ...(input.step ? [input.step] : [])]);
-  for (const c of resolving) c.resolved = true;
-  for (const stepId of touched) {
-    if (input.reply?.trim()) addComment(d, { step: stepId, text: input.reply, by: 'agent', resolved: true });
-    const s = d.steps.find((x) => x.id === stepId)!;
-    if (!d.comments.some((c) => c.step === stepId && c.by === 'reviewer' && !c.resolved)) {
-      s.changesRequested = undefined;
-      s.seen = false;
-    }
-  }
-  return [...touched];
-}
-
-export type Clip = Pick<Design, 'components' | 'connections' | 'notes' | 'decisions' | 'boundaries'> & { flows?: Design['flows'] };
-
-/** Copies items for pasting: a boundary brings everything inside it, and connections and flows come along when all their stops do. */
-export function copyItems(d: Design, ids: string[]): Clip {
-  const boundaries = new Set<string>();
-  for (const id of ids) if (d.boundaries.some((b) => b.id === id)) for (const b of boundaryTree(d, id)) boundaries.add(b);
-  const components = d.components.filter((c) => ids.includes(c.id) || (c.boundary && boundaries.has(c.boundary)));
-  const cIds = new Set(components.map((c) => c.id));
-  return structuredClone({
-    components,
-    boundaries: d.boundaries.filter((b) => boundaries.has(b.id)),
-    connections: d.connections.filter((c) => cIds.has(c.from) && cIds.has(c.to)),
-    notes: d.notes.filter((n) => ids.includes(n.id)),
-    decisions: d.decisions.filter((x) => ids.includes(x.id)),
-    flows: d.flows.filter((f) => f.path.every((p) => cIds.has(p))),
-  });
-}
-
-/** Pastes copied items into `step` with fresh ids, shifted by `offset`. Returns the new canvas node ids. */
-export function pasteItems(d: Design, clip: Clip, { step, offset }: { step: string; offset: number }) {
-  if (!d.steps.some((s) => s.id === step)) throw new Error(`unknown step "${step}"`);
-  const ids = new Map<string, string>();
-  // Pushing each item before naming the next keeps every new id unique.
-  const fresh = (old: string) => {
-    const id = uniqueId(d, old);
-    ids.set(old, id);
-    return id;
-  };
-  const map = (id: string | undefined) => (id === undefined ? undefined : ids.get(id) ?? id);
-  const shift = (p?: { x: number; y: number }) => p && { x: p.x + offset, y: p.y + offset };
-  const isBoundary = (id?: string) => !!id && d.boundaries.some((b) => b.id === id);
-  const isComponent = (id?: string) => !!id && d.components.some((c) => c.id === id);
-  const pasted = clip.boundaries.map((b) => {
-    const nb = { ...b, id: fresh(b.id), position: shift(b.position), step, option: undefined };
-    d.boundaries.push(nb);
-    return nb;
-  });
-  for (const nb of pasted) nb.parent = isBoundary(map(nb.parent)) ? map(nb.parent) : undefined;
-  for (const c of clip.components) {
-    d.components.push({ ...c, id: fresh(c.id), boundary: isBoundary(map(c.boundary)) ? map(c.boundary) : undefined, position: shift(c.position), step, option: undefined });
-  }
-  const nodes = [...ids.values()];
-  for (const c of clip.connections) d.connections.push({ ...c, id: fresh(c.id), from: ids.get(c.from)!, to: ids.get(c.to)!, step, option: undefined });
-  for (const f of clip.flows ?? []) d.flows.push({ ...f, id: fresh(f.id), path: f.path.map((p) => ids.get(p)!), step, option: undefined });
-  for (const n of clip.notes) {
-    nodes.push(fresh(n.id));
-    d.notes.push({ ...n, id: nodes.at(-1)!, attachTo: isComponent(map(n.attachTo)) ? map(n.attachTo) : undefined, position: shift(n.position), step, option: undefined });
-  }
-  for (const x of clip.decisions) {
-    nodes.push(fresh(x.id));
-    d.decisions.push({ ...x, id: nodes.at(-1)!, links: x.links.map((l) => map(l)!).filter(isComponent), position: shift(x.position), step, option: undefined });
-  }
-  return nodes;
 }
 
 /** Where each step sits in the walkthrough, for filtering what is visible. */
