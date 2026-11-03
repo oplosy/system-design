@@ -111,7 +111,7 @@ export const NoteNodeView = memo(function NoteNodeView({ id, data, selected }: N
   const { w, h } = NOTE_SIZE;
   const paths = useMemo(
     () => toPaths([gen.rectangle(2, 2, w - 4, h - 4, options(sketch, undefined, hash(id), { fill: sketch ? NOTE_COLOR : 'var(--panel)', fillStyle: 'solid', stroke: sketch ? NOTE_COLOR : 'var(--rule-strong)', roughness: sketch ? 1.8 : 0 }))]),
-    [sketch, id, w, h],
+    [sketch, id],
   );
   return (
     <Frame w={w} h={h} data={data} selected={selected}>
@@ -202,6 +202,7 @@ export const RoughEdge = memo(function RoughEdge({ id, source, target, data, sel
   const dashed = link || data?.async || rel === 'implementation' || rel === 'include' || rel === 'extend';
   const geo = s && t ? edgeGeometry(box(s), box(t), link ? 'curve' : data?.route, drag ?? data?.bend) : null;
   // The line and its ends are drawn apart so a dashed line keeps solid arrowheads and diamonds.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: geo is a new object every render; its path d changes exactly when its shape does.
   const [line, ends] = useMemo(() => {
     if (!geo) return [[], []];
     const o = options(sketch, undefined, hash(id), { strokeWidth: link ? 1.1 : selected || data?.hopOn ? 2.2 : 1.4, roughness: sketch ? 1 : 0 });
@@ -266,6 +267,7 @@ export const RoughEdge = memo(function RoughEdge({ id, source, target, data, sel
       {(label || handle) && (
         <EdgeLabelRenderer>
           {label ? (
+            // biome-ignore lint/a11y/noStaticElementInteractions: dragging and double-clicking are shortcuts; the inspector edits the same label and route from the keyboard.
             <div
               className={`edge-label${data?.faded ? ' faded' : ''}${handle ? ' nodrag nopan grab' : ''}`}
               style={{ transform: at }}
@@ -276,6 +278,7 @@ export const RoughEdge = memo(function RoughEdge({ id, source, target, data, sel
               {label}
             </div>
           ) : (
+            // biome-ignore lint/a11y/noStaticElementInteractions: dragging and double-clicking are shortcuts; the inspector edits the same label and route from the keyboard.
             <div
               className="bend-handle nodrag nopan"
               style={{ transform: at }}

@@ -344,6 +344,7 @@ function Shell() {
 
         {design && current ? (
           <div className="workspace">
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: a drop target for parts dragged from the palette, where a click or Enter adds the same part. */}
             <div
               className={`canvas${sketch ? ' sketch' : ''}`}
               ref={canvasRef}

@@ -41,7 +41,7 @@ export function ReviewBar({
     setAsking(false);
   };
   return (
-    <div className="review" role="region" aria-label="Step review" {...hover.area}>
+    <section className="review" aria-label="Step review" {...hover.area}>
       {open && (
         <div className="review-sheet" id="step-details">
           {children}
@@ -133,7 +133,7 @@ export function ReviewBar({
           )}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -162,7 +162,7 @@ export function PresentBar({
   const labelOf = (id: string) => design.components.find((c) => c.id === id)?.label ?? id;
   const hops = playing ? playing.path.length - 1 : 0;
   return (
-    <div className="present-bar" role="region" aria-label="Presentation">
+    <section className="present-bar" aria-label="Presentation">
       <span className="present-no">
         {(playing ? flow.at : viewIndex) + 1} <span>of {playing ? hops : design.steps.length}</span>
       </span>
@@ -208,7 +208,7 @@ export function PresentBar({
         <Icon name="signout" />
         Exit
       </button>
-    </div>
+    </section>
   );
 }
 

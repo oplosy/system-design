@@ -6,10 +6,10 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "correctness": {
-        // Effects here run on chosen triggers and read refs on purpose. Kept visible as warnings.
-        "useExhaustiveDependencies": "warn"
+        // An effect that runs on a chosen trigger or reads a ref says so with a biome-ignore and its reason.
+        "useExhaustiveDependencies": "error"
       },
       "style": {
         // Ids in a checked design are known to exist; schema validation is what guarantees it.
@@ -39,11 +39,10 @@
         "noAutofocus": "off",
         // role="radio" on a button is the segmented control; a native input can't be drawn this way.
         "useSemanticElements": "off",
-        // The overlay's and canvas's mouse handlers have keyboard paths elsewhere (Escape, shortcuts).
-        "noStaticElementInteractions": "off",
-        // Select keeps focus on its search box and moves through options by key, as a listbox with an active option does.
-        "useFocusableInteractive": "off",
-        "useKeyWithClickEvents": "off"
+        // Mouse-only handlers say at the element where their keyboard path is, with a biome-ignore.
+        "noStaticElementInteractions": "error",
+        "useFocusableInteractive": "error",
+        "useKeyWithClickEvents": "error"
       }
     }
   }

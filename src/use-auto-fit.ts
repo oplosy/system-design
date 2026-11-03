@@ -58,6 +58,7 @@ export function useAutoFit({ design, view, nodes, presenting, detailsOpen, canva
 
   // Unfolded details cover the lower part of the sheet, so the parts move up out from under them, and back when they fold.
   const hasDesign = !!design;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: detailsOpen is what triggers the re-fit; the effect needs only its change.
   useEffect(() => {
     if (!hasDesign || presenting) return;
     const t = setTimeout(() => fitView(fitOpts.current), 150);

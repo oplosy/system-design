@@ -67,6 +67,7 @@ export function NewDesign({ templates, onCancel, onCreated }: { templates: Summa
     ...templates,
   ];
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: a press on the backdrop closes the dialog; Escape does the same from the keyboard.
     <div className="overlay" {...modal} onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
       <form className="dialog" role="dialog" aria-modal="true" aria-labelledby="new-design-title" onSubmit={submit}>
         <DialogHead id="new-design-title" title="New design" onClose={onCancel} />

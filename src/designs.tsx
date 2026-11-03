@@ -82,6 +82,7 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
   useDismiss(!renaming, onClose);
   const hover = useHoverOpen(showTrash, setShowTrash);
   const loadTrash = useCallback(() => api.trashed().then(setTrashed).catch((e) => setErr(errorText(e))), []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a changed list of designs may mean one went to the trash, so it is reloaded then.
   useEffect(() => {
     loadTrash();
     api.info().then((i) => setDir(i.dir)).catch(() => {});
@@ -134,6 +135,7 @@ export function Designs({ designs, current, onOpen, onClose, onChanged }: { desi
     .filter((d) => !q || `${d.title} ${d.description ?? ''}`.toLowerCase().includes(q))
     .sort((a, b) => (byName ? a.title.localeCompare(b.title) : (b.updated ?? 0) - (a.updated ?? 0)));
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: a press on the backdrop closes the dialog; Escape does the same from the keyboard.
     <div className="overlay" {...modal} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog wide" role="dialog" aria-modal="true" aria-labelledby="designs-title">
         <DialogHead id="designs-title" title="Designs" onClose={onClose} />

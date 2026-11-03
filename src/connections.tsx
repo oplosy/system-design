@@ -102,6 +102,7 @@ export function Connections({ design, selected, plugins, onClose }: { design: De
     </li>
   );
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: a press on the backdrop closes the dialog; Escape does the same from the keyboard.
     <div className="overlay" {...modal} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="connections-title">
         <DialogHead id="connections-title" title="Connections" onClose={onClose} />

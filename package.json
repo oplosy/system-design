@@ -41,7 +41,7 @@
     "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=90",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
-    "lint": "biome lint",
+    "lint": "biome lint --error-on-warnings",
     "build:cli": "vite build --config vite.cli.config.ts",
     "prepare": "npm run build && npm run build:cli",
     "diff": "node cli/diff.ts"

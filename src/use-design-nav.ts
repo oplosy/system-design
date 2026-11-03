@@ -55,6 +55,7 @@ export function useDesignNav({ store, selected, setSelected, setError, onOpened,
     [commit, setSelected, setError],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: designRef and saveState are refs from useDesignStore, read when an event arrives.
   useEffect(() => {
     refreshLists();
     // A shared copy has no server to hear from.
@@ -89,6 +90,7 @@ export function useDesignNav({ store, selected, setSelected, setError, onOpened,
   }, [id, designs]);
 
   // Following a link while the app is open: another design, or another item in this one.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: designRef is a ref from useDesignStore, read when the address changes.
   useEffect(() => {
     const onHash = () => {
       const { design: next, item } = readHash();

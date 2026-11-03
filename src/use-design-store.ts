@@ -61,7 +61,7 @@ export function useDesignStore(setError: (message: string | null) => void) {
         void flush();
       }
     }
-  }, [commit]);
+  }, [commit, setError]);
 
   const schedule = useCallback(() => {
     const s = saveState.current;
@@ -92,7 +92,7 @@ export function useDesignStore(setError: (message: string | null) => void) {
       commit(next);
       schedule();
     },
-    [commit, schedule],
+    [commit, schedule, setError],
   );
 
   const undo = (back: boolean) => {

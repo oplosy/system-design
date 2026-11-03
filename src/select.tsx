@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './icons.tsx';
 
@@ -42,7 +42,7 @@ export function Select<T extends string>({ value, options, onChange, label, clas
   };
 
   // Opens below the trigger, or above when that leaves more room.
-  const measure = () => {
+  const measure = useCallback(() => {
     if (!trigger.current) return;
     const r = trigger.current.getBoundingClientRect();
     const below = innerHeight - r.bottom - GAP - EDGE, above = r.top - GAP - EDGE;
@@ -50,18 +50,20 @@ export function Select<T extends string>({ value, options, onChange, label, clas
     const left = Math.min(Math.max(r.left, EDGE), innerWidth - width - EDGE);
     if (below >= Math.min(MAX_H, above)) setPlace({ left, width, top: r.bottom + GAP, maxHeight: Math.min(MAX_H, below) });
     else setPlace({ left, width, bottom: innerHeight - r.top + GAP, maxHeight: Math.min(MAX_H, above) });
-  };
+  }, []);
   useLayoutEffect(() => {
     if (open) measure();
-  }, [open]);
+  }, [open, measure]);
 
+  const placed = !!place;
   useEffect(() => {
-    if (place) (pop.current?.querySelector('input') ?? pop.current)?.focus();
-  }, [!!place]);
+    if (placed) (pop.current?.querySelector<HTMLElement>('input, [role="listbox"]') ?? pop.current)?.focus();
+  }, [placed]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the active option moves, or the list is placed or filtered: each is a reason to scroll it into view.
   useLayoutEffect(() => {
     if (open) pop.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
-  }, [open, active, !!place, query]);
+  }, [open, active, placed, query]);
 
   // While open, every key belongs to the list: the window's shortcuts must not see them.
   useEffect(() => {
@@ -135,6 +137,7 @@ export function Select<T extends string>({ value, options, onChange, label, clas
       </button>
       {open &&
         createPortal(
+          // biome-ignore lint/a11y/noStaticElementInteractions: only keeps a press inside the list from reaching the page behind it.
           <div ref={pop} className="select-pop" tabIndex={-1} onMouseDown={(e) => e.stopPropagation()} style={{ ...(place ?? { left: 0, top: 0, width: 200, maxHeight: MAX_H }), visibility: place ? undefined : 'hidden' }}>
             {search && (
               <div className="select-search">
@@ -147,15 +150,31 @@ export function Select<T extends string>({ value, options, onChange, label, clas
                   }}
                   placeholder="Search"
                   aria-label={`Search ${label}`}
+                  role="combobox"
+                  aria-expanded="true"
+                  aria-autocomplete="list"
                   aria-controls={listId}
+                  aria-activedescendant={shown.length ? `${listId}-${active}` : undefined}
                 />
               </div>
             )}
-            <div id={listId} className="select-list" role="listbox" aria-label={label}>
+            <div
+              id={listId}
+              className="select-list"
+              role="listbox"
+              aria-label={label}
+              tabIndex={-1}
+              aria-activedescendant={!search && shown.length ? `${listId}-${active}` : undefined}
+            >
               {shown.map((o, i) => (
-                <div key={o.value}>
-                  {o.group && o.group !== shown[i - 1]?.group && <div className="select-group">{o.group}</div>}
-                  <div className="select-option" role="option" aria-selected={o.value === value} data-active={i === active} onPointerMove={() => i !== active && setActive(i)} onClick={() => pick(o)}>
+                <div key={o.value} role="none">
+                  {o.group && o.group !== shown[i - 1]?.group && (
+                    <div className="select-group" role="presentation">
+                      {o.group}
+                    </div>
+                  )}
+                  {/* biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/useFocusableInteractive: focus stays on the search box or the list, which points at the active option; the keys are handled while the list is open. */}
+                  <div id={`${listId}-${i}`} className="select-option" role="option" aria-selected={o.value === value} data-active={i === active} onPointerMove={() => i !== active && setActive(i)} onClick={() => pick(o)}>
                     {o.preview && <span className="select-preview">{o.preview}</span>}
                     <span className="select-value">{o.label}</span>
                     {o.value === value && <Icon name="check" />}

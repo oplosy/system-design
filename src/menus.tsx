@@ -36,11 +36,11 @@ export function useHoverOpen(open: boolean, onOpen: (open: boolean) => void, dis
   const opening = useRef<number | undefined>(undefined);
   const closing = useRef<number | undefined>(undefined);
   const byHover = useRef(false);
-  const stop = () => {
+  const stop = useCallback(() => {
     clearTimeout(opening.current);
     clearTimeout(closing.current);
-  };
-  useEffect(() => stop, []);
+  }, []);
+  useEffect(() => stop, [stop]);
   const keep = () => {
     stop();
     byHover.current = false;
