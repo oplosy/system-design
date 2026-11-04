@@ -2,7 +2,13 @@
 
 Newest first. Versions follow [semantic versioning](https://semver.org).
 
-## 1.2.1 - 2026-11-04
+## 1.2.2 - 2026-11-04
+
+### Changed
+
+- The npm package is `system-design-mcp`: npm refused `system-design`, a name another account unpublished in 2022. Run it with `npx -y system-design-mcp`; the command it installs is still `system-design`.
+
+## 1.2.1 - 2026-11-04 (not published)
 
 ### Changed
 
