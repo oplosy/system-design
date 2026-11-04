@@ -40,11 +40,9 @@ Everything runs on your machine. There is no account and no cloud service; a des
 
 ## Status
 
-Version 1.1.0. The features below are complete, and active development is paused as of 2026-10-30.
+Version 1.2.1. The features below are complete, and active development is paused as of 2026-10-30.
 
 The last full check ran that day from a clean clone against the built command: type check, unit tests, every CLI command, the API, webhooks, plugins, the MCP client, every MCP tool, hub sign-in against a local provider that really signs tokens, Slack clicks with real signatures, and a walk through the app in a browser. All of it passed. What has not been tried is listed under [Known limits](#known-limits).
-
-The package is not on npm yet, so install it from GitHub as shown below.
 
 ## Who it is for
 
@@ -57,24 +55,20 @@ The package is not on npm yet, so install it from GitHub as shown below.
 
 You need Node 24 or newer.
 
-Run it straight from GitHub (the first run builds it):
-
-```bash
-npx -y github:oplosy/system-design
-```
-
-Once a release is published to npm, this works too:
+Run it with npx:
 
 ```bash
 npx -y system-design
 ```
+
+npm 12 and newer refuse packages from git by default (`allow-git=none`), so `npx github:oplosy/system-design` fails there. To run an unreleased commit, use a clone as shown below.
 
 Open http://127.0.0.1:5180. Create a design from the **Twitter from scratch** or **Three-tier web app** template, start blank, or bring a diagram or infrastructure file from another tool.
 
 To let Claude Code work on your designs from any project:
 
 ```bash
-claude mcp add system-design -s user -- npx -y github:oplosy/system-design mcp
+claude mcp add system-design -s user -- npx -y system-design mcp
 ```
 
 Other MCP clients take the same command and arguments in their own configuration.
@@ -461,7 +455,7 @@ Event types are `system-design.` followed by:
 **In git.** Keep design files in the repository, and the [action](#pull-requests-github-action) reports each pull request's changes. Every save moves `rev`, so two branches that change a design would always clash. This merge driver merges them item by item instead, and leaves a real clash (both sides changed the same field) as a normal git conflict. Each clone runs:
 
 ```bash
-git config merge.system-design.driver "npx -y github:oplosy/system-design merge %O %A %B"
+git config merge.system-design.driver "npx -y system-design merge %O %A %B"
 ```
 
 and the repository's `.gitattributes` names the files:
@@ -644,7 +638,7 @@ npm run build:cli
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and [CHANGELOG.md](CHANGELOG.md) for what changed.
 
-To release, set `version` in `package.json`, commit, and push a matching tag (`git tag v1.1.0 && git push origin v1.1.0`). The release workflow runs the checks, publishes to npm when the `NPM_TOKEN` secret (an npm automation token) is set, and moves the major tag (`v1`) that action users pin to.
+To release, set `version` in `package.json`, commit, and push a matching tag (`git tag v1.2.1 && git push origin v1.2.1`). The release workflow runs the checks, publishes to npm when the `NPM_TOKEN` secret (an npm automation token) is set, and moves the major tag (`v1`) that action users pin to.
 
 ## License
 

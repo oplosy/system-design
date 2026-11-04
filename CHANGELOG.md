@@ -2,6 +2,13 @@
 
 Newest first. Versions follow [semantic versioning](https://semver.org).
 
+## 1.2.1 - 2026-11-04
+
+### Changed
+
+- The build runs before packing (`prepack`) instead of on install (`prepare`), so installing the package from npm runs no install script and npm 12 shows no blocked-script warning. In a clone, run `npm run build` before `npm start` or `share`.
+- The README installs from npm. npm 12 refuses git packages by default, so `npx github:oplosy/system-design` no longer works there.
+
 ## 1.2.0 - 2026-11-03
 
 ### Added

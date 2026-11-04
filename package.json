@@ -1,6 +1,6 @@
 {
   "name": "system-design",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Local architecture canvas where coding agents add reviewable design steps over MCP",
   "license": "MIT",
   "repository": {
@@ -43,7 +43,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome lint --error-on-warnings",
     "build:cli": "vite build --config vite.cli.config.ts",
-    "prepare": "npm run build && npm run build:cli",
+    "prepack": "npm run build && npm run build:cli",
     "diff": "node cli/diff.ts"
   },
   "dependencies": {
