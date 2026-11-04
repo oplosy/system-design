@@ -1,6 +1,6 @@
 {
-  "name": "system-design",
-  "version": "1.2.1",
+  "name": "system-design-mcp",
+  "version": "1.2.2",
   "description": "Local architecture canvas where coding agents add reviewable design steps over MCP",
   "license": "MIT",
   "repository": {
